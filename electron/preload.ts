@@ -22,3 +22,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // You can expose other APTs you need here.
   // ...
 })
+
+contextBridge.exposeInMainWorld('codex', {
+  ask(prompt: string) {
+    return ipcRenderer.invoke('codex:ask', prompt)
+  },
+})
