@@ -178,7 +178,7 @@ id: m_broken
       expect.arrayContaining([
         expect.objectContaining({
           severity: 'error',
-          message: expect.stringContaining('Front Matter 解析失败'),
+          message: expect.stringContaining('Front Matter 第 2 行数组语法不完整'),
         }),
         expect.objectContaining({ severity: 'error', message: '碎碎念 block 缺少结束标记 :::。' }),
       ]),

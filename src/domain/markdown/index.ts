@@ -9,6 +9,5 @@ export type {
   MarkdownDiagnostic,
   MurmurBlock,
   ParsedJournalEntry,
-  RenderAnnotation,
   RenderJournalMarkdownOptions,
 } from './types'

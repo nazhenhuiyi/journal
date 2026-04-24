@@ -48,11 +48,8 @@ export type ParsedJournalEntry = {
   diagnostics: MarkdownDiagnostic[]
 }
 
-export type RenderAnnotation = {
-  id: string
-}
-
 export type RenderJournalMarkdownOptions = {
   markdown: string
-  annotations?: RenderAnnotation[]
+  annotations?: Annotation[]
 }
+import type { Annotation } from '../annotations'

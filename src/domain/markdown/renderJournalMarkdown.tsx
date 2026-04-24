@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Fragment } from 'react'
-import matter from 'gray-matter'
 import rehypeReact from 'rehype-react'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkDirective from 'remark-directive'
@@ -9,6 +8,7 @@ import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import * as runtime from 'react/jsx-runtime'
 import { unified } from 'unified'
+import { parseJournalMarkdown, stripJournalFrontMatter } from './parseJournalMarkdown'
 import { rehypeAnnotationAttributes } from './plugins/rehypeAnnotationAttributes'
 import { remarkJournalDirectives } from './plugins/remarkJournalDirectives'
 import type { RenderJournalMarkdownOptions } from './types'
@@ -20,8 +20,9 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     '*': [
       ...(defaultSchema.attributes?.['*'] ?? []),
-      ['className', 'journal-murmur', 'journal-image'],
+      ['className', 'journal-murmur', 'journal-image', 'journal-annotated-block'],
       'dataJournalDirective',
+      'dataAnnotationIds',
     ],
     figure: [
       ...(defaultSchema.attributes?.figure ?? []),
@@ -40,7 +41,8 @@ export function renderJournalMarkdown({
   markdown,
   annotations = [],
 }: RenderJournalMarkdownOptions): ReactNode {
-  const content = stripFrontMatter(markdown)
+  const parsedEntry = parseJournalMarkdown(markdown)
+  const content = stripJournalFrontMatter(markdown)
   const file = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -48,7 +50,7 @@ export function renderJournalMarkdown({
     .use(remarkJournalDirectives)
     .use(remarkRehype)
     .use(rehypeSanitize, sanitizeSchema)
-    .use(rehypeAnnotationAttributes, { annotations })
+    .use(rehypeAnnotationAttributes, { annotations, markdown: parsedEntry.longEntryMarkdown })
     .use(rehypeReact, {
       Fragment,
       jsx: runtime.jsx,
@@ -59,12 +61,4 @@ export function renderJournalMarkdown({
     .processSync(content)
 
   return file.result as ReactNode
-}
-
-function stripFrontMatter(markdown: string): string {
-  try {
-    return matter(markdown).content
-  } catch {
-    return markdown
-  }
 }

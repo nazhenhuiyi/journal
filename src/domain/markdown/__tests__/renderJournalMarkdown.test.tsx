@@ -5,7 +5,10 @@ import basicEntry from '../__fixtures__/basic-entry.md?raw'
 import gfmEntry from '../__fixtures__/gfm-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
 import unsafeHtmlEntry from '../__fixtures__/unsafe-html.md?raw'
+import { createTextSelector } from '../../annotations'
+import { parseJournalMarkdown } from '../parseJournalMarkdown'
 import { renderJournalMarkdown } from '../renderJournalMarkdown'
+import type { Annotation, TextSelector } from '../../annotations'
 
 describe('renderJournalMarkdown', () => {
   it('renders basic markdown without rendering front matter', () => {
@@ -111,4 +114,39 @@ date: [broken
 
     expect(screen.getByText('这不是日记自定义块。')).toBeInTheDocument()
   })
+
+  it('attaches visible long-entry annotations to intersecting markdown blocks', () => {
+    const { longEntryMarkdown } = parseJournalMarkdown(annotationTargetsEntry)
+    const exact = '今天真的**很累**'
+    const start = longEntryMarkdown.indexOf(exact)
+    const annotation = createAnnotation(
+      'ann_tired',
+      createTextSelector(longEntryMarkdown, start, start + exact.length),
+    )
+    const { container } = render(
+      <>{renderJournalMarkdown({ markdown: annotationTargetsEntry, annotations: [annotation] })}</>,
+    )
+    const annotatedBlock = container.querySelector('[data-annotation-ids="ann_tired"]')
+
+    expect(annotatedBlock).toBeInTheDocument()
+    expect(annotatedBlock).toHaveClass('journal-annotated-block')
+    expect(annotatedBlock).toHaveTextContent('今天真的很累')
+  })
 })
+
+function createAnnotation(id: string, selector: TextSelector): Annotation {
+  return {
+    id,
+    author: 'ai',
+    kind: 'observation',
+    target: {
+      type: 'longEntryRange',
+      selector,
+    },
+    body: {
+      content: '测试批注',
+    },
+    status: 'visible',
+    createdAt: '2026-04-24T00:00:00+08:00',
+  }
+}

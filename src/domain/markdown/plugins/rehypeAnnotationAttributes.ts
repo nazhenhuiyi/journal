@@ -1,18 +1,30 @@
-import type { RenderAnnotation } from '../types'
+import { annotationIdsForBlock, resolveAnnotationRanges } from '../../annotations'
+import type { Annotation, ResolvedAnnotationRange } from '../../annotations'
 
 export type RehypeAnnotationAttributesOptions = {
-  annotations?: RenderAnnotation[]
+  annotations?: Annotation[]
+  markdown?: string
 }
 
 type HastNode = {
   type?: string
   tagName?: string
   properties?: Record<string, unknown>
+  position?: {
+    start?: {
+      offset?: number
+    }
+    end?: {
+      offset?: number
+    }
+  }
   children?: HastNode[]
 }
 
 export function rehypeAnnotationAttributes(options: RehypeAnnotationAttributesOptions = {}) {
   return function transformer(tree: HastNode) {
+    const annotationRanges = resolveAnnotationRanges(options.markdown ?? '', options.annotations ?? [])
+
     visit(tree, (node) => {
       if (node.properties?.dataJournalDirective === 'murmur') {
         node.properties.className = mergeClassName(node.properties.className, 'journal-murmur')
@@ -21,10 +33,37 @@ export function rehypeAnnotationAttributes(options: RehypeAnnotationAttributesOp
       if (node.properties?.dataJournalDirective === 'image') {
         node.properties.className = mergeClassName(node.properties.className, 'journal-image')
       }
-    })
 
-    void options
+      attachAnnotationIds(node, annotationRanges)
+    })
   }
+}
+
+function attachAnnotationIds(node: HastNode, annotationRanges: ResolvedAnnotationRange[]) {
+  const start = node.position?.start?.offset
+  const end = node.position?.end?.offset
+
+  if (!isSupportedAnnotationBlock(node) || typeof start !== 'number' || typeof end !== 'number') {
+    return
+  }
+
+  const annotationIds = annotationIdsForBlock(start, end, annotationRanges)
+
+  if (annotationIds.length === 0) {
+    return
+  }
+
+  node.properties = {
+    ...node.properties,
+    className: mergeClassName(node.properties?.className, 'journal-annotated-block'),
+    dataAnnotationIds: annotationIds.join(' '),
+  }
+}
+
+function isSupportedAnnotationBlock(node: HastNode): boolean {
+  return ['blockquote', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'p', 'pre'].includes(
+    node.tagName ?? '',
+  )
 }
 
 function visit(node: HastNode, visitor: (node: HastNode) => void) {

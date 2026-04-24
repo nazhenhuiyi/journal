@@ -54,6 +54,96 @@ body {
     repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.035) 0 1px, transparent 1px 26px);
 }
 
+.markdown-preview {
+  font-size: 16px;
+  line-height: 1.9;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  font-family: var(--font-display);
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--color-ink);
+}
+
+.markdown-preview h1 {
+  margin: 0 0 2rem;
+  font-size: 2.35rem;
+}
+
+.markdown-preview h2 {
+  margin: 2rem 0 1rem;
+  font-size: 1.65rem;
+}
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 1.2rem 0;
+}
+
+.markdown-preview a {
+  color: #416f83;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.markdown-preview strong {
+  color: #1f352f;
+  font-weight: 700;
+}
+
+.markdown-preview [data-annotation-ids] {
+  position: relative;
+  margin-left: -0.85rem;
+  padding: 0.18rem 0.85rem;
+  border-left: 3px solid rgba(111, 126, 99, 0.32);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.markdown-preview [data-annotation-ids]:hover,
+.markdown-preview [data-annotation-active='true'] {
+  border-left-color: var(--color-sage);
+  background: rgba(111, 126, 99, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(111, 126, 99, 0.14);
+}
+
+.markdown-preview [data-annotation-ids]::before {
+  content: '';
+  position: absolute;
+  top: 0.95em;
+  left: -0.52rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  background: var(--color-brass);
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid rgba(122, 79, 50, 0.18);
+  padding: 0.55rem 0.7rem;
+}
+
+.markdown-preview th {
+  background: rgba(111, 126, 99, 0.1);
+  text-align: left;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-float-in {
     animation: none;

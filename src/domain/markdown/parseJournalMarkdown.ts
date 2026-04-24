@@ -1,4 +1,3 @@
-import matter from 'gray-matter'
 import type {
   DayFrontMatter,
   ImageBlock,
@@ -8,6 +7,7 @@ import type {
 } from './types'
 
 const murmurStartPattern = /^:::murmur\s*$/m
+const frontMatterFence = '---'
 
 export function parseJournalMarkdown(markdown: string): ParsedJournalEntry {
   const diagnostics: MarkdownDiagnostic[] = []
@@ -28,17 +28,22 @@ function parseFrontMatter(
   markdown: string,
   diagnostics: MarkdownDiagnostic[],
 ): { frontMatter: DayFrontMatter; content: string } {
-  try {
-    const parsed = matter(markdown)
-
+  if (!markdown.startsWith(`${frontMatterFence}\n`) && !markdown.startsWith(`${frontMatterFence}\r\n`)) {
     return {
-      frontMatter: normalizeFrontMatter(parsed.data as DayFrontMatter),
-      content: parsed.content,
+      frontMatter: {},
+      content: markdown,
     }
-  } catch (error) {
+  }
+
+  const lines = markdown.split(/\r?\n/)
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === frontMatterFence)
+
+  if (closingIndex === -1) {
     diagnostics.push({
       severity: 'error',
-      message: `Front Matter 解析失败：${getErrorMessage(error)}`,
+      message: 'Front Matter 缺少结束标记 ---。',
+      line: 1,
+      column: 1,
     })
 
     return {
@@ -46,15 +51,102 @@ function parseFrontMatter(
       content: markdown,
     }
   }
+
+  const frontMatterLines = lines.slice(1, closingIndex)
+  const previousDiagnosticCount = diagnostics.length
+  const frontMatter = parseFrontMatterFields(frontMatterLines, diagnostics)
+
+  return {
+    frontMatter: diagnostics.length > previousDiagnosticCount ? {} : frontMatter,
+    content: lines.slice(closingIndex + 1).join('\n').replace(/^\n/, ''),
+  }
 }
 
-function normalizeFrontMatter(frontMatter: DayFrontMatter): DayFrontMatter {
-  return Object.fromEntries(
-    Object.entries(frontMatter).map(([key, value]) => [
-      key,
-      value instanceof Date ? value.toISOString().slice(0, 10) : value,
-    ]),
-  ) as DayFrontMatter
+function parseFrontMatterFields(
+  lines: string[],
+  diagnostics: MarkdownDiagnostic[],
+): DayFrontMatter {
+  const frontMatter: DayFrontMatter = {}
+  let currentObjectKey: string | null = null
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+
+    if (!line.trim()) {
+      continue
+    }
+
+    const nestedMatch = /^ {2}([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
+
+    if (nestedMatch && currentObjectKey) {
+      const currentObject = frontMatter[currentObjectKey]
+
+      if (isRecord(currentObject)) {
+        currentObject[nestedMatch[1]] = parseFrontMatterValue(nestedMatch[2], diagnostics, index + 2)
+      }
+
+      continue
+    }
+
+    const topLevelMatch = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
+
+    if (!topLevelMatch) {
+      diagnostics.push({
+        severity: 'error',
+        message: `Front Matter 无法解析第 ${index + 2} 行。`,
+        line: index + 2,
+        column: 1,
+      })
+      continue
+    }
+
+    const [, key, rawValue] = topLevelMatch
+
+    if (!rawValue.trim()) {
+      frontMatter[key] = {}
+      currentObjectKey = key
+    } else {
+      frontMatter[key] = parseFrontMatterValue(rawValue, diagnostics, index + 2)
+      currentObjectKey = null
+    }
+  }
+
+  return frontMatter
+}
+
+function parseFrontMatterValue(
+  rawValue: string,
+  diagnostics: MarkdownDiagnostic[],
+  line: number,
+): string | number | boolean {
+  const value = stripWrappingQuotes(rawValue.trim())
+
+  if (value.startsWith('[') && !value.endsWith(']')) {
+    diagnostics.push({
+      severity: 'error',
+      message: `Front Matter 第 ${line} 行数组语法不完整。`,
+      line,
+      column: 1,
+    })
+  }
+
+  if (value === 'true') {
+    return true
+  }
+
+  if (value === 'false') {
+    return false
+  }
+
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return Number(value)
+  }
+
+  return value
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function parseMurmurs(content: string, diagnostics: MarkdownDiagnostic[]): MurmurBlock[] {
@@ -249,6 +341,6 @@ function findClosingLine(lines: string[], startIndex: number, marker: string): n
   return -1
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+export function stripJournalFrontMatter(markdown: string): string {
+  return parseFrontMatter(markdown, []).content
 }
