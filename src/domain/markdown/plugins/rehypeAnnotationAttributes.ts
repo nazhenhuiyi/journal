@@ -9,6 +9,7 @@ export type RehypeAnnotationAttributesOptions = {
 type HastNode = {
   type?: string
   tagName?: string
+  value?: string
   properties?: Record<string, unknown>
   position?: {
     start?: {
@@ -35,6 +36,7 @@ export function rehypeAnnotationAttributes(options: RehypeAnnotationAttributesOp
       }
 
       attachAnnotationIds(node, annotationRanges)
+      attachSourceOffsetsToTextChildren(node)
     })
   }
 }
@@ -64,6 +66,36 @@ function isSupportedAnnotationBlock(node: HastNode): boolean {
   return ['blockquote', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'p', 'pre'].includes(
     node.tagName ?? '',
   )
+}
+
+function attachSourceOffsetsToTextChildren(node: HastNode) {
+  if (!node.children || node.properties?.dataSourceStart) {
+    return
+  }
+
+  node.children = node.children.map((child) => {
+    if (child.type !== 'text' || !child.value) {
+      return child
+    }
+
+    const start = child.position?.start?.offset
+    const end = child.position?.end?.offset
+
+    if (typeof start !== 'number' || typeof end !== 'number') {
+      return child
+    }
+
+    return {
+      type: 'element',
+      tagName: 'span',
+      properties: {
+        dataSourceStart: String(start),
+        dataSourceEnd: String(end),
+      },
+      position: child.position,
+      children: [child],
+    }
+  })
 }
 
 function visit(node: HastNode, visitor: (node: HastNode) => void) {

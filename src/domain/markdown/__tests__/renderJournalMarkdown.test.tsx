@@ -5,7 +5,7 @@ import basicEntry from '../__fixtures__/basic-entry.md?raw'
 import gfmEntry from '../__fixtures__/gfm-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
 import unsafeHtmlEntry from '../__fixtures__/unsafe-html.md?raw'
-import { createTextSelector } from '../../annotations'
+import { createDomRangesForSourceRange, createTextSelector } from '../../annotations'
 import { parseJournalMarkdown } from '../parseJournalMarkdown'
 import { renderJournalMarkdown } from '../renderJournalMarkdown'
 import type { Annotation, TextSelector } from '../../annotations'
@@ -76,10 +76,57 @@ describe('renderJournalMarkdown', () => {
     render(<>{renderJournalMarkdown({ markdown: annotationTargetsEntry })}</>)
 
     expect(screen.getByRole('heading', { name: '批注目标' })).toBeInTheDocument()
-    expect(screen.getByText('很累')).toHaveProperty('tagName', 'STRONG')
+    expect(screen.getByText('很累').closest('strong')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '链接' })).toHaveAttribute('href', 'https://example.com')
     expect(screen.getAllByText('这句话会重复出现。')).toHaveLength(2)
     expect(screen.getByText(/这一段\s+跨了两行，\s+但仍然属于同一个段落。/)).toBeInTheDocument()
+  })
+
+  it('marks visible markdown text with source offsets for precise annotations', () => {
+    const { longEntryMarkdown } = parseJournalMarkdown(annotationTargetsEntry)
+    const { container } = render(<>{renderJournalMarkdown({ markdown: annotationTargetsEntry })}</>)
+    const tiredText = screen.getByText('很累')
+    const start = longEntryMarkdown.indexOf('很累')
+
+    expect(tiredText).toHaveAttribute('data-source-start', String(start))
+    expect(tiredText).toHaveAttribute('data-source-end', String(start + '很累'.length))
+    expect(tiredText.closest('strong')).toBeInTheDocument()
+    expect(container.querySelector('[data-annotation-ids]')).not.toBeInTheDocument()
+  })
+
+  it('maps source ranges to DOM ranges in plain paragraphs, inline markdown, and links', () => {
+    const { longEntryMarkdown } = parseJournalMarkdown(annotationTargetsEntry)
+    const { container } = render(<>{renderJournalMarkdown({ markdown: annotationTargetsEntry })}</>)
+
+    const repeatedText = '这句话会重复出现。'
+    const repeatedStart = longEntryMarkdown.lastIndexOf(repeatedText)
+    expect(
+      createDomRangesForSourceRange(container, {
+        start: repeatedStart,
+        end: repeatedStart + repeatedText.length,
+      }).map((range) => range.toString()),
+    ).toEqual([repeatedText])
+
+    const inlineText = '今天真的**很累**'
+    const inlineStart = longEntryMarkdown.indexOf(inlineText)
+    expect(
+      createDomRangesForSourceRange(container, {
+        start: inlineStart,
+        end: inlineStart + inlineText.length,
+      }).map((range) => range.toString()),
+    ).toEqual(['今天真的', '很累'])
+
+    const linkText = '链接'
+    const linkStart = longEntryMarkdown.indexOf(linkText)
+    const linkRanges = createDomRangesForSourceRange(container, {
+      start: linkStart,
+      end: linkStart + linkText.length,
+    })
+
+    expect(linkRanges.map((range) => range.toString())).toEqual([linkText])
+    expect(screen.getByRole('link', { name: linkText })).toContainElement(
+      linkRanges[0].startContainer.parentElement,
+    )
   })
 
   it('does not throw when front matter is malformed', () => {
