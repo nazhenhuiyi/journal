@@ -54,6 +54,257 @@ body {
     repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.035) 0 1px, transparent 1px 26px);
 }
 
+.journal-workspace {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(215, 166, 75, 0.15), transparent 28rem),
+    radial-gradient(circle at 92% 18%, rgba(111, 126, 99, 0.16), transparent 24rem),
+    #ede3ce;
+}
+
+.journal-shell {
+  border: 1.5px solid rgba(122, 79, 50, 0.22);
+  border-radius: 18px 15px 20px 14px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.78), transparent 34rem),
+    radial-gradient(circle at 8% 92%, rgba(215, 166, 75, 0.1), transparent 22rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(251, 248, 239, 0.88));
+  box-shadow: 0 24px 70px rgba(86, 58, 35, 0.14);
+}
+
+.journal-topbar {
+  border-bottom: 1.5px solid rgba(122, 79, 50, 0.14);
+  background: rgba(255, 252, 243, 0.76);
+}
+
+.mode-switch {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1.5px solid rgba(122, 79, 50, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.mode-switch button {
+  min-width: 4.2rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.42rem 0.9rem;
+  color: rgba(47, 38, 31, 0.68);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.mode-switch button.is-active {
+  color: var(--color-ink);
+  background: rgba(111, 126, 99, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(111, 126, 99, 0.28);
+}
+
+.save-state {
+  border: 1.5px solid rgba(215, 166, 75, 0.34);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  color: var(--color-walnut);
+  background: rgba(215, 166, 75, 0.13);
+}
+
+.journal-body {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(122, 79, 50, 0.06), transparent 18rem),
+    rgba(255, 250, 240, 0.22);
+}
+
+.journal-menu {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  border-right: 1.5px solid rgba(122, 79, 50, 0.12);
+  padding: 1.2rem 0.95rem;
+  background:
+    radial-gradient(circle at 10% 8%, rgba(215, 166, 75, 0.14), transparent 8rem),
+    linear-gradient(180deg, rgba(255, 252, 243, 0.78), rgba(247, 239, 219, 0.58));
+}
+
+.journal-menu-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.25rem 0.45rem 0.35rem;
+}
+
+.journal-menu-title span:first-child {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.journal-menu-title span:last-child {
+  color: rgba(47, 38, 31, 0.5);
+  font-size: 0.76rem;
+}
+
+.journal-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.journal-menu button {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  border: 1.5px solid transparent;
+  border-radius: 11px 9px 12px 8px;
+  padding: 0.68rem 0.62rem;
+  color: rgba(47, 38, 31, 0.68);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.journal-menu button:hover {
+  border-color: rgba(122, 79, 50, 0.14);
+  background: rgba(255, 250, 240, 0.68);
+  color: var(--color-ink);
+}
+
+.journal-menu button.is-active {
+  border-color: rgba(111, 126, 99, 0.24);
+  color: var(--color-ink);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(111, 126, 99, 0.16), transparent 3rem),
+    rgba(111, 126, 99, 0.1);
+}
+
+.journal-menu button svg {
+  color: var(--color-sage);
+}
+
+.journal-menu button span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.journal-menu button strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-menu button small {
+  overflow: hidden;
+  color: rgba(47, 38, 31, 0.48);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-stage {
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.58), transparent 35rem),
+    radial-gradient(circle at 0% 20%, rgba(122, 79, 50, 0.06), transparent 18rem),
+    radial-gradient(circle at 100% 88%, rgba(111, 126, 99, 0.08), transparent 20rem),
+    rgba(255, 250, 240, 0.34);
+}
+
+.journal-writing-panel {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.journal-paper,
+.journal-stage .markdown-preview {
+  width: min(100%, 48rem);
+  min-height: min(56rem, calc(100vh - 10rem));
+  margin: 0 auto;
+  border: 1.5px solid rgba(122, 79, 50, 0.22);
+  border-radius: 18px 14px 20px 13px;
+  background:
+    radial-gradient(ellipse at 50% -12%, rgba(255, 255, 255, 0.72), transparent 26rem),
+    radial-gradient(circle at 9% 18%, rgba(215, 166, 75, 0.08), transparent 13rem),
+    radial-gradient(circle at 86% 78%, rgba(111, 126, 99, 0.06), transparent 16rem),
+    radial-gradient(circle at 52% 45%, rgba(122, 79, 50, 0.025), transparent 18rem),
+    linear-gradient(135deg, rgba(255, 254, 247, 0.96), rgba(255, 249, 235, 0.94));
+  box-shadow:
+    0 18px 45px rgba(86, 58, 35, 0.1),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.24);
+}
+
+.journal-stage .markdown-preview {
+  padding: 4.6rem 4rem 4rem;
+}
+
+.journal-paper {
+  display: flex;
+  flex-direction: column;
+  padding: 1.05rem 1.2rem 1rem;
+}
+
+.journal-paper-meta,
+.journal-paper-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: rgba(47, 38, 31, 0.5);
+  font-size: 0.78rem;
+}
+
+.journal-editor {
+  flex: 1;
+  width: 100%;
+  min-height: 34rem;
+}
+
+.journal-editor .cm-editor {
+  min-height: 34rem;
+  background: transparent;
+}
+
+.journal-editor .cm-scroller {
+  border-radius: 14px 10px 16px 9px;
+}
+
+.journal-editor .cm-content {
+  white-space: pre-wrap;
+}
+
+.journal-editor .cm-tooltip {
+  border: 1px solid rgba(122, 79, 50, 0.18);
+  border-radius: 8px;
+  background: #fffaf0;
+  box-shadow: 0 12px 30px rgba(86, 58, 35, 0.12);
+}
+
+.journal-paper-footer button {
+  border: 1.5px solid rgba(111, 126, 99, 0.28);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  color: var(--color-sage);
+  background: rgba(111, 126, 99, 0.1);
+  cursor: pointer;
+}
+
 .markdown-preview {
   position: relative;
   font-size: 16px;
@@ -116,8 +367,9 @@ body {
 
 .annotation-overlay-rect {
   position: absolute;
-  border: 1px solid rgba(122, 79, 50, 0.52);
-  background: rgba(215, 166, 75, 0.12);
+  border: 1.5px solid rgba(122, 79, 50, 0.5);
+  border-radius: 12px 9px 11px 8px;
+  background: rgba(215, 166, 75, 0.1);
   box-shadow: 0 0 0 2px rgba(215, 166, 75, 0.1);
 }
 
@@ -141,5 +393,44 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-float-in {
     animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .journal-menu {
+    border-right: 0;
+    border-bottom: 1.5px solid rgba(122, 79, 50, 0.12);
+    padding: 0.8rem 0.8rem 0.72rem;
+  }
+
+  .journal-menu-title {
+    display: none;
+  }
+
+  .journal-menu-list {
+    flex-direction: row;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+  }
+
+  .journal-menu button {
+    width: auto;
+    min-width: 6.8rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .journal-writing-panel {
+    padding: 1rem;
+  }
+
+  .journal-stage .markdown-preview {
+    padding: 3.4rem 1.6rem 2.6rem;
+  }
+
+  .journal-editor {
+    padding: 2.6rem 1.1rem 2rem 2rem;
+    font-size: 1rem;
   }
 }

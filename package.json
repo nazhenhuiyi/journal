@@ -12,7 +12,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.3",
+    "@lezer/highlight": "^1.2.3",
     "@openai/codex-sdk": "^0.123.0",
+    "codemirror": "^6.0.2",
+    "lucide-react": "^1.11.0",
     "motion": "^12.38.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

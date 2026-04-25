@@ -35,18 +35,41 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+function enterReviewMode() {
+  fireEvent.click(screen.getByRole('button', { name: '回看' }))
+}
+
 describe('MarkdownPreviewPage', () => {
-  it('renders markdown preview as the default page experience', () => {
+  it('renders the writing state as the default page experience', () => {
     render(<MarkdownPreviewPage />)
 
-    expect(screen.getByRole('heading', { name: '2026-04-24 日记预览' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '今日纸面' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()
+  })
+
+  it('shows the reading preview and annotation margin in review mode', () => {
+    render(<MarkdownPreviewPage />)
+
+    enterReviewMode()
+
+    expect(screen.getByRole('button', { name: '回看' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { name: '批注目标' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '批注' })).toBeInTheDocument()
+  })
+
+  it('mounts the writing surface as a CodeMirror editor', () => {
+    const { container } = render(<MarkdownPreviewPage />)
+
+    expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
+    expect(container.querySelector('.cm-editor')).toBeInTheDocument()
   })
 
   it('selects an annotation from the sidebar and marks the matching preview block active', () => {
     const { container } = render(<MarkdownPreviewPage />)
 
+    enterReviewMode()
     fireEvent.click(screen.getByRole('button', { name: /这句重复出现/ }))
 
     const activeBlock = container.querySelector('[data-annotation-active="true"]')
@@ -58,6 +81,7 @@ describe('MarkdownPreviewPage', () => {
   it('updates the active text highlight when selecting a sidebar annotation', async () => {
     render(<MarkdownPreviewPage />)
 
+    enterReviewMode()
     fireEvent.click(screen.getByRole('button', { name: /桌面露出来/ }))
 
     await waitFor(() => {
@@ -71,6 +95,7 @@ describe('MarkdownPreviewPage', () => {
   it('registers precise text highlights and cleans up its own highlight keys', async () => {
     const { unmount } = render(<MarkdownPreviewPage />)
 
+    enterReviewMode()
     await waitFor(() => {
       expect(highlightStore.get('journal-annotation-text')?.ranges.length).toBeGreaterThan(0)
       expect(highlightStore.get('journal-annotation-active')?.ranges.map((range) => range.toString())).toEqual([
@@ -87,6 +112,8 @@ describe('MarkdownPreviewPage', () => {
 
   it('selects an annotation by clicking an annotated preview block', () => {
     const { container } = render(<MarkdownPreviewPage />)
+
+    enterReviewMode()
     const tiredBlock = container.querySelector('[data-annotation-ids~="ann_tired"]')
 
     expect(tiredBlock).toBeInTheDocument()
@@ -97,6 +124,8 @@ describe('MarkdownPreviewPage', () => {
 
   it('selects the precise annotation at the clicked text position inside a shared block', async () => {
     const { container } = render(<MarkdownPreviewPage />)
+
+    enterReviewMode()
     const deskText = screen.getByText((content) => content.includes('桌面慢慢露出来'))
     const sourceText = deskText.firstChild as Text
     const clickRange = document.createRange()
