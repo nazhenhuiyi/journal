@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import type { Transition } from 'motion/react'
 import { createDomRangesByAnnotation, createTextSelector, resolveAnnotationRanges } from '../domain/annotations'
 import type { Annotation } from '../domain/annotations'
 import annotationTargetsEntry from '../domain/markdown/__fixtures__/annotation-targets.md?raw'
@@ -7,6 +9,8 @@ import { parseJournalMarkdown, renderJournalMarkdown } from '../domain/markdown'
 
 const textHighlightKey = 'journal-annotation-text'
 const activeHighlightKey = 'journal-annotation-active'
+const panelTransition: Transition = { duration: 0.34, ease: [0.22, 1, 0.36, 1] }
+const listTransition: Transition = { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
 
 const annotationKinds: Record<Annotation['kind'], string> = {
   observation: '观察',
@@ -251,9 +255,24 @@ function MarkdownPreviewPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4efe2] px-4 py-5 font-sans text-ink sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-7xl flex-col overflow-hidden border border-walnut/15 bg-[#fbf8ef] shadow-xl shadow-walnut/10">
-        <header className="flex flex-col gap-4 border-b border-walnut/10 bg-white/65 px-5 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-7">
+    <motion.main
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-[#f4efe2] px-4 py-5 font-sans text-ink sm:px-6 lg:px-8"
+      initial={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div
+        animate={{ opacity: 1, y: 0 }}
+        className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-7xl flex-col overflow-hidden border border-walnut/15 bg-[#fbf8ef] shadow-xl shadow-walnut/10"
+        initial={{ opacity: 0, y: 12 }}
+        transition={panelTransition}
+      >
+        <motion.header
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col gap-4 border-b border-walnut/10 bg-white/65 px-5 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-7"
+          initial={{ opacity: 0, y: -8 }}
+          transition={{ ...panelTransition, delay: 0.05 }}
+        >
           <div>
             <p className="text-xs font-semibold uppercase text-sage">Markdown Preview</p>
             <h1 className="mt-2 font-display text-2xl font-semibold text-ink sm:text-3xl">2026-04-24 日记预览</h1>
@@ -264,10 +283,15 @@ function MarkdownPreviewPage() {
               {demoAnnotations.length} 条批注
             </span>
           </div>
-        </header>
+        </motion.header>
 
         <section className="grid flex-1 min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <article className="min-h-0 overflow-y-auto px-5 py-6 sm:px-8 lg:px-10">
+          <motion.article
+            animate={{ opacity: 1, x: 0 }}
+            className="min-h-0 overflow-y-auto px-5 py-6 sm:px-8 lg:px-10"
+            initial={{ opacity: 0, x: -14 }}
+            transition={{ ...panelTransition, delay: 0.1 }}
+          >
             <div
               ref={previewRef}
               className="markdown-preview mx-auto max-w-3xl"
@@ -275,56 +299,91 @@ function MarkdownPreviewPage() {
             >
               {renderedMarkdown}
               <div aria-hidden="true" className="annotation-overlay">
-                {activeOverlayRects.map((rect) => (
-                  <span
-                    key={rect.key}
-                    className="annotation-overlay-rect"
-                    style={{
-                      left: rect.left,
-                      top: rect.top,
-                      width: rect.width,
-                      height: rect.height,
-                    }}
-                  />
-                ))}
+                <AnimatePresence initial={false}>
+                  {activeOverlayRects.map((rect) => (
+                    <motion.span
+                      key={`${activeAnnotationId}-${rect.key}`}
+                      animate={{ opacity: 1, scaleX: 1 }}
+                      className="annotation-overlay-rect"
+                      exit={{ opacity: 0, scaleX: 0.96 }}
+                      initial={{ opacity: 0, scaleX: 0.96 }}
+                      style={{
+                        left: rect.left,
+                        top: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                        transformOrigin: 'left center',
+                      }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                    />
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
-          </article>
+          </motion.article>
 
-          <aside className="border-t border-walnut/10 bg-white/70 px-4 py-5 lg:border-l lg:border-t-0">
+          <motion.aside
+            animate={{ opacity: 1, x: 0 }}
+            className="border-t border-walnut/10 bg-white/70 px-4 py-5 lg:border-l lg:border-t-0"
+            initial={{ opacity: 0, x: 14 }}
+            transition={{ ...panelTransition, delay: 0.14 }}
+          >
             <div className="sticky top-5">
               <div className="mb-4">
                 <p className="text-xs font-semibold uppercase text-sage">Annotations</p>
                 <h2 className="mt-2 font-display text-xl font-semibold text-ink">批注</h2>
               </div>
 
-              <div className="space-y-3">
+              <motion.div
+                animate="visible"
+                className="space-y-3"
+                initial="hidden"
+                variants={{
+                  hidden: {},
+                  visible: {
+                    transition: {
+                      delayChildren: 0.18,
+                      staggerChildren: 0.035,
+                    },
+                  },
+                }}
+              >
                 {demoAnnotations.map((annotation) => {
                   const isActive = annotation.id === activeAnnotationId
 
                   return (
-                    <button
+                    <motion.button
                       key={annotation.id}
+                      animate={{ opacity: 1, scale: isActive ? 1.012 : 1, y: 0 }}
                       aria-pressed={isActive}
                       className={`w-full border px-4 py-3 text-left transition ${
                         isActive
                           ? 'border-sage bg-sage/10 shadow-sm'
                           : 'border-walnut/10 bg-[#fbf8ef] hover:border-sage/40 hover:bg-white'
                       }`}
+                      initial={{ opacity: 0, y: 8 }}
+                      layout
                       onClick={() => selectAnnotation(annotation.id, true)}
+                      transition={listTransition}
                       type="button"
+                      variants={{
+                        hidden: { opacity: 0, y: 8 },
+                        visible: { opacity: 1, y: 0 },
+                      }}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.99 }}
                     >
                       <span className="text-xs font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
                       <span className="mt-2 block text-sm leading-6 text-ink/75">{annotation.body.content}</span>
-                    </button>
+                    </motion.button>
                   )
                 })}
-              </div>
+              </motion.div>
             </div>
-          </aside>
+          </motion.aside>
         </section>
-      </div>
-    </main>
+      </motion.div>
+    </motion.main>
   )
 }
 
