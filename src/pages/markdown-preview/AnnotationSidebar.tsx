@@ -16,7 +16,7 @@ function AnnotationSidebar({
   return (
     <motion.aside
       animate={{ opacity: 1, x: 0 }}
-      className="border-t border-walnut/10 bg-white/70 px-4 py-5 lg:border-l lg:border-t-0"
+      className="annotation-sidebar border-t border-walnut/10 bg-white/70 px-4 py-5 lg:border-l lg:border-t-0"
       initial={{ opacity: 0, x: 14 }}
       transition={{ ...panelTransition, delay: 0.14 }}
     >
