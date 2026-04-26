@@ -1,5 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { Feather, MapPin, Stamp, StickyNote } from 'lucide-react'
+import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
+import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
 import bookshopTicketImage from '../../assets/postcards/bookshop-ticket.png'
 import riverLightImage from '../../assets/postcards/river-light.png'
 import foundPostmarkImage from '../../assets/postmarks/found.png'
@@ -43,6 +45,7 @@ const postcards: Array<{
   title: string
   body: string
   stampImage: string
+  motifImage: string
   tone: string
   image: string
   imageAlt: string
@@ -54,6 +57,7 @@ const postcards: Array<{
     title: '水面有一层碎光',
     body: '桥下有人吹口琴，傍晚慢慢落到杯沿上。',
     stampImage: springPostmarkImage,
+    motifImage: riverMotifImage,
     tone: 'river',
     image: riverLightImage,
     imageAlt: '傍晚河面上有一束碎金色的反光',
@@ -65,6 +69,7 @@ const postcards: Array<{
     title: '夹在书页里的票根',
     body: '封底写着别人的名字，像一段被悄悄寄来的天气。',
     stampImage: foundPostmarkImage,
+    motifImage: bookshopMotifImage,
     tone: 'bookshop',
     image: bookshopTicketImage,
     imageAlt: '旧书页间夹着一张泛黄票根',
@@ -92,6 +97,7 @@ function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
 function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
   return (
     <article className={`journal-postcard is-${postcard.tone}`}>
+      <img alt="" aria-hidden="true" className="journal-postcard-motif" src={postcard.motifImage} />
       <div className="journal-postcard-photo">
         <img alt={postcard.imageAlt} className="journal-postcard-image" src={postcard.image} />
         <span aria-hidden="true">FILM</span>
