@@ -10,6 +10,10 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
+import nightLampPhoto from '../assets/memory-photos/night-lamp.jpg'
+import openBookPhoto from '../assets/memory-photos/open-book.jpg'
+import rainyNightPhoto from '../assets/memory-photos/rainy-night.jpg'
+import windowPlantPhoto from '../assets/memory-photos/window-plant.jpg'
 import CardStyleShowcase from './all-pages/CardStyleShowcase'
 import { panelTransition } from './markdown-preview/constants'
 
@@ -45,24 +49,28 @@ const memoryRows = [
     text: '便利店门口的灯很亮，伞面一直滴水。',
     tone: 'rain',
     variant: 'feature',
+    image: rainyNightPhoto,
   },
   {
     date: '三月末',
     text: '窗边那盆植物又长出一点新叶。',
     tone: 'plant',
     variant: 'small',
+    image: windowPlantPhoto,
   },
   {
     date: '上周六 · 夜',
     text: '桌上只剩杯子和台灯，房间安静下来。',
     tone: 'night',
     variant: 'small',
+    image: nightLampPhoto,
   },
   {
     date: '去年春天',
     text: '那张照片里，风把纸页吹起来。',
     tone: 'spring',
     variant: 'small',
+    image: openBookPhoto,
   },
 ]
 
@@ -115,7 +123,9 @@ function AllPagesHomePage() {
         <div className="all-pages-memory-board">
           {memoryRows.map((memory) => (
             <article className={`all-pages-memory-card is-${memory.variant}`} key={`${memory.date}-${memory.text}`}>
-              <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`} />
+              <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`}>
+                <img alt="" draggable="false" src={memory.image} />
+              </div>
               <div className="all-pages-memory-copy">
                 <time>{memory.date}</time>
                 <p>{memory.text}</p>
