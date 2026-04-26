@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
+import CardStyleShowcase from './all-pages/CardStyleShowcase'
 import { panelTransition } from './markdown-preview/constants'
 
 const quickActions: Array<{
@@ -43,21 +44,25 @@ const memoryRows = [
     date: '2025.04.25 · 小雨',
     text: '便利店门口的灯很亮，伞面一直滴水。',
     tone: 'rain',
+    variant: 'feature',
   },
   {
     date: '三月末',
     text: '窗边那盆植物又长出一点新叶。',
     tone: 'plant',
+    variant: 'small',
   },
   {
     date: '上周六 · 夜',
     text: '桌上只剩杯子和台灯，房间安静下来。',
     tone: 'night',
+    variant: 'small',
   },
   {
     date: '去年春天',
     text: '那张照片里，风把纸页吹起来。',
     tone: 'spring',
+    variant: 'small',
   },
 ]
 
@@ -107,9 +112,9 @@ function AllPagesHomePage() {
           <h2 id="old-pages-title">翻到几页旧日</h2>
         </div>
 
-        <div className="all-pages-memory-list">
+        <div className="all-pages-memory-board">
           {memoryRows.map((memory) => (
-            <article className="all-pages-memory-row" key={`${memory.date}-${memory.text}`}>
+            <article className={`all-pages-memory-card is-${memory.variant}`} key={`${memory.date}-${memory.text}`}>
               <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`} />
               <div className="all-pages-memory-copy">
                 <time>{memory.date}</time>
@@ -122,6 +127,8 @@ function AllPagesHomePage() {
           ))}
         </div>
       </section>
+
+      <CardStyleShowcase />
     </motion.div>
   )
 }

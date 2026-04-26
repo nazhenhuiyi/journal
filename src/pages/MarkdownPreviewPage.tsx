@@ -137,7 +137,7 @@ function MarkdownPreviewPage() {
     <>
       <motion.header
         animate={{ opacity: 1, y: 0 }}
-        className="journal-topbar flex min-h-14 items-center justify-between gap-3 px-5 py-2 lg:px-7"
+        className="journal-topbar flex min-h-14 items-center justify-between gap-3 px-7 py-2"
         initial={{ opacity: 0, y: -8 }}
         transition={{ ...panelTransition, delay: 0.05 }}
       >
@@ -167,7 +167,7 @@ function MarkdownPreviewPage() {
 
       <section
         className={`journal-stage grid flex-1 min-h-0 gap-0 ${
-          isReviewing ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''
+          isReviewing ? 'grid-cols-[minmax(0,1fr)_360px]' : ''
         }`}
       >
         {isReviewing ? (

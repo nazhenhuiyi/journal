@@ -21,7 +21,7 @@ function MarkdownPreviewArticle({
   return (
     <motion.article
       animate={{ opacity: 1, x: 0 }}
-      className="min-h-0 overflow-y-auto px-5 py-6 sm:px-8 lg:px-10"
+      className="min-h-0 overflow-y-auto px-10 py-6"
       initial={{ opacity: 0, x: -14 }}
       transition={{ ...panelTransition, delay: 0.1 }}
     >

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { askCodex } from './codex'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const APP_MIN_WIDTH = 1180
 
 // The built directory structure
 //
@@ -29,6 +30,10 @@ ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, proces
 
 function createWindow() {
   win = new BrowserWindow({
+    width: 1280,
+    height: 840,
+    minWidth: APP_MIN_WIDTH,
+    minHeight: 720,
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),

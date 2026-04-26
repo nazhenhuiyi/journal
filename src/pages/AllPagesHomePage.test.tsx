@@ -32,4 +32,14 @@ describe('AllPagesHomePage', () => {
     expect(screen.queryByText('整理未完成')).not.toBeInTheDocument()
     expect(screen.queryByText('批注回看')).not.toBeInTheDocument()
   })
+
+  it('shows sticky note and postcard card studies', () => {
+    renderHomePage()
+
+    expect(screen.getByRole('heading', { name: '先留两种手感' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '便利贴' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '明信片' })).toBeInTheDocument()
+    expect(screen.getByText('今天的风把窗帘吹得很轻，像有人在旁边翻书。')).toBeInTheDocument()
+    expect(screen.getByText('桥下有人吹口琴，傍晚慢慢落到杯沿上。')).toBeInTheDocument()
+  })
 })

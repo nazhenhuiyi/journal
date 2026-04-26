@@ -28,7 +28,7 @@ function AppLayout() {
     >
       <motion.div
         animate={{ opacity: 1, y: 0 }}
-        className="journal-shell grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[232px_minmax(0,1fr)] lg:grid-rows-none"
+        className="journal-shell grid h-full min-h-0 w-full grid-cols-[232px_minmax(0,1fr)] overflow-hidden"
         initial={{ opacity: 0, y: 12 }}
         transition={panelTransition}
       >
