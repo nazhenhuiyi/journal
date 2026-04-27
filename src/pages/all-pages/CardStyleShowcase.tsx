@@ -77,6 +77,32 @@ const postcards: Array<{
 
 const cdTracks = ['出门前又找了一遍钥匙', '便利店的灯比雨天更亮', '没发出去的那条消息', '回家后把杯子洗干净']
 
+const dailyReceipt = {
+  shop: 'JOURNAL MART',
+  label: 'DAILY RECEIPT',
+  date: '2026.04.27',
+  dateTime: '2026-04-27',
+  time: '23:48',
+  cashier: 'self',
+  orderNo: '0427-2348',
+  stamp: 'SAVED',
+  items: [
+    { name: '早上犹豫了一会儿', qty: '1' },
+    { name: '热咖啡前的勇气', qty: '2' },
+    { name: '未读消息', qty: '5' },
+    { name: '小小松一口气', qty: '1' },
+    { name: '没有戴耳机的散步', qty: '1' },
+    { name: '差点说出口的话', qty: '1' },
+  ],
+  subtotal: '漫长的一天',
+  discount: '一句好听的话',
+  tax: '想太多',
+  total: '还在这里',
+  payment: '注意力',
+  change: '明天',
+  footer: 'Thank you for staying.',
+}
+
 const movieTicket = {
   cinema: '暮色日记放映所',
   badge: 'ADMIT ONE',
@@ -306,6 +332,91 @@ function LibraryBorrowCard({ card }: { card: typeof libraryCard }) {
   )
 }
 
+function DailyReceiptCard({ receipt }: { receipt: typeof dailyReceipt }) {
+  return (
+    <article className="journal-receipt" aria-labelledby="daily-receipt-title">
+      <div className="journal-receipt-tear" aria-hidden="true" />
+
+      <header className="journal-receipt-header">
+        <span>{receipt.shop}</span>
+        <h4 id="daily-receipt-title">{receipt.label}</h4>
+        <p>生活结算单 / day end close</p>
+      </header>
+
+      <dl className="journal-receipt-meta">
+        <div>
+          <dt>DATE</dt>
+          <dd>
+            <time dateTime={receipt.dateTime}>{receipt.date}</time>
+          </dd>
+        </div>
+        <div>
+          <dt>TIME</dt>
+          <dd>{receipt.time}</dd>
+        </div>
+        <div>
+          <dt>CASHIER</dt>
+          <dd>{receipt.cashier}</dd>
+        </div>
+        <div>
+          <dt>ORDER #</dt>
+          <dd>{receipt.orderNo}</dd>
+        </div>
+      </dl>
+
+      <div className="journal-receipt-rule" aria-hidden="true" />
+
+      <div className="journal-receipt-items" role="table" aria-label="今日小票条目">
+        <div className="journal-receipt-row is-head" role="row">
+          <span role="columnheader">ITEM</span>
+          <span role="columnheader">QTY</span>
+        </div>
+        {receipt.items.map((item) => (
+          <div className="journal-receipt-row" role="row" key={item.name}>
+            <span role="cell">{item.name}</span>
+            <span role="cell">{item.qty}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="journal-receipt-rule" aria-hidden="true" />
+
+      <dl className="journal-receipt-totals">
+        <div>
+          <dt>SUBTOTAL</dt>
+          <dd>{receipt.subtotal}</dd>
+        </div>
+        <div>
+          <dt>DISCOUNT</dt>
+          <dd>{receipt.discount}</dd>
+        </div>
+        <div>
+          <dt>TAX</dt>
+          <dd>{receipt.tax}</dd>
+        </div>
+        <div className="is-total">
+          <dt>TOTAL</dt>
+          <dd>{receipt.total}</dd>
+        </div>
+        <div>
+          <dt>PAYMENT</dt>
+          <dd>{receipt.payment}</dd>
+        </div>
+        <div>
+          <dt>CHANGE</dt>
+          <dd>{receipt.change}</dd>
+        </div>
+      </dl>
+
+      <p className="journal-receipt-footer">{receipt.footer}</p>
+      <span className="journal-receipt-stamp" aria-hidden="true">
+        {receipt.stamp}
+      </span>
+      <div className="journal-receipt-tear is-bottom" aria-hidden="true" />
+    </article>
+  )
+}
+
 function RetroCdPlayerCard() {
   return (
     <article className="journal-cd-player journal-cd-player-retro" aria-labelledby="retro-cd-title">
@@ -436,6 +547,15 @@ function CardStyleShowcase() {
           </div>
 
           <LibraryBorrowCard card={libraryCard} />
+        </div>
+
+        <div className="journal-receipt-showcase">
+          <div className="journal-card-family-title">
+            <span className="journal-receipt-title-icon" aria-hidden="true" />
+            <h3>今日小票</h3>
+          </div>
+
+          <DailyReceiptCard receipt={dailyReceipt} />
         </div>
 
         <div className="journal-cd-showcase">

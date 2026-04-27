@@ -1707,6 +1707,261 @@ body {
   font-size: 0.78rem;
 }
 
+.journal-receipt-showcase {
+  width: min(100%, 54rem);
+  margin: 1.8rem auto 0;
+}
+
+.journal-receipt-title-icon {
+  position: relative;
+  display: inline-block;
+  width: 1.08rem;
+  height: 1.34rem;
+  border: 1.8px solid #14724f;
+  border-radius: 2px 2px 4px 4px;
+  background:
+    repeating-linear-gradient(180deg, rgba(20, 114, 79, 0.18) 0 1px, transparent 1px 0.28rem),
+    rgba(255, 253, 244, 0.52);
+  box-shadow:
+    inset 0 0 0 0.12rem rgba(255, 253, 244, 0.4),
+    0 0.18rem 0 -0.06rem rgba(20, 114, 79, 0.72);
+  transform: rotate(2deg);
+}
+
+.journal-receipt-title-icon::before,
+.journal-receipt-title-icon::after {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 0.18rem;
+  background:
+    linear-gradient(135deg, transparent 0.13rem, #14724f 0.14rem 0.2rem, transparent 0.21rem) 0 0 / 0.34rem 100%
+      repeat-x;
+  content: "";
+}
+
+.journal-receipt-title-icon::before {
+  top: -0.18rem;
+}
+
+.journal-receipt-title-icon::after {
+  bottom: -0.18rem;
+  transform: rotate(180deg);
+}
+
+.journal-receipt {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 25.8rem);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(68, 58, 45, 0.15);
+  border-radius: 5px 5px 7px 7px;
+  padding: 1.06rem 1.08rem 1.1rem;
+  color: #29241e;
+  background:
+    linear-gradient(90deg, rgba(47, 38, 31, 0.035), transparent 0.58rem calc(100% - 0.58rem), rgba(47, 38, 31, 0.028)),
+    radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.86), transparent 9rem),
+    linear-gradient(180deg, #faf7ec, #eee7d8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -20px 32px rgba(72, 58, 42, 0.045),
+    0 18px 30px rgba(57, 49, 43, 0.1);
+  font-family:
+    "SFMono-Regular",
+    "Cascadia Mono",
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  transform: rotate(-0.45deg);
+}
+
+.journal-receipt::before,
+.journal-receipt::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.journal-receipt::before {
+  z-index: 0;
+  opacity: 0.48;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.018) 0 1px, transparent 1px 5px),
+    repeating-radial-gradient(circle at 0 0, rgba(47, 38, 31, 0.03) 0 0.65px, transparent 0.75px 8px);
+  mix-blend-mode: multiply;
+}
+
+.journal-receipt::after {
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 253, 244, 0.3),
+    inset 0 0 24px rgba(68, 58, 45, 0.05);
+}
+
+.journal-receipt > * {
+  position: relative;
+  z-index: 2;
+}
+
+.journal-receipt-tear {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 0.42rem;
+  background:
+    linear-gradient(135deg, #f4eddf 25%, transparent 25%) 0 0 / 0.58rem 0.42rem repeat-x,
+    linear-gradient(225deg, #f4eddf 25%, transparent 25%) 0.29rem 0 / 0.58rem 0.42rem repeat-x;
+}
+
+.journal-receipt-tear.is-bottom {
+  top: auto;
+  bottom: -1px;
+  transform: rotate(180deg);
+}
+
+.journal-receipt-header {
+  display: grid;
+  justify-items: center;
+  gap: 0.22rem;
+  padding: 0.28rem 0 0.7rem;
+  text-align: center;
+}
+
+.journal-receipt-header span {
+  color: rgba(41, 36, 30, 0.7);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.journal-receipt-header h4 {
+  margin: 0;
+  color: #24211d;
+  font-size: 1.42rem;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.journal-receipt-header p {
+  margin: 0;
+  color: rgba(41, 36, 30, 0.48);
+  font-size: 0.62rem;
+  line-height: 1.32;
+}
+
+.journal-receipt-meta,
+.journal-receipt-totals {
+  display: grid;
+  gap: 0.32rem;
+  margin: 0;
+}
+
+.journal-receipt-meta div,
+.journal-receipt-totals div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.journal-receipt-meta dt,
+.journal-receipt-totals dt,
+.journal-receipt-row.is-head span {
+  color: rgba(41, 36, 30, 0.5);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.journal-receipt-meta dd,
+.journal-receipt-totals dd {
+  overflow: hidden;
+  margin: 0;
+  color: rgba(41, 36, 30, 0.76);
+  font-size: 0.78rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-receipt-rule {
+  height: 1px;
+  margin: 0.72rem 0;
+  background: repeating-linear-gradient(90deg, rgba(41, 36, 30, 0.36) 0 0.38rem, transparent 0.38rem 0.62rem);
+}
+
+.journal-receipt-items {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.journal-receipt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.2rem;
+  align-items: baseline;
+  gap: 0.76rem;
+}
+
+.journal-receipt-row span {
+  overflow: hidden;
+  color: rgba(41, 36, 30, 0.78);
+  font-size: 0.78rem;
+  line-height: 1.24;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-receipt-row span:last-child {
+  text-align: right;
+}
+
+.journal-receipt-totals .is-total {
+  margin: 0.24rem 0 0.16rem;
+  border-top: 1px solid rgba(41, 36, 30, 0.16);
+  padding-top: 0.48rem;
+}
+
+.journal-receipt-totals .is-total dt,
+.journal-receipt-totals .is-total dd {
+  color: #24211d;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.journal-receipt-footer {
+  margin: 0.92rem 0 0;
+  color: rgba(41, 36, 30, 0.58);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.journal-receipt-stamp {
+  position: absolute;
+  left: 10rem;
+  right: auto;
+  bottom: 2.28rem;
+  z-index: 3;
+  display: grid;
+  min-width: 5.2rem;
+  min-height: 1.9rem;
+  place-items: center;
+  border: 2px solid rgba(196, 58, 49, 0.6);
+  border-radius: 4px;
+  color: rgba(143, 47, 41, 0.76);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  transform: rotate(-8deg);
+}
+
 .journal-cd-showcase {
   margin-top: 1.8rem;
 }
