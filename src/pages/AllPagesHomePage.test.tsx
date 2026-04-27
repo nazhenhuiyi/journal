@@ -33,18 +33,22 @@ describe('AllPagesHomePage', () => {
     expect(screen.queryByText('批注回看')).not.toBeInTheDocument()
   })
 
-  it('shows sticky note, postcard, and movie ticket card studies', () => {
+  it('shows sticky note, postcard, movie ticket, and library card studies', () => {
     renderHomePage()
 
     expect(screen.getByRole('heading', { name: '先留几种手感' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '便利贴' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '明信片' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '电影票' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '回忆借阅卡' })).toBeInTheDocument()
     expect(screen.getByText('今天的风把窗帘吹得很轻，像有人在旁边翻书。')).toBeInTheDocument()
     expect(screen.getByText('桥下有人吹口琴，傍晚慢慢落到杯沿上。')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '雨停以后' })).toBeInTheDocument()
     expect(screen.getByText('去买一杯热咖啡')).toBeInTheDocument()
     expect(screen.getByText('我 / 雨后的路灯 / 一条没发出去的消息')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '旧书店门口等雨停' })).toBeInTheDocument()
+    expect(screen.getByText('门口雨棚')).toBeInTheDocument()
+    expect(screen.getByText('车窗起雾，票根夹在第 27 页')).toBeInTheDocument()
   })
 
   it('shows both CD player display concepts', () => {

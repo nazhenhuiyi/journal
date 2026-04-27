@@ -1,4 +1,4 @@
-import { Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
+import { BookOpen, Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
 import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
 import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
 import bookshopTicketImage from '../../assets/postcards/bookshop-ticket.png'
@@ -95,6 +95,35 @@ const movieTicket = {
   note: '下班后没有马上回家，沿着便利店和梧桐树走了一小段。杯子很烫，心里慢慢安静下来。',
   ticketNo: 'JRNL-0427-2016',
   screen: 'MEMORY 03',
+}
+
+const libraryCard = {
+  archiveNo: 'MEM-2024-1103',
+  shelf: '旧回忆 / 城市散步',
+  title: '旧书店门口等雨停',
+  author: '2024.11.03 · 平江路旁',
+  cardNo: 'CARD 017',
+  dueDate: '下次下雨时',
+  rows: [
+    {
+      date: '15:42',
+      dateTime: '2024-11-03T15:42',
+      borrower: '旧书店',
+      note: '买了一本薄薄的散文集',
+    },
+    {
+      date: '16:18',
+      dateTime: '2024-11-03T16:18',
+      borrower: '门口雨棚',
+      note: '鞋尖湿了，塑料袋一直响',
+    },
+    {
+      date: '17:06',
+      dateTime: '2024-11-03T17:06',
+      borrower: '46 路公交',
+      note: '车窗起雾，票根夹在第 27 页',
+    },
+  ],
 }
 
 function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
@@ -229,6 +258,54 @@ function MovieTicketCard({ ticket }: { ticket: typeof movieTicket }) {
   )
 }
 
+function LibraryBorrowCard({ card }: { card: typeof libraryCard }) {
+  return (
+    <article className="journal-library-card" aria-labelledby="library-card-title">
+      <div className="journal-library-card-header">
+        <div>
+          <span>回忆借阅卡</span>
+          <h4 id="library-card-title">{card.title}</h4>
+          <p>{card.author}</p>
+        </div>
+        <strong>{card.cardNo}</strong>
+      </div>
+
+      <div className="journal-library-card-meta">
+        <span>馆藏号 {card.archiveNo}</span>
+        <span>书架 {card.shelf}</span>
+      </div>
+
+      <div className="journal-library-ledger" role="table" aria-label="借阅记录">
+        <div className="journal-library-ledger-head" role="row">
+          <span role="columnheader">时间</span>
+          <span role="columnheader">片段</span>
+          <span role="columnheader">备注</span>
+        </div>
+        {card.rows.map((row) => (
+          <div className="journal-library-ledger-row" role="row" key={`${row.date}-${row.borrower}`}>
+            <time dateTime={row.dateTime} role="cell">
+              {row.date}
+            </time>
+            <span role="cell">{row.borrower}</span>
+            <span role="cell">{row.note}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="journal-library-card-footer">
+        <div className="journal-library-pocket" aria-hidden="true">
+          <span>回看提示</span>
+          <strong>{card.dueDate}</strong>
+        </div>
+        <div className="journal-library-stamp" aria-hidden="true">
+          <span>已收录</span>
+          <span>旧日可借</span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 function RetroCdPlayerCard() {
   return (
     <article className="journal-cd-player journal-cd-player-retro" aria-labelledby="retro-cd-title">
@@ -350,6 +427,15 @@ function CardStyleShowcase() {
           </div>
 
           <MovieTicketCard ticket={movieTicket} />
+        </div>
+
+        <div className="journal-library-showcase">
+          <div className="journal-card-family-title">
+            <BookOpen aria-hidden="true" size={19} strokeWidth={2.15} />
+            <h3>回忆借阅卡</h3>
+          </div>
+
+          <LibraryBorrowCard card={libraryCard} />
         </div>
 
         <div className="journal-cd-showcase">
