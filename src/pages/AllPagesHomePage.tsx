@@ -1,4 +1,3 @@
-import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
   BookOpen,
@@ -7,7 +6,8 @@ import {
   MessageSquareText,
   MoreHorizontal,
   PenLine,
-} from 'lucide-react'
+  type HandDrawnIcon,
+} from '../components/HandDrawnIcons'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
 import nightLampPhoto from '../assets/memory-photos/night-lamp.jpg'
@@ -20,7 +20,7 @@ import { panelTransition } from './markdown-preview/constants'
 const quickActions: Array<{
   title: string
   description: string
-  icon: LucideIcon
+  icon: HandDrawnIcon
   className: string
 }> = [
   {
@@ -85,7 +85,7 @@ function AllPagesHomePage() {
       <div className="all-pages-upper">
         <section aria-labelledby="all-pages-quote" className="all-pages-quote-card">
           <p className="all-pages-date">
-            <CalendarDays aria-hidden="true" size={15} strokeWidth={1.8} />
+            <CalendarDays aria-hidden="true" size={16} strokeWidth={2.15} />
             4月25日 · 星期六 · 已安放 18 页
           </p>
           <h1 id="all-pages-quote">有些日子不必被解释，只要被留下。</h1>
@@ -99,14 +99,14 @@ function AllPagesHomePage() {
             return (
               <Link className={action.className} key={action.title} to="/preview">
                 <span className="all-pages-action-icon">
-                  <Icon aria-hidden="true" size={28} strokeWidth={1.75} />
+                  <Icon aria-hidden="true" size={30} strokeWidth={2.35} />
                 </span>
                 <span className="all-pages-action-copy">
                   <strong>{action.title}</strong>
                   <small>{action.description}</small>
                 </span>
                 <span aria-hidden="true" className="all-pages-action-arrow">
-                  <ArrowRight size={18} strokeWidth={1.9} />
+                  <ArrowRight size={18} strokeWidth={2.3} />
                 </span>
               </Link>
             )
@@ -116,7 +116,7 @@ function AllPagesHomePage() {
 
       <section aria-labelledby="old-pages-title" className="all-pages-memory-shelf">
         <div className="all-pages-memory-header">
-          <BookOpen aria-hidden="true" size={18} strokeWidth={1.7} />
+          <BookOpen aria-hidden="true" size={19} strokeWidth={2.15} />
           <h2 id="old-pages-title">翻到几页旧日</h2>
         </div>
 
@@ -131,7 +131,7 @@ function AllPagesHomePage() {
                 <p>{memory.text}</p>
               </div>
               <button aria-label={`打开 ${memory.date} 的回忆`} type="button">
-                <MoreHorizontal aria-hidden="true" size={20} strokeWidth={1.8} />
+                <MoreHorizontal aria-hidden="true" size={20} strokeWidth={2.1} />
               </button>
             </article>
           ))}

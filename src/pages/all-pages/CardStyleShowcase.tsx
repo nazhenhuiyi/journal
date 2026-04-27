@@ -1,5 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
-import { Feather, MapPin, Stamp, StickyNote } from 'lucide-react'
+import { Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
 import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
 import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
 import bookshopTicketImage from '../../assets/postcards/bookshop-ticket.png'
@@ -13,7 +12,7 @@ const stickyNotes: Array<{
   meta: string
   body: string
   tone: string
-  icon: LucideIcon
+  icon: HandDrawnIcon
 }> = [
   {
     title: '一句话',
@@ -85,7 +84,7 @@ function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
         <img alt="" src={stickyPinImage} />
       </span>
       <div className="journal-sticky-meta">
-        <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
+        <Icon aria-hidden="true" size={17} strokeWidth={2.12} />
         <span>{note.meta}</span>
       </div>
       <h3>{note.title}</h3>
@@ -107,7 +106,7 @@ function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
         <div className="journal-postcard-topline">
           <div>
             <div className="journal-postcard-place">
-              <MapPin aria-hidden="true" size={15} strokeWidth={1.8} />
+              <MapPin aria-hidden="true" size={16} strokeWidth={2.1} />
               <span>{postcard.place}</span>
             </div>
             <time dateTime={postcard.dateTime}>{postcard.date}</time>
@@ -147,7 +146,7 @@ function CardStyleShowcase() {
         <div className="journal-card-style-grid">
           <div className="journal-card-family">
             <div className="journal-card-family-title">
-              <StickyNote aria-hidden="true" size={18} strokeWidth={1.75} />
+              <StickyNote aria-hidden="true" size={19} strokeWidth={2.15} />
               <h3>便利贴</h3>
             </div>
             <div className="journal-sticky-stack">
@@ -159,7 +158,7 @@ function CardStyleShowcase() {
 
           <div className="journal-card-family">
             <div className="journal-card-family-title">
-              <Stamp aria-hidden="true" size={18} strokeWidth={1.75} />
+              <Stamp aria-hidden="true" size={19} strokeWidth={2.15} />
               <h3>明信片</h3>
             </div>
             <div className="journal-postcard-stack">
