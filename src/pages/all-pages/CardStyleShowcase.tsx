@@ -77,6 +77,26 @@ const postcards: Array<{
 
 const cdTracks = ['出门前又找了一遍钥匙', '便利店的灯比雨天更亮', '没发出去的那条消息', '回家后把杯子洗干净']
 
+const movieTicket = {
+  cinema: '暮色日记放映所',
+  badge: 'ADMIT ONE',
+  title: '雨停以后',
+  subtitle: '去买一杯热咖啡',
+  date: '2026.04.27',
+  dateTime: '2026-04-27',
+  time: '20:16',
+  hall: '窗边 3 号厅',
+  row: 'B',
+  seat: '07',
+  mood: '平静 / 有点累',
+  genre: '城市散步',
+  rating: 'PG-13',
+  cast: ['我', '雨后的路灯', '一条没发出去的消息'],
+  note: '下班后没有马上回家，沿着便利店和梧桐树走了一小段。杯子很烫，心里慢慢安静下来。',
+  ticketNo: 'JRNL-0427-2016',
+  screen: 'MEMORY 03',
+}
+
 function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
   const Icon = note.icon
 
@@ -132,6 +152,79 @@ function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
           <span />
         </div>
       </div>
+    </article>
+  )
+}
+
+function MovieTicketCard({ ticket }: { ticket: typeof movieTicket }) {
+  return (
+    <article className="journal-movie-ticket" aria-labelledby="movie-ticket-title">
+      <div className="journal-movie-ticket-main">
+        <div className="journal-movie-ticket-topline">
+          <span>{ticket.cinema}</span>
+          <span>{ticket.badge}</span>
+        </div>
+
+        <div className="journal-movie-marquee">
+          <span>NOW SHOWING</span>
+          <h4 id="movie-ticket-title">{ticket.title}</h4>
+          <em>{ticket.subtitle}</em>
+          <p>{ticket.note}</p>
+        </div>
+
+        <dl className="journal-movie-ticket-grid">
+          <div>
+            <dt>DATE</dt>
+            <dd>
+              <time dateTime={ticket.dateTime}>{ticket.date}</time>
+            </dd>
+          </div>
+          <div>
+            <dt>TIME</dt>
+            <dd>{ticket.time}</dd>
+          </div>
+          <div>
+            <dt>THEATER</dt>
+            <dd>{ticket.hall}</dd>
+          </div>
+          <div>
+            <dt>MOOD</dt>
+            <dd>{ticket.mood}</dd>
+          </div>
+          <div>
+            <dt>GENRE</dt>
+            <dd>{ticket.genre}</dd>
+          </div>
+          <div>
+            <dt>RATING</dt>
+            <dd>{ticket.rating}</dd>
+          </div>
+        </dl>
+
+        <div className="journal-movie-cast">
+          <span>STARRING</span>
+          <p>{ticket.cast.join(' / ')}</p>
+        </div>
+      </div>
+
+      <div className="journal-movie-ticket-seam" aria-hidden="true" />
+
+      <aside className="journal-movie-ticket-stub" aria-label="电影票副券">
+        <span className="journal-movie-stub-kicker">KEEP STUB</span>
+        <div>
+          <span>ROW</span>
+          <strong>{ticket.row}</strong>
+        </div>
+        <div>
+          <span>SEAT</span>
+          <strong>{ticket.seat}</strong>
+        </div>
+        <div>
+          <span>SCREEN</span>
+          <strong>{ticket.screen}</strong>
+        </div>
+        <small>{ticket.ticketNo}</small>
+      </aside>
     </article>
   )
 }
@@ -221,7 +314,7 @@ function CardStyleShowcase() {
       <div className="all-pages-card-lab-inner">
         <div className="all-pages-card-lab-header">
           <p>卡片样张</p>
-          <h2 id="card-style-title">先留两种手感</h2>
+          <h2 id="card-style-title">先留几种手感</h2>
         </div>
 
         <div className="journal-card-style-grid">
@@ -248,6 +341,15 @@ function CardStyleShowcase() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="journal-movie-showcase">
+          <div className="journal-card-family-title">
+            <span className="journal-movie-title-icon" aria-hidden="true" />
+            <h3>电影票</h3>
+          </div>
+
+          <MovieTicketCard ticket={movieTicket} />
         </div>
 
         <div className="journal-cd-showcase">

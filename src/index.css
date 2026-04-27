@@ -1217,6 +1217,288 @@ body {
   transform-origin: center;
 }
 
+.journal-movie-showcase {
+  width: min(100%, 54rem);
+  margin: 1.8rem auto 0;
+}
+
+.journal-movie-title-icon {
+  position: relative;
+  display: inline-block;
+  width: 1.34rem;
+  height: 0.9rem;
+  border: 1.8px solid #df6246;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, transparent 0.22rem, rgba(223, 98, 70, 0.18) 0.24rem 0.3rem, transparent 0.32rem),
+    rgba(255, 253, 244, 0.42);
+  box-shadow:
+    -0.14rem 0.31rem 0 -0.07rem #df6246,
+    0.14rem -0.31rem 0 -0.07rem #df6246;
+  transform: rotate(-2deg);
+}
+
+.journal-movie-ticket {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.12rem 8.35rem;
+  min-height: 15.4rem;
+  overflow: hidden;
+  border: 1px solid rgba(90, 54, 38, 0.22);
+  border-radius: 8px 7px 8px 7px;
+  color: #30251f;
+  background:
+    radial-gradient(circle at 8% 18%, rgba(196, 58, 49, 0.12), transparent 11rem),
+    radial-gradient(circle at 88% 74%, rgba(36, 89, 188, 0.1), transparent 10rem),
+    linear-gradient(135deg, #fff3df, #efd5ad 54%, #f6e5d7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -18px 28px rgba(86, 58, 35, 0.045),
+    0 16px 28px rgba(86, 58, 35, 0.095);
+}
+
+.journal-movie-ticket::before,
+.journal-movie-ticket::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.journal-movie-ticket::before {
+  opacity: 0.5;
+  background-image:
+    repeating-linear-gradient(2deg, rgba(47, 38, 31, 0.034) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(92deg, rgba(122, 79, 50, 0.026) 0 1px, transparent 1px 12px);
+  mix-blend-mode: multiply;
+}
+
+.journal-movie-ticket::after {
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 253, 244, 0.36),
+    inset 0 0 30px rgba(86, 58, 35, 0.06);
+}
+
+.journal-movie-ticket > * {
+  position: relative;
+  z-index: 2;
+}
+
+.journal-movie-ticket-main {
+  display: grid;
+  min-width: 0;
+  align-content: space-between;
+  padding: 0.9rem 1rem 0.92rem;
+}
+
+.journal-movie-ticket-seam {
+  isolation: isolate;
+  min-width: 0;
+  background:
+    linear-gradient(90deg, rgba(90, 54, 38, 0.1), transparent 34% 66%, rgba(90, 54, 38, 0.08)),
+    rgba(255, 253, 244, 0.1);
+}
+
+.journal-movie-ticket-seam::before,
+.journal-movie-ticket-seam::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  content: "";
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.journal-movie-ticket-seam::before {
+  width: 1px;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(90, 54, 38, 0.34) 0 0.42rem,
+    transparent 0.42rem 0.86rem
+  );
+}
+
+.journal-movie-ticket-seam::after {
+  width: 0.72rem;
+  background:
+    radial-gradient(circle, #f1e8d7 0 0.28rem, rgba(90, 54, 38, 0.16) 0.29rem 0.31rem, transparent 0.32rem)
+      center 0.86rem / 0.72rem 1.66rem repeat-y;
+  filter: drop-shadow(0 1px 0 rgba(90, 54, 38, 0.08));
+}
+
+.journal-movie-ticket-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: rgba(47, 38, 31, 0.58);
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.journal-movie-ticket-topline span:last-child {
+  border: 1px solid rgba(196, 58, 49, 0.34);
+  border-radius: 999px;
+  padding: 0.24rem 0.48rem;
+  color: #8f2f29;
+  background: rgba(255, 253, 244, 0.4);
+}
+
+.journal-movie-marquee {
+  margin-top: 0.72rem;
+  border: 1px solid rgba(90, 54, 38, 0.16);
+  border-radius: 7px;
+  padding: 0.78rem 0.86rem 0.76rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.38), transparent 48%),
+    rgba(255, 253, 244, 0.24);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 7px 16px rgba(86, 58, 35, 0.04);
+}
+
+.journal-movie-marquee span {
+  display: block;
+  color: rgba(122, 79, 50, 0.5);
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.journal-movie-marquee h4 {
+  margin: 0.3rem 0 0;
+  color: #2f261f;
+  font-family: var(--font-display);
+  font-size: 1.86rem;
+  font-weight: 650;
+  line-height: 1.04;
+  letter-spacing: 0;
+}
+
+.journal-movie-marquee em {
+  display: block;
+  margin-top: 0.2rem;
+  color: rgba(47, 38, 31, 0.72);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.journal-movie-marquee p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0.42rem 0 0;
+  color: rgba(47, 38, 31, 0.62);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.journal-movie-ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.52rem 0.72rem;
+  margin: 0.78rem 0 0;
+}
+
+.journal-movie-ticket-grid div {
+  min-width: 0;
+}
+
+.journal-movie-ticket-grid dt,
+.journal-movie-cast span,
+.journal-movie-ticket-stub span,
+.journal-movie-stub-kicker {
+  color: rgba(47, 38, 31, 0.44);
+  font-size: 0.52rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.journal-movie-ticket-grid dd {
+  overflow: hidden;
+  margin: 0.16rem 0 0;
+  color: rgba(47, 38, 31, 0.82);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-movie-cast {
+  margin-top: 0.7rem;
+  border-top: 1px solid rgba(122, 79, 50, 0.17);
+  padding-top: 0.58rem;
+}
+
+.journal-movie-cast p {
+  overflow: hidden;
+  margin: 0.22rem 0 0;
+  color: rgba(47, 38, 31, 0.7);
+  font-size: 0.78rem;
+  line-height: 1.34;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-movie-ticket-stub {
+  display: grid;
+  align-content: space-between;
+  justify-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.86rem 0.62rem 0.78rem;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 44%),
+    rgba(143, 47, 41, 0.075);
+}
+
+.journal-movie-stub-kicker {
+  display: inline-grid;
+  min-height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgba(47, 38, 31, 0.12);
+  border-radius: 999px;
+  padding: 0 0.48rem;
+  color: #8f2f29;
+  background: rgba(255, 253, 244, 0.28);
+}
+
+.journal-movie-ticket-stub div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.journal-movie-ticket-stub strong {
+  color: #2f261f;
+  font-family: var(--font-display);
+  font-size: 1.48rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.journal-movie-ticket-stub small {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(47, 38, 31, 0.46);
+  font-size: 0.6rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .journal-cd-showcase {
   margin-top: 1.8rem;
 }
