@@ -1712,6 +1712,134 @@ body {
   margin: 1.8rem auto 0;
 }
 
+.journal-receipt-console {
+  display: grid;
+  grid-template-columns: 13.8rem minmax(25.8rem, 1fr);
+  align-items: start;
+  gap: 1.35rem;
+}
+
+.journal-receipt-controls {
+  display: grid;
+  gap: 0.88rem;
+  min-width: 0;
+  border: 1px solid rgba(47, 38, 31, 0.12);
+  border-radius: 8px;
+  padding: 0.82rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 54%),
+    rgba(255, 253, 244, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 12px 20px rgba(57, 49, 43, 0.055);
+}
+
+.journal-receipt-control-group {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.journal-receipt-control-group > span {
+  color: rgba(47, 38, 31, 0.52);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.journal-receipt-tabs,
+.journal-receipt-stamp-options,
+.journal-receipt-actions {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.journal-receipt-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.journal-receipt-stamp-options {
+  grid-template-columns: 1fr;
+}
+
+.journal-receipt-actions {
+  grid-template-columns: 1fr;
+  border-top: 1px solid rgba(47, 38, 31, 0.1);
+  padding-top: 0.86rem;
+}
+
+.journal-receipt-controls button {
+  display: grid;
+  min-width: 0;
+  min-height: 2.16rem;
+  place-items: center;
+  border: 1px solid rgba(47, 38, 31, 0.14);
+  border-radius: 7px;
+  padding: 0 0.54rem;
+  color: rgba(47, 38, 31, 0.68);
+  background: rgba(255, 253, 244, 0.46);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.journal-receipt-controls button:hover {
+  border-color: rgba(20, 114, 79, 0.32);
+  color: #14724f;
+  background: rgba(226, 238, 219, 0.56);
+  transform: translateY(-1px);
+}
+
+.journal-receipt-controls button:focus-visible {
+  outline: 2px solid rgba(36, 89, 188, 0.56);
+  outline-offset: 2px;
+}
+
+.journal-receipt-controls button.is-active,
+.journal-receipt-controls button[aria-pressed="true"] {
+  border-color: rgba(20, 114, 79, 0.36);
+  color: #115f43;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent),
+    rgba(199, 224, 203, 0.64);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.journal-receipt-actions button:nth-child(2) {
+  border-color: rgba(36, 89, 188, 0.22);
+  color: #2459bc;
+  background: rgba(223, 234, 246, 0.54);
+}
+
+.journal-receipt-actions button:nth-child(3)[aria-pressed="true"] {
+  border-color: rgba(196, 58, 49, 0.34);
+  color: #8f2f29;
+  background: rgba(248, 214, 202, 0.5);
+}
+
+.journal-receipt-controls p {
+  margin: 0;
+  border-top: 1px solid rgba(47, 38, 31, 0.1);
+  padding-top: 0.78rem;
+  color: rgba(47, 38, 31, 0.54);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.journal-receipt-print-slot {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  animation: receipt-print-in 520ms cubic-bezier(0.2, 0.78, 0.18, 1) both;
+}
+
 .journal-receipt-title-icon {
   position: relative;
   display: inline-block;
@@ -1753,7 +1881,7 @@ body {
   position: relative;
   isolation: isolate;
   width: min(100%, 25.8rem);
-  margin: 0 auto;
+  margin: 0;
   overflow: hidden;
   border: 1px solid rgba(68, 58, 45, 0.15);
   border-radius: 5px 5px 7px 7px;
@@ -1774,6 +1902,10 @@ body {
     Menlo,
     monospace;
   transform: rotate(-0.45deg);
+  transition:
+    clip-path 220ms ease,
+    filter 180ms ease,
+    transform 220ms ease;
 }
 
 .journal-receipt::before,
@@ -1804,6 +1936,12 @@ body {
 .journal-receipt > * {
   position: relative;
   z-index: 2;
+}
+
+.journal-receipt.is-torn {
+  clip-path: polygon(0 0, 100% 0, 100% 92%, 96% 93%, 91% 91.5%, 86% 94%, 80% 92%, 74% 94.5%, 68% 92%, 62% 93.5%, 56% 91.5%, 48% 94%, 41% 92%, 34% 94.5%, 27% 92%, 20% 93.5%, 14% 91.5%, 8% 94%, 0 92%);
+  filter: drop-shadow(0 18px 22px rgba(57, 49, 43, 0.08));
+  transform: rotate(-1.45deg) translateY(0.25rem);
 }
 
 .journal-receipt-tear {
@@ -1960,6 +2098,24 @@ body {
   font-weight: 850;
   letter-spacing: 0.14em;
   transform: rotate(-8deg);
+}
+
+@keyframes receipt-print-in {
+  0% {
+    opacity: 0.18;
+    transform: translateY(-1rem) scaleY(0.86);
+    transform-origin: 50% 0%;
+  }
+
+  62% {
+    opacity: 1;
+    transform: translateY(0.18rem) scaleY(1.01);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
 }
 
 .journal-cd-showcase {

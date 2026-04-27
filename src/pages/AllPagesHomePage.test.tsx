@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import AllPagesHomePage from './AllPagesHomePage'
@@ -64,5 +64,32 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('heading', { name: '雨停在十点半' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '今天没发生大事' })).toBeInTheDocument()
     expect(screen.getByText('没发出去的那条消息')).toBeInTheDocument()
+  })
+
+  it('lets the receipt study switch mode, stamp, print, and tear', () => {
+    renderHomePage()
+
+    fireEvent.click(screen.getByRole('button', { name: '情绪' }))
+
+    expect(screen.getByRole('heading', { name: 'EMOTIONAL RECEIPT' })).toBeInTheDocument()
+    expect(screen.getByText('焦虑库存')).toBeInTheDocument()
+    expect(screen.getByText('情绪结算')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'SURVIVED' }))
+
+    expect(screen.getByLabelText('当前盖章 SURVIVED')).toBeInTheDocument()
+
+    const tearButton = screen.getByRole('button', { name: '撕下' })
+    fireEvent.click(tearButton)
+
+    expect(screen.getByRole('button', { name: '复原' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: '重新结算' }))
+
+    expect(screen.getByRole('heading', { name: 'SOFT RECEIPT' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '打印' }))
+
+    expect(screen.getByRole('heading', { name: 'SOFT RECEIPT' })).toBeInTheDocument()
   })
 })

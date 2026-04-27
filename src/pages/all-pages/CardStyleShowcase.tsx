@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BookOpen, Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
 import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
 import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
@@ -77,31 +78,112 @@ const postcards: Array<{
 
 const cdTracks = ['出门前又找了一遍钥匙', '便利店的灯比雨天更亮', '没发出去的那条消息', '回家后把杯子洗干净']
 
-const dailyReceipt = {
-  shop: 'JOURNAL MART',
-  label: 'DAILY RECEIPT',
-  date: '2026.04.27',
-  dateTime: '2026-04-27',
-  time: '23:48',
-  cashier: 'self',
-  orderNo: '0427-2348',
-  stamp: 'SAVED',
-  items: [
-    { name: '早上犹豫了一会儿', qty: '1' },
-    { name: '热咖啡前的勇气', qty: '2' },
-    { name: '未读消息', qty: '5' },
-    { name: '小小松一口气', qty: '1' },
-    { name: '没有戴耳机的散步', qty: '1' },
-    { name: '差点说出口的话', qty: '1' },
-  ],
-  subtotal: '漫长的一天',
-  discount: '一句好听的话',
-  tax: '想太多',
-  total: '还在这里',
-  payment: '注意力',
-  change: '明天',
-  footer: 'Thank you for staying.',
+type ReceiptVariant = {
+  id: string
+  tabLabel: string
+  actionLabel: string
+  shop: string
+  label: string
+  date: string
+  dateTime: string
+  time: string
+  cashier: string
+  orderNo: string
+  items: Array<{ name: string; qty: string }>
+  subtotal: string
+  discount: string
+  tax: string
+  total: string
+  payment: string
+  change: string
+  footer: string
 }
+
+const dailyReceipts: ReceiptVariant[] = [
+  {
+    id: 'literal',
+    tabLabel: '日常',
+    actionLabel: '今日结算',
+    shop: 'JOURNAL MART',
+    label: 'DAILY RECEIPT',
+    date: '2026.04.27',
+    dateTime: '2026-04-27',
+    time: '23:48',
+    cashier: 'self',
+    orderNo: '0427-2348',
+    items: [
+      { name: '早上犹豫了一会儿', qty: '1' },
+      { name: '热咖啡前的勇气', qty: '2' },
+      { name: '未读消息', qty: '5' },
+      { name: '小小松一口气', qty: '1' },
+      { name: '没有戴耳机的散步', qty: '1' },
+      { name: '差点说出口的话', qty: '1' },
+    ],
+    subtotal: '漫长的一天',
+    discount: '一句好听的话',
+    tax: '想太多',
+    total: '还在这里',
+    payment: '注意力',
+    change: '明天',
+    footer: 'Thank you for staying.',
+  },
+  {
+    id: 'emotional',
+    tabLabel: '情绪',
+    actionLabel: '情绪结算',
+    shop: 'MOOD COUNTER',
+    label: 'EMOTIONAL RECEIPT',
+    date: '2026.04.27',
+    dateTime: '2026-04-27',
+    time: '23:49',
+    cashier: 'heart',
+    orderNo: 'MOOD-427',
+    items: [
+      { name: '焦虑库存', qty: '7' },
+      { name: '突然开心', qty: '1' },
+      { name: '想念但没说', qty: '3' },
+      { name: '被一句话救到', qty: '1' },
+      { name: '过度复盘', qty: '4' },
+      { name: '晚风补偿', qty: '2' },
+    ],
+    subtotal: '情绪很贵',
+    discount: '朋友回了一句',
+    tax: '反复想',
+    total: '可以睡了',
+    payment: '诚实',
+    change: '六分钟安静',
+    footer: 'No refund on feelings.',
+  },
+  {
+    id: 'quiet',
+    tabLabel: '安静',
+    actionLabel: '低声结算',
+    shop: 'QUIET STORE',
+    label: 'SOFT RECEIPT',
+    date: '2026.04.27',
+    dateTime: '2026-04-27',
+    time: '23:51',
+    cashier: 'window',
+    orderNo: 'SOFT-051',
+    items: [
+      { name: '灯下坐了一会儿', qty: '1' },
+      { name: '洗干净的杯子', qty: '1' },
+      { name: '没再追问自己', qty: '1' },
+      { name: '窗外的车声', qty: '6' },
+      { name: '早一点关掉屏幕', qty: '1' },
+      { name: '把今天放回今天', qty: '1' },
+    ],
+    subtotal: '很轻的一页',
+    discount: '没有催自己',
+    tax: '一点疲惫',
+    total: '够了',
+    payment: '呼吸',
+    change: '一个好梦',
+    footer: 'Come back when ready.',
+  },
+]
+
+const receiptStamps = ['SAVED', 'SURVIVED', 'VOID']
 
 const movieTicket = {
   cinema: '暮色日记放映所',
@@ -332,9 +414,23 @@ function LibraryBorrowCard({ card }: { card: typeof libraryCard }) {
   )
 }
 
-function DailyReceiptCard({ receipt }: { receipt: typeof dailyReceipt }) {
+function DailyReceiptCard({
+  receipt,
+  stamp,
+  isTorn,
+  printKey,
+}: {
+  receipt: ReceiptVariant
+  stamp: string
+  isTorn: boolean
+  printKey: number
+}) {
   return (
-    <article className="journal-receipt" aria-labelledby="daily-receipt-title">
+    <article
+      className={`journal-receipt ${isTorn ? 'is-torn' : ''}`}
+      aria-labelledby="daily-receipt-title"
+      data-print-key={printKey}
+    >
       <div className="journal-receipt-tear" aria-hidden="true" />
 
       <header className="journal-receipt-header">
@@ -409,11 +505,87 @@ function DailyReceiptCard({ receipt }: { receipt: typeof dailyReceipt }) {
       </dl>
 
       <p className="journal-receipt-footer">{receipt.footer}</p>
-      <span className="journal-receipt-stamp" aria-hidden="true">
-        {receipt.stamp}
+      <span className="journal-receipt-stamp" aria-label={`当前盖章 ${stamp}`}>
+        {stamp}
       </span>
       <div className="journal-receipt-tear is-bottom" aria-hidden="true" />
     </article>
+  )
+}
+
+function DailyReceiptExperience() {
+  const [receiptIndex, setReceiptIndex] = useState(0)
+  const [stamp, setStamp] = useState(receiptStamps[0])
+  const [isTorn, setIsTorn] = useState(false)
+  const [printKey, setPrintKey] = useState(0)
+  const receipt = dailyReceipts[receiptIndex]
+
+  function handleSetReceipt(nextIndex: number) {
+    setReceiptIndex(nextIndex)
+    setPrintKey((current) => current + 1)
+  }
+
+  function handleRecalculate() {
+    setReceiptIndex((current) => (current + 1) % dailyReceipts.length)
+    setPrintKey((current) => current + 1)
+  }
+
+  return (
+    <div className="journal-receipt-console">
+      <div className="journal-receipt-controls" aria-label="今日小票交互">
+        <div className="journal-receipt-control-group">
+          <span>结算</span>
+          <div className="journal-receipt-tabs">
+            {dailyReceipts.map((option, index) => (
+              <button
+                aria-pressed={index === receiptIndex}
+                className={index === receiptIndex ? 'is-active' : ''}
+                key={option.id}
+                onClick={() => handleSetReceipt(index)}
+                type="button"
+              >
+                {option.tabLabel}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="journal-receipt-control-group">
+          <span>盖章</span>
+          <div className="journal-receipt-stamp-options">
+            {receiptStamps.map((option) => (
+              <button
+                aria-pressed={option === stamp}
+                className={option === stamp ? 'is-active' : ''}
+                key={option}
+                onClick={() => setStamp(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="journal-receipt-actions">
+          <button onClick={handleRecalculate} type="button">
+            重新结算
+          </button>
+          <button onClick={() => setPrintKey((current) => current + 1)} type="button">
+            打印
+          </button>
+          <button aria-pressed={isTorn} onClick={() => setIsTorn((current) => !current)} type="button">
+            {isTorn ? '复原' : '撕下'}
+          </button>
+        </div>
+
+        <p>{receipt.actionLabel}</p>
+      </div>
+
+      <div className="journal-receipt-print-slot" key={printKey}>
+        <DailyReceiptCard receipt={receipt} stamp={stamp} isTorn={isTorn} printKey={printKey} />
+      </div>
+    </div>
   )
 }
 
@@ -555,7 +727,7 @@ function CardStyleShowcase() {
             <h3>今日小票</h3>
           </div>
 
-          <DailyReceiptCard receipt={dailyReceipt} />
+          <DailyReceiptExperience />
         </div>
 
         <div className="journal-cd-showcase">
