@@ -1,0 +1,51 @@
+{
+  "id": "weather",
+  "label": "天气包",
+  "description": "给日记纸页使用的手绘天气贴纸，统一为 256px 透明 PNG。",
+  "version": 1,
+  "preview": "./weather-pack-preview.png",
+  "items": [
+    {
+      "id": "weather.sunny",
+      "name": "sunny",
+      "label": "晴",
+      "file": "./sunny.png",
+      "keywords": ["晴天", "阳光", "太阳"]
+    },
+    {
+      "id": "weather.rain",
+      "name": "rain",
+      "label": "雨",
+      "file": "./rain.png",
+      "keywords": ["下雨", "雨滴", "小雨"]
+    },
+    {
+      "id": "weather.snow",
+      "name": "snow",
+      "label": "雪",
+      "file": "./snow.png",
+      "keywords": ["下雪", "雪花", "冬天"]
+    },
+    {
+      "id": "weather.wind",
+      "name": "wind",
+      "label": "风",
+      "file": "./wind.png",
+      "keywords": ["微风", "风声", "吹拂"]
+    },
+    {
+      "id": "weather.fog",
+      "name": "fog",
+      "label": "雾",
+      "file": "./fog.png",
+      "keywords": ["雾气", "朦胧", "清晨"]
+    },
+    {
+      "id": "weather.thunder",
+      "name": "thunder",
+      "label": "雷",
+      "file": "./thunder.png",
+      "keywords": ["雷电", "闪电", "暴雨"]
+    }
+  ]
+}
