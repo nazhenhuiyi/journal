@@ -42,4 +42,15 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByText('今天的风把窗帘吹得很轻，像有人在旁边翻书。')).toBeInTheDocument()
     expect(screen.getByText('桥下有人吹口琴，傍晚慢慢落到杯沿上。')).toBeInTheDocument()
   })
+
+  it('shows both CD player display concepts', () => {
+    renderHomePage()
+
+    expect(screen.getByRole('heading', { name: 'CD 播放器' })).toBeInTheDocument()
+    expect(screen.getByText('A · 复古实物感')).toBeInTheDocument()
+    expect(screen.getByText('B · 极简播放器面板')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '雨停在十点半' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '今天没发生大事' })).toBeInTheDocument()
+    expect(screen.getByText('没发出去的那条消息')).toBeInTheDocument()
+  })
 })

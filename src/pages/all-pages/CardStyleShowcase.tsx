@@ -75,6 +75,8 @@ const postcards: Array<{
   },
 ]
 
+const cdTracks = ['出门前又找了一遍钥匙', '便利店的灯比雨天更亮', '没发出去的那条消息', '回家后把杯子洗干净']
+
 function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
   const Icon = note.icon
 
@@ -134,6 +136,85 @@ function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
   )
 }
 
+function RetroCdPlayerCard() {
+  return (
+    <article className="journal-cd-player journal-cd-player-retro" aria-labelledby="retro-cd-title">
+      <div className="journal-cd-player-topline">
+        <span>日记光盘</span>
+        <span>2026.04.27 周一</span>
+      </div>
+
+      <div className="journal-cd-retro-body">
+        <div className="journal-cd-window" aria-hidden="true">
+          <div className="journal-cd-disc">
+            <span />
+          </div>
+        </div>
+
+        <div className="journal-cd-retro-panel">
+          <div>
+            <p>正在展示</p>
+            <h4 id="retro-cd-title">雨停在十点半</h4>
+            <div className="journal-cd-retro-notes">
+              <span>窗台还有一点潮气</span>
+              <span>回家路上没有绕远</span>
+            </div>
+          </div>
+          <div className="journal-cd-progress" aria-hidden="true">
+            <span />
+          </div>
+        </div>
+      </div>
+
+      <div className="journal-cd-controls" aria-hidden="true">
+        <span>片段 02</span>
+        <span className="is-main">回看中</span>
+        <span>共 04 段</span>
+        <small>02:18 / 04:27</small>
+      </div>
+    </article>
+  )
+}
+
+function MinimalCdPanelCard() {
+  return (
+    <article className="journal-cd-player journal-cd-player-minimal" aria-labelledby="minimal-cd-title">
+      <div className="journal-cd-mini-rail" aria-hidden="true">
+        <div className="journal-cd-mini-disc">
+          <span />
+        </div>
+        <div className="journal-cd-meta-strip">
+          <span>2026.04.27</span>
+          <span>小雨转阴</span>
+          <span>低电量 / 平静</span>
+        </div>
+      </div>
+
+      <div className="journal-cd-screen">
+        <div className="journal-cd-screen-topline">
+          <span>今日片段</span>
+          <span>第 04 页</span>
+        </div>
+        <h4 id="minimal-cd-title">今天没发生大事</h4>
+        <ol>
+          {cdTracks.map((track, index) => (
+            <li key={track}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <span>{track}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="journal-cd-minimal-footer" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </article>
+  )
+}
+
 function CardStyleShowcase() {
   return (
     <section aria-labelledby="card-style-title" className="all-pages-card-lab">
@@ -165,6 +246,24 @@ function CardStyleShowcase() {
               {postcards.map((postcard) => (
                 <PostcardCard key={`${postcard.date}-${postcard.place}`} postcard={postcard} />
               ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="journal-cd-showcase">
+          <div className="journal-card-family-title">
+            <span className="journal-cd-title-icon" aria-hidden="true" />
+            <h3>CD 播放器</h3>
+          </div>
+
+          <div className="journal-cd-concept-grid">
+            <div className="journal-cd-concept">
+              <p>A · 复古实物感</p>
+              <RetroCdPlayerCard />
+            </div>
+            <div className="journal-cd-concept">
+              <p>B · 极简播放器面板</p>
+              <MinimalCdPanelCard />
             </div>
           </div>
         </div>
