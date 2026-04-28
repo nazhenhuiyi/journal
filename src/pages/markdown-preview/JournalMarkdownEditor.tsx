@@ -2,7 +2,14 @@ import { useEffect, useRef } from 'react'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
+import { GFM } from '@lezer/markdown'
 import { EditorView, minimalSetup } from 'codemirror'
+import {
+  Decoration,
+  ViewPlugin,
+  type DecorationSet,
+  type ViewUpdate,
+} from '@codemirror/view'
 
 type JournalMarkdownEditorProps = {
   value: string
@@ -10,13 +17,91 @@ type JournalMarkdownEditorProps = {
 }
 
 const journalHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading1, class: 'tok-heading tok-heading-1' },
+  { tag: tags.heading2, class: 'tok-heading tok-heading-2' },
+  { tag: tags.heading3, class: 'tok-heading tok-heading-3' },
   { tag: tags.heading, class: 'tok-heading' },
   { tag: tags.emphasis, class: 'tok-emphasis' },
   { tag: tags.strong, class: 'tok-strong' },
+  { tag: tags.strikethrough, class: 'tok-strikethrough' },
+  { tag: tags.quote, class: 'tok-quote' },
+  { tag: tags.list, class: 'tok-list' },
+  { tag: tags.monospace, class: 'tok-monospace' },
   { tag: tags.link, class: 'tok-link' },
   { tag: tags.url, class: 'tok-url' },
+  { tag: tags.contentSeparator, class: 'tok-content-separator' },
   { tag: tags.meta, class: 'tok-meta' },
 ])
+
+function getMarkdownLineClasses(text: string, isInsideCodeFence: boolean) {
+  const trimmedText = text.trim()
+  const headingMatch = /^(#{1,6})\s+/.exec(trimmedText)
+
+  if (/^(`{3,}|~{3,})/.test(trimmedText)) {
+    return ['cm-md-code-line', 'cm-md-code-boundary']
+  }
+
+  if (isInsideCodeFence) {
+    return ['cm-md-code-line']
+  }
+
+  if (headingMatch) {
+    return ['cm-md-heading-line', `cm-md-heading-${Math.min(headingMatch[1].length, 6)}`]
+  }
+
+  if (/^>\s?/.test(trimmedText)) {
+    return ['cm-md-quote-line']
+  }
+
+  if (/^([-*+]\s+|\d+[.)]\s+)/.test(trimmedText)) {
+    return ['cm-md-list-line']
+  }
+
+  if (/^(([-*_])\s*){3,}$/.test(trimmedText)) {
+    return ['cm-md-separator-line']
+  }
+
+  return []
+}
+
+function buildMarkdownLineDecorations(view: EditorView) {
+  const decorations = []
+  let isInsideCodeFence = false
+
+  for (let lineNumber = 1; lineNumber <= view.state.doc.lines; lineNumber += 1) {
+    const line = view.state.doc.line(lineNumber)
+    const classes = getMarkdownLineClasses(line.text, isInsideCodeFence)
+
+    if (/^(`{3,}|~{3,})/.test(line.text.trim())) {
+      isInsideCodeFence = !isInsideCodeFence
+    }
+
+    if (classes.length > 0) {
+      decorations.push(Decoration.line({ class: classes.join(' ') }).range(line.from))
+    }
+  }
+
+  return Decoration.set(decorations, true)
+}
+
+const journalMarkdownLineDecorations = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildMarkdownLineDecorations(view)
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = buildMarkdownLineDecorations(update.view)
+      }
+    }
+  },
+  {
+    decorations: (plugin) => plugin.decorations,
+  },
+)
 
 const journalEditorTheme = EditorView.theme({
   '&': {
@@ -37,7 +122,8 @@ const journalEditorTheme = EditorView.theme({
     caretColor: 'var(--color-walnut)',
   },
   '.cm-line': {
-    padding: '0 0.1rem',
+    borderRadius: '8px 6px 9px 6px',
+    padding: '0 0.35rem',
   },
   '.cm-gutters': {
     display: 'none',
@@ -62,24 +148,113 @@ const journalEditorTheme = EditorView.theme({
     color: 'var(--color-walnut)',
     fontWeight: '650',
   },
+  '.tok-heading-1': {
+    fontSize: '1.38em',
+    lineHeight: '1.55',
+  },
+  '.tok-heading-2': {
+    fontSize: '1.2em',
+    lineHeight: '1.65',
+  },
+  '.tok-heading-3': {
+    fontSize: '1.08em',
+  },
+  '.tok-heading.tok-meta': {
+    color: 'rgba(122, 79, 50, 0.42)',
+  },
   '.tok-emphasis': {
-    color: '#4d6545',
+    color: '#526848',
     fontStyle: 'italic',
   },
   '.tok-strong': {
-    color: '#263f35',
+    color: '#293d34',
     fontWeight: '700',
   },
+  '.tok-strikethrough': {
+    borderRadius: '4px',
+    color: 'rgba(82, 55, 45, 0.72)',
+    backgroundColor: 'rgba(190, 71, 52, 0.055)',
+    textDecoration: 'line-through',
+    textDecorationColor: 'rgba(151, 77, 57, 0.72)',
+    textDecorationThickness: '0.08em',
+  },
+  '.tok-quote': {
+    color: '#526848',
+  },
+  '.tok-list': {
+    color: 'rgba(122, 79, 50, 0.78)',
+    fontWeight: '550',
+  },
+  '.tok-monospace': {
+    border: '1px solid rgba(111, 126, 99, 0.15)',
+    borderRadius: '5px',
+    padding: '0.04rem 0.24rem',
+    color: '#3d5149',
+    backgroundColor: 'rgba(111, 126, 99, 0.09)',
+    fontFamily: '"SFMono-Regular", "Menlo", "Consolas", monospace',
+    fontSize: '0.9em',
+  },
   '.tok-link': {
-    color: '#416f83',
+    color: '#2f7070',
     textDecoration: 'underline',
     textUnderlineOffset: '0.16em',
   },
   '.tok-url': {
-    color: 'rgba(65, 111, 131, 0.72)',
+    color: 'rgba(47, 112, 112, 0.66)',
+  },
+  '.tok-content-separator': {
+    color: 'rgba(122, 79, 50, 0.38)',
   },
   '.tok-meta': {
-    color: 'rgba(122, 79, 50, 0.6)',
+    color: 'rgba(122, 79, 50, 0.46)',
+  },
+  '.tok-strong.tok-meta, .tok-emphasis.tok-meta, .tok-link.tok-meta': {
+    color: 'rgba(122, 79, 50, 0.36)',
+    fontWeight: '500',
+    textDecoration: 'none',
+  },
+  '.cm-md-heading-line': {
+    paddingTop: '0.18rem',
+    paddingBottom: '0.12rem',
+  },
+  '.cm-md-heading-1': {
+    marginTop: '0.4rem',
+  },
+  '.cm-md-quote-line': {
+    borderLeft: '3px solid rgba(111, 126, 99, 0.3)',
+    borderRadius: '0 8px 8px 0',
+    paddingLeft: '0.9rem',
+    color: 'rgba(47, 38, 31, 0.76)',
+    backgroundColor: 'rgba(111, 126, 99, 0.06)',
+  },
+  '.cm-md-code-line': {
+    borderRadius: '0',
+    paddingLeft: '0.85rem',
+    color: '#34473f',
+    backgroundColor: 'rgba(122, 79, 50, 0.045)',
+    fontFamily: '"SFMono-Regular", "Menlo", "Consolas", monospace',
+    fontSize: '0.9em',
+    lineHeight: '1.75',
+  },
+  '.cm-md-code-boundary': {
+    color: 'rgba(122, 79, 50, 0.42)',
+    backgroundColor: 'rgba(122, 79, 50, 0.06)',
+  },
+  '.cm-md-code-line .tok-monospace': {
+    border: '0',
+    borderRadius: '0',
+    padding: '0',
+    color: 'inherit',
+    backgroundColor: 'transparent',
+    fontSize: 'inherit',
+  },
+  '.cm-md-code-line .tok-meta': {
+    color: 'rgba(122, 79, 50, 0.42)',
+  },
+  '.cm-md-separator-line': {
+    color: 'rgba(122, 79, 50, 0.38)',
+    textAlign: 'center',
+    letterSpacing: '0',
   },
 })
 
@@ -103,8 +278,9 @@ function JournalMarkdownEditor({ value, onChange }: JournalMarkdownEditorProps) 
       parent: hostRef.current,
       extensions: [
         minimalSetup,
-        markdown(),
+        markdown({ extensions: [GFM] }),
         syntaxHighlighting(journalHighlightStyle),
+        journalMarkdownLineDecorations,
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ 'aria-label': '日记正文' }),
         journalEditorTheme,
