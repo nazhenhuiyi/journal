@@ -3754,11 +3754,21 @@ body {
 }
 
 ::highlight(journal-annotation-text) {
-  background-color: rgba(215, 166, 75, 0.28);
+  background-color: transparent;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: rgba(215, 166, 75, 0.82);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.24em;
 }
 
 ::highlight(journal-annotation-active) {
-  background-color: rgba(215, 166, 75, 0.42);
+  background-color: transparent;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: rgba(122, 79, 50, 0.9);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.24em;
 }
 
 .markdown-preview h1,
@@ -4058,10 +4068,7 @@ body {
 
 .annotation-overlay-rect {
   position: absolute;
-  border: 1.5px solid rgba(122, 79, 50, 0.5);
-  border-radius: 12px 9px 11px 8px;
-  background: rgba(215, 166, 75, 0.1);
-  box-shadow: 0 0 0 2px rgba(215, 166, 75, 0.1);
+  display: none;
 }
 
 .markdown-preview table {

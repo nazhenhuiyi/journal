@@ -32,8 +32,10 @@ export function registerAnnotationHighlights(
     return () => undefined
   }
 
-  const ranges = Array.from(rangesByAnnotation.values()).flat()
   const activeRanges = rangesByAnnotation.get(activeAnnotationId) ?? []
+  const ranges = Array.from(rangesByAnnotation.entries()).flatMap(([annotationId, ranges]) =>
+    annotationId === activeAnnotationId ? [] : ranges,
+  )
 
   registry.delete(textHighlightKey)
   registry.delete(activeHighlightKey)
