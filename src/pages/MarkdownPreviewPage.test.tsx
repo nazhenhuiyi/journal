@@ -60,6 +60,7 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(loadToday).toHaveBeenCalledOnce()
+      expect(screen.getByRole('heading', { name: '4月28日 · 周二' })).toBeInTheDocument()
       expect(screen.getByText('~/.journal/2026-04-28.md')).toHaveAttribute('title', storedJournal.filePath)
       expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('从文件醒来')
       expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('date: 2026-04-28')
@@ -120,6 +121,7 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(refreshTodayWeather).toHaveBeenCalledOnce()
+      expect(screen.getByRole('heading', { name: '4月28日 · 周二 · 雨天' })).toBeInTheDocument()
       expect(screen.getByLabelText('今日天气')).toHaveTextContent('小雨')
       expect(screen.getByLabelText('今日天气')).toHaveTextContent('18°C')
       expect(screen.getByLabelText('今日天气')).toHaveTextContent('上海')
@@ -129,7 +131,7 @@ describe('MarkdownPreviewPage', () => {
   it('renders the writing state as the default page experience', () => {
     render(<MarkdownPreviewPage />)
 
-    expect(screen.getByRole('heading', { name: '今日纸面' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /\d+月\d+日 · 周./ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()

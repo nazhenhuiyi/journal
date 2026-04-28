@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
+import SegmentedControl from '../components/SegmentedControl'
 import { createDomRangesByAnnotation, resolveAnnotationRanges } from '../domain/annotations'
 import {
   createJournalMarkdownWithFrontMatter,
@@ -32,6 +33,11 @@ type WeatherStatus = 'idle' | 'loading' | 'ready' | 'failed'
 
 const noAnnotations: typeof demoAnnotations = []
 const AUTOSAVE_DELAY_MS = 700
+const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
+  { value: 'write', label: '书写' },
+  { value: 'review', label: '回看' },
+]
 
 function getJournalStore() {
   return typeof window === 'undefined' ? undefined : window.journalStore
@@ -57,6 +63,63 @@ export function createManagedJournalMarkdown(
   return createJournalMarkdownWithFrontMatter(markdown, { ...frontMatter, date })
 }
 
+function formatJournalTopbarTitle(dateKey: string, weatherText?: string) {
+  const date = parseLocalDateKey(dateKey) ?? new Date()
+  const dateLabel = `${date.getMonth() + 1}月${date.getDate()}日`
+  const weekdayLabel = weekdayLabels[date.getDay()]
+  const weatherLabel = formatTopbarWeatherLabel(weatherText)
+
+  return [dateLabel, weekdayLabel, weatherLabel].filter(Boolean).join(' · ')
+}
+
+function parseLocalDateKey(dateKey: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+
+  if (!match) {
+    return null
+  }
+
+  const [, year, month, day] = match
+
+  return new Date(Number(year), Number(month) - 1, Number(day))
+}
+
+function formatTopbarWeatherLabel(weatherText: string | undefined) {
+  if (!weatherText) {
+    return ''
+  }
+
+  if (/雷|暴/.test(weatherText)) {
+    return '雷雨'
+  }
+
+  if (/雨|淋|阵雨/.test(weatherText)) {
+    return '雨天'
+  }
+
+  if (/雪|冰/.test(weatherText)) {
+    return '雪天'
+  }
+
+  if (/雾|霾/.test(weatherText)) {
+    return '雾天'
+  }
+
+  if (/阴|云/.test(weatherText)) {
+    return '阴天'
+  }
+
+  if (/风/.test(weatherText)) {
+    return '有风'
+  }
+
+  if (/晴|阳/.test(weatherText)) {
+    return '晴天'
+  }
+
+  return weatherText
+}
+
 function MarkdownPreviewPage() {
   const [journalMode, setJournalMode] = useState<JournalMode>('write')
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
@@ -71,6 +134,10 @@ function MarkdownPreviewPage() {
   const saveRequestIdRef = useRef(0)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
+  const topbarTitle = formatJournalTopbarTitle(
+    journalFile?.date ?? journalFrontMatter.date ?? getLocalDateKey(),
+    journalFrontMatter.weather?.text,
+  )
   const visibleAnnotations = isReviewing ? demoAnnotations : noAnnotations
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
@@ -80,6 +147,38 @@ function MarkdownPreviewPage() {
     () => renderJournalMarkdown({ markdown: journalMarkdown, annotations: visibleAnnotations }),
     [journalMarkdown, visibleAnnotations],
   )
+
+  async function refreshTodayWeather(loadedFile: JournalFile) {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.refreshTodayWeather) {
+      const frontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
+
+      setWeatherStatus(frontMatter.weather?.text ? 'ready' : 'failed')
+      return
+    }
+
+    const loadedFrontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
+
+    if (isFreshWeather(loadedFrontMatter.weather, loadedFile.date)) {
+      setWeatherStatus('ready')
+      return
+    }
+
+    setWeatherStatus('loading')
+
+    try {
+      const location = await resolveBrowserWeatherLocation()
+      const refreshedFile = await journalStore.refreshTodayWeather(location)
+      const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
+
+      setJournalFrontMatter(refreshedFrontMatter)
+      setJournalFile(refreshedFile)
+      setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
+    } catch {
+      setWeatherStatus('failed')
+    }
+  }
 
   useEffect(() => {
     const journalStore = getJournalStore()
@@ -248,38 +347,6 @@ function MarkdownPreviewPage() {
     setJournalMarkdown(nextMarkdown)
   }
 
-  async function refreshTodayWeather(loadedFile: JournalFile) {
-    const journalStore = getJournalStore()
-
-    if (!journalStore?.refreshTodayWeather) {
-      const frontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
-
-      setWeatherStatus(frontMatter.weather?.text ? 'ready' : 'failed')
-      return
-    }
-
-    const loadedFrontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
-
-    if (isFreshWeather(loadedFrontMatter.weather, loadedFile.date)) {
-      setWeatherStatus('ready')
-      return
-    }
-
-    setWeatherStatus('loading')
-
-    try {
-      const location = await resolveBrowserWeatherLocation()
-      const refreshedFile = await journalStore.refreshTodayWeather(location)
-      const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
-
-      setJournalFrontMatter(refreshedFrontMatter)
-      setJournalFile(refreshedFile)
-      setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
-    } catch {
-      setWeatherStatus('failed')
-    }
-  }
-
   return (
     <>
       <motion.header
@@ -288,26 +355,14 @@ function MarkdownPreviewPage() {
         initial={{ opacity: 0, y: -8 }}
         transition={{ ...panelTransition, delay: 0.05 }}
       >
-        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">今日纸面</h1>
+        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">{topbarTitle}</h1>
         <div className="flex shrink-0 items-center gap-2 text-sm text-ink/60">
-          <div aria-label="纸面状态" className="mode-switch" role="group">
-            <button
-              aria-pressed={journalMode === 'write'}
-              className={journalMode === 'write' ? 'is-active' : ''}
-              onClick={() => handleModeChange('write')}
-              type="button"
-            >
-              书写
-            </button>
-            <button
-              aria-pressed={journalMode === 'review'}
-              className={journalMode === 'review' ? 'is-active' : ''}
-              onClick={() => handleModeChange('review')}
-              type="button"
-            >
-              回看
-            </button>
-          </div>
+          <SegmentedControl
+            ariaLabel="纸面状态"
+            onChange={handleModeChange}
+            options={journalModeOptions}
+            value={journalMode}
+          />
         </div>
       </motion.header>
 
