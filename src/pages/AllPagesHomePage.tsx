@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import {
   ArrowRight,
   BookOpen,
@@ -10,6 +11,16 @@ import {
 } from '../components/HandDrawnIcons'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
+import {
+  formatSketchDuration,
+  renderSketch,
+  setupCanvasDpi,
+  SKETCH_CANVAS_HEIGHT,
+  SKETCH_CANVAS_WIDTH,
+  SKETCH_THUMBNAIL_HEIGHT,
+  SKETCH_THUMBNAIL_WIDTH,
+  useSketchSession,
+} from '../domain/sketch'
 import nightLampPhoto from '../assets/memory-photos/night-lamp.jpg'
 import openBookPhoto from '../assets/memory-photos/open-book.jpg'
 import rainyNightPhoto from '../assets/memory-photos/rainy-night.jpg'
@@ -75,6 +86,28 @@ const memoryRows = [
 ]
 
 function AllPagesHomePage() {
+  const { state, eventCount, originalDuration, replayDuration } = useSketchSession()
+  const sketchPreviewRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = sketchPreviewRef.current
+
+    if (!canvas) {
+      return
+    }
+
+    const context = setupCanvasDpi(canvas, SKETCH_THUMBNAIL_WIDTH, SKETCH_THUMBNAIL_HEIGHT)
+
+    if (!context) {
+      return
+    }
+
+    context.save()
+    context.scale(SKETCH_THUMBNAIL_WIDTH / SKETCH_CANVAS_WIDTH, SKETCH_THUMBNAIL_HEIGHT / SKETCH_CANVAS_HEIGHT)
+    renderSketch(context, state, SKETCH_CANVAS_WIDTH, SKETCH_CANVAS_HEIGHT)
+    context.restore()
+  }, [state])
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -113,6 +146,33 @@ function AllPagesHomePage() {
           })}
         </section>
       </div>
+
+      <section aria-labelledby="recent-sketch-title" className="all-pages-sketch-shelf">
+        <div className="all-pages-sketch-copy">
+          <p>过程回放</p>
+          <h2 id="recent-sketch-title">最近涂鸦</h2>
+          <span>
+            {eventCount > 0
+              ? `${eventCount} 个事件 · 原始 ${formatSketchDuration(originalDuration)} · 回放 ${formatSketchDuration(replayDuration)}`
+              : '还没有落笔，先去画一小页。'}
+          </span>
+          <div className="all-pages-sketch-actions">
+            <Link to="/sketch">继续画</Link>
+            <Link aria-disabled={eventCount === 0} className={eventCount === 0 ? 'is-disabled' : ''} to="/sketch?replay=1">
+              播放过程
+            </Link>
+          </div>
+        </div>
+        <div className="all-pages-sketch-preview">
+          <canvas
+            aria-label="最近涂鸦预览"
+            height={SKETCH_THUMBNAIL_HEIGHT}
+            ref={sketchPreviewRef}
+            width={SKETCH_THUMBNAIL_WIDTH}
+          />
+          {eventCount === 0 ? <span>空白画纸</span> : null}
+        </div>
+      </section>
 
       <section aria-labelledby="old-pages-title" className="all-pages-memory-shelf">
         <div className="all-pages-memory-header">

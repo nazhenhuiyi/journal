@@ -7,6 +7,7 @@ import {
   PenLine,
   Settings,
   Sparkles,
+  StickyNote,
   type HandDrawnIcon,
 } from '../components/HandDrawnIcons'
 import { panelTransition } from '../pages/markdown-preview/constants'
@@ -20,6 +21,7 @@ const menuItems: Array<{
 }> = [
   { label: '今日', description: '4月25日', icon: PenLine, to: '/preview' },
   { label: '日记', description: '全部纸页', icon: BookOpen, to: '/pages' },
+  { label: '画板', description: '涂鸦过程', icon: StickyNote, to: '/sketch' },
   { label: '回声', description: '旧日重现', icon: Sparkles, disabled: true },
   { label: '相册', description: '照片记录', icon: Image, disabled: true },
   { label: '日历', description: '时间索引', icon: CalendarDays, disabled: true },

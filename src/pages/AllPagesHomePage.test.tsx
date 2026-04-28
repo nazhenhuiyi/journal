@@ -1,13 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
+import { SketchSessionProvider } from '../domain/sketch'
 import AllPagesHomePage from './AllPagesHomePage'
 
 function renderHomePage() {
   return render(
-    <MemoryRouter>
-      <AllPagesHomePage />
-    </MemoryRouter>,
+    <SketchSessionProvider>
+      <MemoryRouter>
+        <AllPagesHomePage />
+      </MemoryRouter>
+    </SketchSessionProvider>,
   )
 }
 
@@ -20,6 +23,9 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('link', { name: /写日记/ })).toHaveAttribute('href', '/preview')
     expect(screen.getByRole('link', { name: /碎碎念/ })).toHaveAttribute('href', '/preview')
     expect(screen.getByRole('link', { name: /放照片/ })).toHaveAttribute('href', '/preview')
+    expect(screen.getByRole('heading', { name: '最近涂鸦' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '继续画' })).toHaveAttribute('href', '/sketch')
+    expect(screen.getByRole('link', { name: '播放过程' })).toHaveAttribute('href', '/sketch?replay=1')
   })
 
   it('surfaces actual memories instead of review categories', () => {
