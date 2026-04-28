@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import SegmentedControl from '../components/SegmentedControl'
 import { createDomRangesByAnnotation, resolveAnnotationRanges } from '../domain/annotations'
+import type { Annotation } from '../domain/annotations'
 import {
   createJournalMarkdownWithFrontMatter,
   parseJournalMarkdown,
@@ -31,7 +32,7 @@ type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
 type WeatherStatus = 'idle' | 'loading' | 'ready' | 'failed'
 
-const noAnnotations: typeof demoAnnotations = []
+const noAnnotations: Annotation[] = []
 const AUTOSAVE_DELAY_MS = 700
 const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
@@ -125,6 +126,7 @@ function MarkdownPreviewPage() {
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
   const [journalFrontMatter, setJournalFrontMatter] = useState<DayFrontMatter>({})
+  const [journalAnnotations, setJournalAnnotations] = useState<Annotation[]>(demoAnnotations)
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
@@ -138,7 +140,10 @@ function MarkdownPreviewPage() {
     journalFile?.date ?? journalFrontMatter.date ?? getLocalDateKey(),
     journalFrontMatter.weather?.text,
   )
-  const visibleAnnotations = isReviewing ? demoAnnotations : noAnnotations
+  const visibleAnnotations = useMemo(
+    () => (isReviewing ? journalAnnotations.filter((annotation) => annotation.status === 'visible') : noAnnotations),
+    [isReviewing, journalAnnotations],
+  )
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
     [journalMarkdown, visibleAnnotations],
@@ -180,6 +185,30 @@ function MarkdownPreviewPage() {
     }
   }
 
+  async function loadAnnotationsForDate(date: string) {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.readAnnotations) {
+      replaceJournalAnnotations(noAnnotations)
+      return
+    }
+
+    try {
+      const annotationFile = await journalStore.readAnnotations(date)
+
+      replaceJournalAnnotations(annotationFile.annotations)
+    } catch {
+      replaceJournalAnnotations(noAnnotations)
+    }
+  }
+
+  function replaceJournalAnnotations(nextAnnotations: Annotation[]) {
+    setJournalAnnotations(nextAnnotations)
+    setActiveAnnotationId(
+      nextAnnotations.find((annotation) => annotation.status === 'visible')?.id ?? '',
+    )
+  }
+
   useEffect(() => {
     const journalStore = getJournalStore()
 
@@ -205,6 +234,7 @@ function MarkdownPreviewPage() {
         setJournalFrontMatter(frontMatter)
         setJournalFile(file)
         setJournalMarkdown(editableMarkdown)
+        void loadAnnotationsForDate(file.date)
         void refreshTodayWeather(file)
       })
       .catch(() => {
@@ -383,7 +413,7 @@ function MarkdownPreviewPage() {
 
             <AnnotationSidebar
               activeAnnotationId={activeAnnotationId}
-              annotations={demoAnnotations}
+              annotations={visibleAnnotations}
               onSelectAnnotation={(annotationId) => selectAnnotation(annotationId, true)}
             />
           </>

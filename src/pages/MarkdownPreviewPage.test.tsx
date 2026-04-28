@@ -4,6 +4,8 @@ import MarkdownPreviewPage, {
   createManagedJournalMarkdown,
   stripManagedFrontMatter,
 } from './MarkdownPreviewPage'
+import { createTextSelector } from '../domain/annotations'
+import type { AnnotationFile } from '../domain/annotations'
 
 const highlightStore = new Map<string, TestHighlight>()
 const highlightRegistry = {
@@ -66,6 +68,59 @@ describe('MarkdownPreviewPage', () => {
       expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('date: 2026-04-28')
     })
     expect(saveToday).not.toHaveBeenCalled()
+  })
+
+  it('loads same-day annotations from the desktop journal store in review mode', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 从文件醒来\n今天记得很轻。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const longEntryMarkdown = '# 从文件醒来\n今天记得很轻。'
+    const exact = '今天记得很轻'
+    const start = longEntryMarkdown.indexOf(exact)
+    const annotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-28',
+      source: storedJournal.filePath,
+      sourceHash: 'test-hash',
+      annotations: [
+        {
+          id: 'ann_today_light',
+          author: 'ai',
+          kind: 'observation',
+          target: {
+            type: 'longEntryRange',
+            selector: createTextSelector(longEntryMarkdown, start, start + exact.length),
+          },
+          body: {
+            content: '这条来自今天的旁路批注文件。',
+          },
+          status: 'visible',
+          createdAt: '2026-04-28T17:20:00+08:00',
+        },
+      ],
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveToday = vi.fn().mockResolvedValue(storedJournal)
+    const readAnnotations = vi.fn().mockResolvedValue(annotationFile)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday, readAnnotations })
+
+    const { container } = render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
+    })
+    enterReviewMode()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /这条来自今天/ })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /这里保留了疲惫/ })).not.toBeInTheDocument()
+    expect(container.querySelector('[data-annotation-ids="ann_today_light"]')).toHaveTextContent('今天记得很轻。')
   })
 
   it('keeps managed front matter out of the editable journal body', () => {

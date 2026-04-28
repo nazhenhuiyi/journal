@@ -9,6 +9,14 @@ import {
 } from '../src/domain/markdown/frontMatter'
 import type { DayFrontMatter } from '../src/domain/markdown/types'
 import { parseJournalMarkdown } from '../src/domain/markdown/parseJournalMarkdown'
+import type {
+  Annotation,
+  AnnotationFile,
+  LinePosition,
+  TextPosition,
+  TextQuote,
+  TextSelector,
+} from '../src/domain/annotations/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const APP_MIN_WIDTH = 1180
@@ -37,6 +45,7 @@ let win: BrowserWindow | null
 ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, process.env.APP_ROOT))
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
+ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 
 type JournalFile = {
@@ -70,7 +79,12 @@ function createDefaultJournalMarkdown(dateKey: string) {
 }
 
 function getTodayJournalPath() {
-  const date = getTodayDateKey()
+  return getJournalPath(getTodayDateKey())
+}
+
+function getJournalPath(date: string) {
+  assertDateKey(date)
+
   const fileName = `${date}.md`
   const directory = path.join(app.getPath('home'), JOURNAL_DIR_NAME)
 
@@ -79,6 +93,28 @@ function getTodayJournalPath() {
     directory,
     fileName,
     filePath: path.join(directory, fileName),
+  }
+}
+
+function getJournalAnnotationsPath(date: string) {
+  assertDateKey(date)
+
+  const directory = path.join(app.getPath('home'), JOURNAL_DIR_NAME)
+  const annotationsDirectory = path.join(directory, 'annotations')
+  const fileName = `${date}.json`
+
+  return {
+    date,
+    directory: annotationsDirectory,
+    fileName,
+    filePath: path.join(annotationsDirectory, fileName),
+    sourcePath: path.join(directory, `${date}.md`),
+  }
+}
+
+function assertDateKey(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new TypeError('Journal date must use YYYY-MM-DD format.')
   }
 }
 
@@ -130,6 +166,191 @@ async function saveTodayJournal(content: unknown) {
   await writeJournalFile(filePath, content)
 
   return journalFilePayload(content)
+}
+
+async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {
+  if (typeof date !== 'string') {
+    throw new TypeError('Annotation date must be a string.')
+  }
+
+  const { filePath, sourcePath } = getJournalAnnotationsPath(date)
+  const content = await readFile(filePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  })
+
+  if (content === null) {
+    return {
+      version: 1,
+      date,
+      source: sourcePath,
+      sourceHash: '',
+      annotations: [],
+    }
+  }
+
+  return normalizeAnnotationFile(JSON.parse(content), date)
+}
+
+function normalizeAnnotationFile(payload: unknown, date: string): AnnotationFile {
+  const root = asRecord(payload)
+  const annotations = Array.isArray(root.annotations)
+    ? root.annotations.flatMap((annotation) => normalizeAnnotation(annotation))
+    : []
+
+  return {
+    version: 1,
+    date: typeof root.date === 'string' ? root.date : date,
+    source: typeof root.source === 'string' ? root.source : getJournalAnnotationsPath(date).sourcePath,
+    sourceHash: typeof root.sourceHash === 'string' ? root.sourceHash : '',
+    annotations,
+  }
+}
+
+function normalizeAnnotation(payload: unknown): Annotation[] {
+  const annotation = asRecord(payload)
+  const id = stringFromRecord(annotation, 'id')
+  const author = stringFromRecord(annotation, 'author')
+  const kind = stringFromRecord(annotation, 'kind')
+  const status = stringFromRecord(annotation, 'status')
+  const createdAt = stringFromRecord(annotation, 'createdAt')
+  const body = asRecord(annotation.body)
+  const content = stringFromRecord(body, 'content')
+  const target = asRecord(annotation.target)
+
+  if (
+    !id ||
+    !isAnnotationAuthor(author) ||
+    !isAnnotationKind(kind) ||
+    !isAnnotationStatus(status) ||
+    !createdAt ||
+    !content
+  ) {
+    return []
+  }
+
+  if (target.type === 'day') {
+    return [
+      {
+        id,
+        author,
+        kind,
+        target: {
+          type: 'day',
+        },
+        body: {
+          content,
+        },
+        status,
+        createdAt,
+        updatedAt: stringFromRecord(annotation, 'updatedAt'),
+      },
+    ]
+  }
+
+  if (target.type !== 'longEntryRange') {
+    return []
+  }
+
+  const selector = normalizeTextSelector(asRecord(target.selector))
+
+  if (!selector) {
+    return []
+  }
+
+  return [
+    {
+      id,
+      author,
+      kind,
+      target: {
+        type: 'longEntryRange',
+        selector,
+      },
+      body: {
+        content,
+      },
+      status,
+      createdAt,
+      updatedAt: stringFromRecord(annotation, 'updatedAt'),
+    },
+  ]
+}
+
+function normalizeTextSelector(selector: Record<string, unknown>): TextSelector | null {
+  const sourceQuote = normalizeTextQuote(asRecord(selector.sourceQuote))
+  const plainQuote = normalizeTextQuote(asRecord(selector.plainQuote))
+  const textPosition = normalizeTextPosition(asRecord(selector.textPosition))
+  const linePosition = normalizeLinePosition(asRecord(selector.linePosition))
+
+  if (!sourceQuote || !plainQuote || !textPosition || !linePosition) {
+    return null
+  }
+
+  return {
+    sourceQuote,
+    plainQuote,
+    textPosition,
+    linePosition,
+  }
+}
+
+function normalizeTextQuote(payload: Record<string, unknown>): TextQuote | null {
+  const exact = stringFromRecord(payload, 'exact')
+
+  if (!exact) {
+    return null
+  }
+
+  return {
+    exact,
+    prefix: stringFromRecord(payload, 'prefix'),
+    suffix: stringFromRecord(payload, 'suffix'),
+  }
+}
+
+function normalizeTextPosition(payload: Record<string, unknown>): TextPosition | null {
+  const start = numberFromRecord(payload, 'start')
+  const end = numberFromRecord(payload, 'end')
+
+  if (start === undefined || end === undefined || start < 0 || end < start) {
+    return null
+  }
+
+  return { start, end }
+}
+
+function normalizeLinePosition(payload: Record<string, unknown>): LinePosition | null {
+  const startLine = numberFromRecord(payload, 'startLine')
+  const startColumn = numberFromRecord(payload, 'startColumn')
+  const endLine = numberFromRecord(payload, 'endLine')
+  const endColumn = numberFromRecord(payload, 'endColumn')
+
+  if (
+    startLine === undefined ||
+    startColumn === undefined ||
+    endLine === undefined ||
+    endColumn === undefined
+  ) {
+    return null
+  }
+
+  return { startLine, startColumn, endLine, endColumn }
+}
+
+function isAnnotationAuthor(value: string | undefined): value is Annotation['author'] {
+  return value === 'ai' || value === 'user'
+}
+
+function isAnnotationKind(value: string | undefined): value is Annotation['kind'] {
+  return value === 'observation' || value === 'question' || value === 'format' || value === 'spelling'
+}
+
+function isAnnotationStatus(value: string | undefined): value is Annotation['status'] {
+  return value === 'visible' || value === 'hidden' || value === 'orphaned'
 }
 
 async function refreshTodayWeather(location: unknown) {
@@ -268,6 +489,12 @@ function numberFromRecord(record: Record<string, unknown>, key: string) {
   const numberValue = typeof value === 'number' ? value : Number(value)
 
   return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function stringFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+
+  return typeof value === 'string' && value ? value : undefined
 }
 
 function firstLocalizedValue(value: unknown) {
