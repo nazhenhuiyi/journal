@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { NavLink, Outlet } from 'react-router'
 import {
@@ -19,7 +20,7 @@ const menuItems: Array<{
   to?: string
   disabled?: boolean
 }> = [
-  { label: '今日', description: '4月25日', icon: PenLine, to: '/preview' },
+  { label: '今日', description: '', icon: PenLine, to: '/preview' },
   { label: '日记', description: '全部纸页', icon: BookOpen, to: '/pages' },
   { label: '画板', description: '涂鸦过程', icon: StickyNote, to: '/sketch' },
   { label: '回声', description: '旧日重现', icon: Sparkles, disabled: true },
@@ -28,7 +29,42 @@ const menuItems: Array<{
   { label: '设置', description: '外观与边界', icon: Settings, disabled: true },
 ]
 
+function formatMenuDate(date = new Date()) {
+  return `${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+function millisecondsUntilNextDay(date = new Date()) {
+  const nextDay = new Date(date)
+
+  nextDay.setHours(24, 0, 1, 0)
+
+  return nextDay.getTime() - date.getTime()
+}
+
+function useTodayMenuDate() {
+  const [todayMenuDate, setTodayMenuDate] = useState(() => formatMenuDate())
+
+  useEffect(() => {
+    let timeoutId: number
+
+    function scheduleNextUpdate() {
+      timeoutId = window.setTimeout(() => {
+        setTodayMenuDate(formatMenuDate())
+        scheduleNextUpdate()
+      }, millisecondsUntilNextDay())
+    }
+
+    scheduleNextUpdate()
+
+    return () => window.clearTimeout(timeoutId)
+  }, [])
+
+  return todayMenuDate
+}
+
 function AppLayout() {
+  const todayMenuDate = useTodayMenuDate()
+
   return (
     <motion.main
       animate={{ opacity: 1 }}
@@ -49,12 +85,13 @@ function AppLayout() {
           <div className="journal-menu-list">
             {menuItems.map((item) => {
               const Icon = item.icon
+              const description = item.label === '今日' ? todayMenuDate : item.description
               const content = (
                 <>
                   <Icon aria-hidden="true" size={19} strokeWidth={2.18} />
                   <span>
                     <strong>{item.label}</strong>
-                    <small>{item.description}</small>
+                    <small>{description}</small>
                   </span>
                 </>
               )

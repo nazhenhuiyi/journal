@@ -20,16 +20,55 @@ import MarkdownPreviewArticle from './markdown-preview/MarkdownPreviewArticle'
 import type { AnnotationOverlayRect } from './markdown-preview/types'
 
 type JournalMode = 'write' | 'review'
+type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
 
 const noAnnotations: typeof demoAnnotations = []
+const AUTOSAVE_DELAY_MS = 700
+const frontMatterFence = '---'
+
+function getJournalStore() {
+  return typeof window === 'undefined' ? undefined : window.journalStore
+}
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+export function stripManagedFrontMatter(markdown: string) {
+  if (!markdown.startsWith(`${frontMatterFence}\n`) && !markdown.startsWith(`${frontMatterFence}\r\n`)) {
+    return markdown
+  }
+
+  const lines = markdown.split(/\r?\n/)
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === frontMatterFence)
+
+  if (closingIndex === -1) {
+    return markdown
+  }
+
+  return lines.slice(closingIndex + 1).join('\n').replace(/^\n/, '')
+}
+
+export function createManagedJournalMarkdown(markdown: string, date: string) {
+  return `${frontMatterFence}\ndate: ${date}\n${frontMatterFence}\n\n${markdown}`
+}
 
 function MarkdownPreviewPage() {
   const [journalMode, setJournalMode] = useState<JournalMode>('write')
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
+  const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
   const previewRef = useRef<HTMLDivElement>(null)
+  const hasLoadedJournalRef = useRef(false)
+  const lastSavedMarkdownRef = useRef(annotationTargetsEntry)
+  const saveRequestIdRef = useRef(0)
   const isReviewing = journalMode === 'review'
+  const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
   const visibleAnnotations = isReviewing ? demoAnnotations : noAnnotations
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
@@ -39,6 +78,73 @@ function MarkdownPreviewPage() {
     () => renderJournalMarkdown({ markdown: journalMarkdown, annotations: visibleAnnotations }),
     [journalMarkdown, visibleAnnotations],
   )
+
+  useEffect(() => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore) {
+      hasLoadedJournalRef.current = true
+      return
+    }
+
+    let isCancelled = false
+
+    journalStore
+      .loadToday()
+      .then((file) => {
+        if (isCancelled) {
+          return
+        }
+
+        const editableMarkdown = stripManagedFrontMatter(file.content)
+
+        lastSavedMarkdownRef.current = editableMarkdown
+        hasLoadedJournalRef.current = true
+        setJournalFile(file)
+        setJournalMarkdown(editableMarkdown)
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return
+        }
+
+        hasLoadedJournalRef.current = true
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore || !hasLoadedJournalRef.current || journalMarkdown === lastSavedMarkdownRef.current) {
+      return
+    }
+
+    const requestId = saveRequestIdRef.current + 1
+    saveRequestIdRef.current = requestId
+
+    const timeoutId = window.setTimeout(() => {
+      const date = journalFile?.date ?? getLocalDateKey()
+      const fileMarkdown = createManagedJournalMarkdown(journalMarkdown, date)
+
+      journalStore
+        .saveToday(fileMarkdown)
+        .then((file) => {
+          if (saveRequestIdRef.current !== requestId) {
+            return
+          }
+
+          lastSavedMarkdownRef.current = stripManagedFrontMatter(file.content)
+          setJournalFile(file)
+        })
+        .catch(() => undefined)
+    }, AUTOSAVE_DELAY_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [journalFile?.date, journalMarkdown])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -133,6 +239,10 @@ function MarkdownPreviewPage() {
     }
   }
 
+  function handleJournalMarkdownChange(nextMarkdown: string) {
+    setJournalMarkdown(nextMarkdown)
+  }
+
   return (
     <>
       <motion.header
@@ -161,7 +271,6 @@ function MarkdownPreviewPage() {
               回看
             </button>
           </div>
-          <span className="save-state">已安放</span>
         </div>
       </motion.header>
 
@@ -196,15 +305,9 @@ function MarkdownPreviewPage() {
             <div className="journal-paper">
               <div className="journal-paper-meta">
                 <span>正文</span>
-                <span>页边保持安静</span>
+                <span title={journalFile?.filePath}>{journalStorageLabel}</span>
               </div>
-              <JournalMarkdownEditor onChange={setJournalMarkdown} value={journalMarkdown} />
-              <div className="journal-paper-footer">
-                <span>写的时候不出现正式批注</span>
-                <button onClick={() => handleModeChange('review')} type="button">
-                  回看一下
-                </button>
-              </div>
+              <JournalMarkdownEditor onChange={handleJournalMarkdownChange} value={journalMarkdown} />
             </div>
           </motion.article>
         )}

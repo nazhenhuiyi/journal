@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import MarkdownPreviewPage from './MarkdownPreviewPage'
+import MarkdownPreviewPage, {
+  createManagedJournalMarkdown,
+  stripManagedFrontMatter,
+} from './MarkdownPreviewPage'
 
 const highlightStore = new Map<string, TestHighlight>()
 const highlightRegistry = {
@@ -40,6 +43,37 @@ function enterReviewMode() {
 }
 
 describe('MarkdownPreviewPage', () => {
+  it('loads today journal from the desktop journal store', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 从文件醒来\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveToday = vi.fn().mockResolvedValue(storedJournal)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(loadToday).toHaveBeenCalledOnce()
+      expect(screen.getByText('~/.journal/2026-04-28.md')).toHaveAttribute('title', storedJournal.filePath)
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('从文件醒来')
+      expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('date: 2026-04-28')
+    })
+    expect(saveToday).not.toHaveBeenCalled()
+  })
+
+  it('keeps managed front matter out of the editable journal body', () => {
+    expect(stripManagedFrontMatter('---\ndate: 2026-04-28\n---\n\n今天直接写。')).toBe('今天直接写。')
+    expect(createManagedJournalMarkdown('今天直接写。', '2026-04-28')).toBe(
+      '---\ndate: 2026-04-28\n---\n\n今天直接写。',
+    )
+  })
+
   it('renders the writing state as the default page experience', () => {
     render(<MarkdownPreviewPage />)
 

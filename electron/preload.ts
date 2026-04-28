@@ -28,3 +28,12 @@ contextBridge.exposeInMainWorld('codex', {
     return ipcRenderer.invoke('codex:ask', prompt)
   },
 })
+
+contextBridge.exposeInMainWorld('journalStore', {
+  loadToday() {
+    return ipcRenderer.invoke('journal:loadToday')
+  },
+  saveToday(content: string) {
+    return ipcRenderer.invoke('journal:saveToday', content)
+  },
+})

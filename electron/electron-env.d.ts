@@ -24,6 +24,22 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
+  journalStore?: {
+    loadToday(): Promise<{
+      content: string
+      date: string
+      fileName: string
+      filePath: string
+      updatedAt: string | null
+    }>
+    saveToday(content: string): Promise<{
+      content: string
+      date: string
+      fileName: string
+      filePath: string
+      updatedAt: string | null
+    }>
+  }
   codex?: {
     ask(prompt: string): Promise<{
       finalResponse: string
