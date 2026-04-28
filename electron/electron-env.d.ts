@@ -39,6 +39,13 @@ interface Window {
       filePath: string
       updatedAt: string | null
     }>
+    refreshTodayWeather(location?: { latitude?: number; longitude?: number }): Promise<{
+      content: string
+      date: string
+      fileName: string
+      filePath: string
+      updatedAt: string | null
+    }>
   }
   codex?: {
     ask(prompt: string): Promise<{

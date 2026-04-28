@@ -36,4 +36,7 @@ contextBridge.exposeInMainWorld('journalStore', {
   saveToday(content: string) {
     return ipcRenderer.invoke('journal:saveToday', content)
   },
+  refreshTodayWeather(location?: { latitude?: number; longitude?: number }) {
+    return ipcRenderer.invoke('journal:refreshTodayWeather', location)
+  },
 })

@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import { createDomRangesByAnnotation, resolveAnnotationRanges } from '../domain/annotations'
-import { parseJournalMarkdown, renderJournalMarkdown } from '../domain/markdown'
+import {
+  createJournalMarkdownWithFrontMatter,
+  parseJournalMarkdown,
+  renderJournalMarkdown,
+  stripManagedFrontMatter as stripJournalManagedFrontMatter,
+  type DayFrontMatter,
+} from '../domain/markdown'
+import { weatherPack } from '../assets/theme-packs/weather'
 import {
   getAnnotationIds,
   registerAnnotationHighlights,
@@ -21,10 +28,10 @@ import type { AnnotationOverlayRect } from './markdown-preview/types'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
+type WeatherStatus = 'idle' | 'loading' | 'ready' | 'failed'
 
 const noAnnotations: typeof demoAnnotations = []
 const AUTOSAVE_DELAY_MS = 700
-const frontMatterFence = '---'
 
 function getJournalStore() {
   return typeof window === 'undefined' ? undefined : window.journalStore
@@ -39,28 +46,23 @@ function getLocalDateKey(date = new Date()) {
 }
 
 export function stripManagedFrontMatter(markdown: string) {
-  if (!markdown.startsWith(`${frontMatterFence}\n`) && !markdown.startsWith(`${frontMatterFence}\r\n`)) {
-    return markdown
-  }
-
-  const lines = markdown.split(/\r?\n/)
-  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === frontMatterFence)
-
-  if (closingIndex === -1) {
-    return markdown
-  }
-
-  return lines.slice(closingIndex + 1).join('\n').replace(/^\n/, '')
+  return stripJournalManagedFrontMatter(markdown)
 }
 
-export function createManagedJournalMarkdown(markdown: string, date: string) {
-  return `${frontMatterFence}\ndate: ${date}\n${frontMatterFence}\n\n${markdown}`
+export function createManagedJournalMarkdown(
+  markdown: string,
+  date: string,
+  frontMatter: DayFrontMatter = {},
+) {
+  return createJournalMarkdownWithFrontMatter(markdown, { ...frontMatter, date })
 }
 
 function MarkdownPreviewPage() {
   const [journalMode, setJournalMode] = useState<JournalMode>('write')
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
+  const [journalFrontMatter, setJournalFrontMatter] = useState<DayFrontMatter>({})
+  const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
   const previewRef = useRef<HTMLDivElement>(null)
@@ -97,11 +99,14 @@ function MarkdownPreviewPage() {
         }
 
         const editableMarkdown = stripManagedFrontMatter(file.content)
+        const frontMatter = parseJournalMarkdown(file.content).frontMatter
 
         lastSavedMarkdownRef.current = editableMarkdown
         hasLoadedJournalRef.current = true
+        setJournalFrontMatter(frontMatter)
         setJournalFile(file)
         setJournalMarkdown(editableMarkdown)
+        void refreshTodayWeather(file)
       })
       .catch(() => {
         if (isCancelled) {
@@ -128,7 +133,7 @@ function MarkdownPreviewPage() {
 
     const timeoutId = window.setTimeout(() => {
       const date = journalFile?.date ?? getLocalDateKey()
-      const fileMarkdown = createManagedJournalMarkdown(journalMarkdown, date)
+      const fileMarkdown = createManagedJournalMarkdown(journalMarkdown, date, journalFrontMatter)
 
       journalStore
         .saveToday(fileMarkdown)
@@ -144,7 +149,7 @@ function MarkdownPreviewPage() {
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timeoutId)
-  }, [journalFile?.date, journalMarkdown])
+  }, [journalFile?.date, journalFrontMatter, journalMarkdown])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -243,6 +248,38 @@ function MarkdownPreviewPage() {
     setJournalMarkdown(nextMarkdown)
   }
 
+  async function refreshTodayWeather(loadedFile: JournalFile) {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.refreshTodayWeather) {
+      const frontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
+
+      setWeatherStatus(frontMatter.weather?.text ? 'ready' : 'failed')
+      return
+    }
+
+    const loadedFrontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
+
+    if (isFreshWeather(loadedFrontMatter.weather, loadedFile.date)) {
+      setWeatherStatus('ready')
+      return
+    }
+
+    setWeatherStatus('loading')
+
+    try {
+      const location = await resolveBrowserWeatherLocation()
+      const refreshedFile = await journalStore.refreshTodayWeather(location)
+      const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
+
+      setJournalFrontMatter(refreshedFrontMatter)
+      setJournalFile(refreshedFile)
+      setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
+    } catch {
+      setWeatherStatus('failed')
+    }
+  }
+
   return (
     <>
       <motion.header
@@ -307,6 +344,7 @@ function MarkdownPreviewPage() {
                 <span>正文</span>
                 <span title={journalFile?.filePath}>{journalStorageLabel}</span>
               </div>
+              <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} />
               <JournalMarkdownEditor onChange={handleJournalMarkdownChange} value={journalMarkdown} />
             </div>
           </motion.article>
@@ -314,6 +352,142 @@ function MarkdownPreviewPage() {
       </section>
     </>
   )
+}
+
+function JournalWeatherHeader({
+  frontMatter,
+  status,
+}: {
+  frontMatter: DayFrontMatter
+  status: WeatherStatus
+}) {
+  const weather = frontMatter.weather
+  const locationLabel = formatLocationLabel(frontMatter.location)
+  const weatherImage = getWeatherImage(weather?.text)
+
+  return (
+    <section className="journal-weather-strip" aria-label="今日天气">
+      <img alt="" aria-hidden="true" className="journal-weather-strip-image" src={weatherImage} />
+      <div className="journal-weather-strip-copy">
+        <span>{weather?.text ?? getWeatherStatusLabel(status)}</span>
+        <strong>{formatTemperature(weather?.temperature)}</strong>
+      </div>
+      <dl className="journal-weather-strip-details">
+        <div>
+          <dt>体感</dt>
+          <dd>{formatTemperature(weather?.feelsLike)}</dd>
+        </div>
+        <div>
+          <dt>湿度</dt>
+          <dd>{formatPercent(weather?.humidity)}</dd>
+        </div>
+        <div>
+          <dt>风</dt>
+          <dd>{formatWindSpeed(weather?.windSpeed)}</dd>
+        </div>
+        <div>
+          <dt>地点</dt>
+          <dd>{locationLabel}</dd>
+        </div>
+      </dl>
+    </section>
+  )
+}
+
+function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude: number } | undefined> {
+  if (!navigator.geolocation) {
+    return Promise.resolve(undefined)
+  }
+
+  return new Promise((resolve) => {
+    const timeoutId = window.setTimeout(() => resolve(undefined), 5000)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        window.clearTimeout(timeoutId)
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+      },
+      () => {
+        window.clearTimeout(timeoutId)
+        resolve(undefined)
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 1000 * 60 * 60,
+        timeout: 4500,
+      },
+    )
+  })
+}
+
+function formatLocationLabel(location: DayFrontMatter['location']) {
+  return location?.name ?? location?.region ?? location?.country ?? '未定位'
+}
+
+function formatTemperature(temperature: number | undefined) {
+  return temperature === undefined ? '--' : `${Math.round(temperature)}°C`
+}
+
+function formatPercent(value: number | undefined) {
+  return value === undefined ? '--' : `${Math.round(value)}%`
+}
+
+function formatWindSpeed(value: number | undefined) {
+  return value === undefined ? '--' : `${Math.round(value)} km/h`
+}
+
+function getWeatherStatusLabel(status: WeatherStatus) {
+  if (status === 'loading') {
+    return '天气同步中'
+  }
+
+  if (status === 'failed') {
+    return '天气未同步'
+  }
+
+  return '今日天气'
+}
+
+function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
+  return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function getWeatherImage(weatherText: string | undefined) {
+  const normalizedText = weatherText ?? ''
+  const item = weatherPack.items.find((weatherItem) => {
+    const searchableText = [weatherItem.label, ...weatherItem.keywords].join(' ')
+
+    return searchableText.includes(normalizedText) || normalizedText.includes(weatherItem.label)
+  })
+
+  if (item) {
+    return item.image
+  }
+
+  if (/雷|暴/.test(normalizedText)) {
+    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.thunder')?.image ?? weatherPack.previewImage
+  }
+
+  if (/雨|淋|阵雨/.test(normalizedText)) {
+    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.rain')?.image ?? weatherPack.previewImage
+  }
+
+  if (/雪|冰/.test(normalizedText)) {
+    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.snow')?.image ?? weatherPack.previewImage
+  }
+
+  if (/雾|霾|阴/.test(normalizedText)) {
+    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.fog')?.image ?? weatherPack.previewImage
+  }
+
+  if (/风/.test(normalizedText)) {
+    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.wind')?.image ?? weatherPack.previewImage
+  }
+
+  return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.sunny')?.image ?? weatherPack.previewImage
 }
 
 export default MarkdownPreviewPage

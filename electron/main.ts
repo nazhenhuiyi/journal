@@ -3,6 +3,12 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { askCodex } from './codex'
+import {
+  createJournalMarkdownWithFrontMatter,
+  stripManagedFrontMatter,
+} from '../src/domain/markdown/frontMatter'
+import type { DayFrontMatter } from '../src/domain/markdown/types'
+import { parseJournalMarkdown } from '../src/domain/markdown/parseJournalMarkdown'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const APP_MIN_WIDTH = 1180
@@ -31,6 +37,7 @@ let win: BrowserWindow | null
 ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, process.env.APP_ROOT))
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
+ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 
 type JournalFile = {
   content: string
@@ -38,6 +45,16 @@ type JournalFile = {
   fileName: string
   filePath: string
   updatedAt: string | null
+}
+
+type WeatherLookupLocation = {
+  latitude?: number
+  longitude?: number
+}
+
+type WeatherLookupPayload = {
+  weather: NonNullable<DayFrontMatter['weather']>
+  location?: NonNullable<DayFrontMatter['location']>
 }
 
 function getTodayDateKey(date = new Date()) {
@@ -49,7 +66,7 @@ function getTodayDateKey(date = new Date()) {
 }
 
 function createDefaultJournalMarkdown(dateKey: string) {
-  return `---\ndate: ${dateKey}\n---\n\n`
+  return createJournalMarkdownWithFrontMatter('', { date: dateKey })
 }
 
 function getTodayJournalPath() {
@@ -108,13 +125,168 @@ async function saveTodayJournal(content: unknown) {
   }
 
   const { directory, filePath } = getTodayJournalPath()
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
 
   await mkdir(directory, { recursive: true })
-  await writeFile(temporaryPath, content, 'utf8')
-  await rename(temporaryPath, filePath)
+  await writeJournalFile(filePath, content)
 
   return journalFilePayload(content)
+}
+
+async function refreshTodayWeather(location: unknown) {
+  const { date, directory, filePath } = getTodayJournalPath()
+
+  await mkdir(directory, { recursive: true })
+
+  const existingContent = await readFile(filePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return createDefaultJournalMarkdown(date)
+    }
+
+    throw error
+  })
+  const parsedEntry = parseJournalMarkdown(existingContent)
+
+  if (hasFreshWeather(parsedEntry.frontMatter.weather, date)) {
+    return journalFilePayload(existingContent)
+  }
+
+  const weatherPayload = await fetchTodayWeather(normalizeWeatherLookupLocation(location))
+  const latestContent = await readFile(filePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return existingContent
+    }
+
+    throw error
+  })
+  const latestParsedEntry = parseJournalMarkdown(latestContent)
+
+  if (hasFreshWeather(latestParsedEntry.frontMatter.weather, date)) {
+    return journalFilePayload(latestContent)
+  }
+
+  const nextFrontMatter: DayFrontMatter = {
+    ...latestParsedEntry.frontMatter,
+    date,
+    weather: weatherPayload.weather,
+    location: weatherPayload.location ?? latestParsedEntry.frontMatter.location,
+  }
+  const nextContent = createJournalMarkdownWithFrontMatter(
+    stripManagedFrontMatter(latestContent),
+    nextFrontMatter,
+  )
+
+  await writeJournalFile(filePath, nextContent)
+
+  return journalFilePayload(nextContent)
+}
+
+async function writeJournalFile(filePath: string, content: string) {
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+
+  await writeFile(temporaryPath, content, 'utf8')
+  await rename(temporaryPath, filePath)
+}
+
+async function fetchTodayWeather(location: WeatherLookupLocation): Promise<WeatherLookupPayload> {
+  const weatherTarget = hasCoordinates(location)
+    ? `${location.latitude},${location.longitude}`
+    : ''
+  const requestUrl = `https://wttr.in/${weatherTarget}?format=j1&lang=zh`
+  const response = await fetch(requestUrl, {
+    headers: {
+      'User-Agent': 'JournalDesktop/0.0.0',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Weather request failed with ${response.status}.`)
+  }
+
+  return parseWttrWeather(await response.json())
+}
+
+function parseWttrWeather(payload: unknown): WeatherLookupPayload {
+  const root = asRecord(payload)
+  const currentCondition = firstRecord(root.current_condition)
+  const nearestArea = firstRecord(root.nearest_area)
+  const temperature = numberFromRecord(currentCondition, 'temp_C')
+  const feelsLike = numberFromRecord(currentCondition, 'FeelsLikeC')
+  const humidity = numberFromRecord(currentCondition, 'humidity')
+  const windSpeed = numberFromRecord(currentCondition, 'windspeedKmph')
+  const text = firstLocalizedValue(currentCondition.lang_zh) ?? firstLocalizedValue(currentCondition.weatherDesc)
+
+  if (!text || temperature === undefined) {
+    throw new Error('Weather response did not include current weather.')
+  }
+
+  const areaName = firstLocalizedValue(nearestArea.areaName)
+  const region = firstLocalizedValue(nearestArea.region)
+  const country = firstLocalizedValue(nearestArea.country)
+
+  return {
+    weather: {
+      text,
+      temperature,
+      feelsLike,
+      humidity,
+      windSpeed,
+      updatedAt: new Date().toISOString(),
+    },
+    location: {
+      name: areaName,
+      region,
+      country,
+    },
+  }
+}
+
+function normalizeWeatherLookupLocation(location: unknown): WeatherLookupLocation {
+  if (!isRecord(location)) {
+    return {}
+  }
+
+  return {
+    latitude: normalizeCoordinate(location.latitude),
+    longitude: normalizeCoordinate(location.longitude),
+  }
+}
+
+function normalizeCoordinate(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function hasCoordinates(location: WeatherLookupLocation): location is Required<WeatherLookupLocation> {
+  return location.latitude !== undefined && location.longitude !== undefined
+}
+
+function hasFreshWeather(weather: DayFrontMatter['weather'], date: string) {
+  return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function numberFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  const numberValue = typeof value === 'number' ? value : Number(value)
+
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function firstLocalizedValue(value: unknown) {
+  const record = firstRecord(value)
+  const localizedValue = record.value
+
+  return typeof localizedValue === 'string' && localizedValue.trim() ? localizedValue.trim() : undefined
+}
+
+function firstRecord(value: unknown): Record<string, unknown> {
+  return Array.isArray(value) ? asRecord(value[0]) : {}
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function createWindow() {

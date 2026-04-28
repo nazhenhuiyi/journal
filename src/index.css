@@ -3668,6 +3668,90 @@ body {
   font-size: 0.78rem;
 }
 
+.journal-weather-strip {
+  display: grid;
+  grid-template-columns: 3.3rem minmax(9rem, 0.8fr) minmax(26rem, 1fr);
+  align-items: center;
+  gap: 1.05rem;
+  min-height: 4.6rem;
+  margin: 0.8rem 1.05rem 0;
+  padding: 0.62rem 0.8rem 0.62rem 0.65rem;
+  border: 1px solid rgba(122, 79, 50, 0.13);
+  border-radius: 14px 10px 16px 9px;
+  color: rgba(47, 38, 31, 0.72);
+  background:
+    radial-gradient(circle at 11% 28%, rgba(215, 166, 75, 0.13), transparent 4.8rem),
+    linear-gradient(135deg, rgba(255, 253, 244, 0.78), rgba(241, 232, 210, 0.54));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 8px 24px rgba(86, 58, 35, 0.05);
+}
+
+.journal-weather-strip-image {
+  width: 3.1rem;
+  height: 3.1rem;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(86, 58, 35, 0.1));
+}
+
+.journal-weather-strip-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.journal-weather-strip-copy span {
+  overflow: hidden;
+  color: rgba(47, 38, 31, 0.58);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-weather-strip-copy strong {
+  color: var(--color-walnut);
+  font-family: var(--font-display);
+  font-size: 1.36rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.journal-weather-strip-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.journal-weather-strip-details div {
+  min-width: 0;
+  padding-left: 0.72rem;
+  border-left: 1px solid rgba(122, 79, 50, 0.13);
+}
+
+.journal-weather-strip-details dt,
+.journal-weather-strip-details dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-weather-strip-details dt {
+  color: rgba(47, 38, 31, 0.44);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+}
+
+.journal-weather-strip-details dd {
+  color: rgba(47, 38, 31, 0.7);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .journal-editor {
   flex: 1;
   width: 100%;

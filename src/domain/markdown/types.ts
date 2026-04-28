@@ -5,9 +5,15 @@ export type DayFrontMatter = {
   weather?: {
     text?: string
     temperature?: number
+    feelsLike?: number
+    humidity?: number
+    windSpeed?: number
+    updatedAt?: string
   }
   location?: {
     name?: string
+    region?: string
+    country?: string
   }
   [key: string]: unknown
 }

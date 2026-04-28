@@ -72,6 +72,58 @@ describe('MarkdownPreviewPage', () => {
     expect(createManagedJournalMarkdown('今天直接写。', '2026-04-28')).toBe(
       '---\ndate: 2026-04-28\n---\n\n今天直接写。',
     )
+    expect(createManagedJournalMarkdown('今天直接写。', '2026-04-28', {
+      weather: {
+        text: '小雨',
+        temperature: 18,
+      },
+      location: {
+        name: '上海',
+      },
+    })).toBe('---\ndate: 2026-04-28\nweather:\n  text: 小雨\n  temperature: 18\nlocation:\n  name: 上海\n---\n\n今天直接写。')
+  })
+
+  it('refreshes missing weather and shows it above the writing area', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 等天气来\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const refreshedJournal = {
+      ...storedJournal,
+      content: [
+        '---',
+        'date: 2026-04-28',
+        'weather:',
+        '  text: 小雨',
+        '  temperature: 18',
+        '  feelsLike: 17',
+        '  humidity: 82',
+        '  windSpeed: 9',
+        'location:',
+        '  name: 上海',
+        '---',
+        '',
+        '# 等天气来',
+        '',
+      ].join('\n'),
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveToday = vi.fn().mockResolvedValue(refreshedJournal)
+    const refreshTodayWeather = vi.fn().mockResolvedValue(refreshedJournal)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday, refreshTodayWeather })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(refreshTodayWeather).toHaveBeenCalledOnce()
+      expect(screen.getByLabelText('今日天气')).toHaveTextContent('小雨')
+      expect(screen.getByLabelText('今日天气')).toHaveTextContent('18°C')
+      expect(screen.getByLabelText('今日天气')).toHaveTextContent('上海')
+    })
   })
 
   it('renders the writing state as the default page experience', () => {
