@@ -34,6 +34,7 @@ describe('renderJournalMarkdown', () => {
 
     expect(checkboxes[0]).not.toBeChecked()
     expect(checkboxes[1]).toBeChecked()
+    expect(checkboxes[0].closest('li')).toHaveClass('task-list-item')
     expect(screen.getByText('写日记')).toBeInTheDocument()
     expect(screen.getByText('散步')).toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
@@ -42,6 +43,7 @@ describe('renderJournalMarkdown', () => {
       'href',
       'https://example.com',
     )
+    expect(screen.getByRole('heading', { name: '脚注' })).toBeInTheDocument()
     expect(screen.getByText('只是一个补充说明。')).toBeInTheDocument()
   })
 

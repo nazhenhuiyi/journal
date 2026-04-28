@@ -20,8 +20,19 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     '*': [
       ...(defaultSchema.attributes?.['*'] ?? []),
-      ['className', 'journal-murmur', 'journal-image', 'journal-annotated-block'],
+      [
+        'className',
+        'contains-task-list',
+        'footnotes',
+        'journal-annotated-block',
+        'journal-image',
+        'journal-murmur',
+        'sr-only',
+        'task-list-item',
+      ],
       'dataJournalDirective',
+      'dataFootnoteBackref',
+      'dataFootnotes',
       'dataAnnotationIds',
     ],
     figure: [
@@ -48,7 +59,10 @@ export function renderJournalMarkdown({
     .use(remarkGfm)
     .use(remarkDirective)
     .use(remarkJournalDirectives)
-    .use(remarkRehype)
+    .use(remarkRehype, {
+      footnoteBackLabel: '返回正文',
+      footnoteLabel: '脚注',
+    })
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeAnnotationAttributes, { annotations, markdown: parsedEntry.longEntryMarkdown })
     .use(rehypeReact, {
