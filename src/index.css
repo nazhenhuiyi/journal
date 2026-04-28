@@ -254,18 +254,14 @@ body {
 }
 
 .journal-menu-list > :nth-child(4) svg {
-  color: #df6246;
-}
-
-.journal-menu-list > :nth-child(5) svg {
   color: #e96b98;
 }
 
-.journal-menu-list > :nth-child(6) svg {
+.journal-menu-list > :nth-child(5) svg {
   color: #171512;
 }
 
-.journal-menu-list > :nth-child(7) svg {
+.journal-menu-list > :nth-child(6) svg {
   color: #7a4f32;
 }
 
