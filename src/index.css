@@ -1227,6 +1227,8 @@ body {
 }
 
 .journal-polaroid-console {
+  --polaroid-develop-delay: 1.42s;
+  --polaroid-eject-duration: 1.35s;
   display: grid;
   grid-template-columns: minmax(23rem, 1fr) minmax(17rem, 0.58fr);
   align-items: center;
@@ -1247,25 +1249,161 @@ body {
   display: flex;
   min-width: 0;
   justify-content: center;
+  padding-top: 5.78rem;
   perspective: 72rem;
 }
 
-.journal-polaroid-stage::before {
+.journal-polaroid-stage::after {
   position: absolute;
-  top: 0.15rem;
+  top: 5.25rem;
   left: 50%;
-  width: 23.8rem;
-  height: 2.15rem;
-  border: 1px solid rgba(47, 38, 31, 0.1);
+  z-index: 3;
+  width: 22.9rem;
+  height: 1.2rem;
+  border-radius: 0 0 999px 999px;
+  background:
+    linear-gradient(180deg, rgba(86, 58, 35, 0.2), rgba(86, 58, 35, 0.05) 55%, transparent);
+  content: "";
+  filter: blur(0.08rem);
+  pointer-events: none;
+  transform: translateX(-50%) rotate(-2deg);
+}
+
+.journal-polaroid-camera {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 4;
+  width: 25.15rem;
+  height: 5.85rem;
+  border: 1px solid rgba(86, 58, 35, 0.2);
+  border-radius: 22px 20px 15px 17px;
+  background:
+    linear-gradient(90deg, transparent 0 3.05rem, #df6246 3.08rem 3.38rem, #d7a64b 3.4rem 3.7rem, #14724f 3.72rem 4.02rem, #2459bc 4.04rem 4.34rem, transparent 4.36rem) 0 0 / 100% 3.52rem no-repeat,
+    radial-gradient(circle at 17% 28%, rgba(255, 255, 255, 0.48), transparent 4.5rem),
+    linear-gradient(180deg, rgba(255, 253, 244, 0.98) 0 61%, rgba(198, 178, 145, 0.18) 61% 63%, rgba(216, 201, 173, 0.94) 63% 100%);
+  box-shadow:
+    0 18px 24px rgba(86, 58, 35, 0.14),
+    0 4px 8px rgba(86, 58, 35, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    inset 0 -0.48rem 0 rgba(122, 79, 50, 0.1);
+  animation: polaroid-camera-pulse var(--polaroid-eject-duration) ease both;
+  transform: translateX(-50%) rotate(-2deg);
+}
+
+.journal-polaroid-camera::before {
+  position: absolute;
+  top: -0.42rem;
+  left: 1.22rem;
+  width: 5.8rem;
+  height: 0.72rem;
+  border: 1px solid rgba(86, 58, 35, 0.13);
+  border-radius: 8px 8px 0 0;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 244, 0.96), rgba(218, 202, 170, 0.9));
+  content: "";
+}
+
+.journal-polaroid-camera::after {
+  position: absolute;
+  right: 2.45rem;
+  bottom: 1.2rem;
+  left: 2.45rem;
+  height: 0.22rem;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(47, 38, 31, 0.14), transparent 42%),
-    rgba(255, 253, 244, 0.3);
+    linear-gradient(180deg, rgba(47, 38, 31, 0.28), rgba(47, 38, 31, 0.06)),
+    #6a5b49;
   box-shadow:
-    inset 0 0.4rem 0.75rem rgba(47, 38, 31, 0.12),
-    0 0.9rem 1.5rem rgba(86, 58, 35, 0.08);
+    inset 0 0.11rem 0.18rem rgba(20, 18, 15, 0.26),
+    0 0.42rem 0.52rem rgba(86, 58, 35, 0.1);
   content: "";
-  transform: translateX(-50%) rotate(-2deg);
+}
+
+.journal-polaroid-camera-flash,
+.journal-polaroid-camera-viewfinder,
+.journal-polaroid-camera-lens,
+.journal-polaroid-camera-shutter,
+.journal-polaroid-camera-slot {
+  position: absolute;
+  z-index: 1;
+  display: block;
+}
+
+.journal-polaroid-camera-flash {
+  top: 1.18rem;
+  left: 1.15rem;
+  width: 2.08rem;
+  height: 1.08rem;
+  border: 1px solid rgba(86, 58, 35, 0.16);
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.34) 0 0.12rem, transparent 0.12rem 0.25rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(215, 166, 75, 0.2)),
+    #f4ead8;
+  box-shadow: 0 0 0 0.24rem rgba(215, 166, 75, 0.08);
+  animation: polaroid-camera-flash var(--polaroid-eject-duration) ease both;
+}
+
+.journal-polaroid-camera-viewfinder {
+  top: 1.14rem;
+  left: 5.18rem;
+  width: 1.9rem;
+  height: 1.22rem;
+  border: 1px solid rgba(86, 58, 35, 0.18);
+  border-radius: 7px 6px 6px 7px;
+  background:
+    radial-gradient(circle at 34% 35%, rgba(255, 255, 255, 0.7) 0 0.18rem, transparent 0.2rem),
+    linear-gradient(135deg, rgba(36, 89, 188, 0.2), rgba(20, 114, 79, 0.12)),
+    rgba(255, 253, 244, 0.32);
+  box-shadow: inset 0 0 0 0.18rem rgba(47, 38, 31, 0.04);
+}
+
+.journal-polaroid-camera-lens {
+  top: 0.88rem;
+  left: 50%;
+  width: 3.18rem;
+  height: 3.18rem;
+  border: 1px solid rgba(86, 58, 35, 0.22);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 38% 34%, rgba(255, 255, 255, 0.78) 0 0.24rem, transparent 0.26rem),
+    radial-gradient(circle at 50% 50%, rgba(36, 89, 188, 0.34) 0 0.56rem, rgba(47, 38, 31, 0.36) 0.6rem 0.9rem, rgba(255, 253, 244, 0.2) 0.94rem 1.16rem, transparent 1.2rem),
+    #c9d4d0;
+  box-shadow:
+    inset 0 0 0 0.28rem rgba(255, 253, 244, 0.48),
+    inset 0 0 0 0.54rem rgba(122, 79, 50, 0.08),
+    0 0.42rem 0.72rem rgba(86, 58, 35, 0.16);
+  transform: translateX(-50%);
+}
+
+.journal-polaroid-camera-shutter {
+  top: 1.08rem;
+  right: 1.34rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.36), transparent 0.28rem),
+    #df6246;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 0.22rem 0 rgba(154, 72, 56, 0.18);
+  animation: polaroid-camera-shutter var(--polaroid-eject-duration) ease both;
+}
+
+.journal-polaroid-camera-slot {
+  right: 2.35rem;
+  bottom: -0.34rem;
+  left: 2.35rem;
+  height: 0.72rem;
+  border: 1px solid rgba(122, 79, 50, 0.08);
+  border-radius: 0 0 14px 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 244, 0.62), rgba(214, 197, 164, 0.36));
+  box-shadow:
+    0 0.32rem 0.66rem rgba(86, 58, 35, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .journal-polaroid-card {
@@ -1274,7 +1412,7 @@ body {
   z-index: 1;
   width: 22.6rem;
   height: 29.1rem;
-  animation: polaroid-slide-out 680ms cubic-bezier(0.18, 0.78, 0.18, 1) both;
+  animation: polaroid-slide-out var(--polaroid-eject-duration) cubic-bezier(0.18, 0.78, 0.18, 1) both;
   transform: rotate(var(--polaroid-tilt));
   transform-origin: 50% 70%;
 }
@@ -1342,7 +1480,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: polaroid-image-develop 2.45s cubic-bezier(0.2, 0.72, 0.18, 1) both;
+  animation: polaroid-image-develop 2.45s cubic-bezier(0.2, 0.72, 0.18, 1) var(--polaroid-develop-delay) both;
   filter: saturate(0.82) contrast(0.92) sepia(0.08);
 }
 
@@ -1361,7 +1499,7 @@ body {
 }
 
 .journal-polaroid-card:not(.is-flipped) .journal-polaroid-develop {
-  animation: polaroid-chemical-wash 2.45s cubic-bezier(0.2, 0.72, 0.18, 1) both;
+  animation: polaroid-chemical-wash 2.45s cubic-bezier(0.2, 0.72, 0.18, 1) var(--polaroid-develop-delay) both;
 }
 
 .journal-polaroid-photo::after {
@@ -1377,7 +1515,7 @@ body {
 }
 
 .journal-polaroid-card:not(.is-flipped) .journal-polaroid-photo::after {
-  animation: polaroid-sheen 2.45s ease both;
+  animation: polaroid-sheen 2.45s ease var(--polaroid-develop-delay) both;
 }
 
 .journal-polaroid-caption {
@@ -1390,7 +1528,7 @@ body {
 
 .journal-polaroid-caption h4 {
   margin: 0;
-  animation: polaroid-text-develop 1.55s ease 0.62s both;
+  animation: polaroid-text-develop 1.55s ease calc(var(--polaroid-develop-delay) + 0.42s) both;
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: 1.12rem;
@@ -1400,14 +1538,14 @@ body {
 
 .journal-polaroid-caption p {
   margin: 0.28rem 0 0;
-  animation: polaroid-text-develop 1.6s ease 0.82s both;
+  animation: polaroid-text-develop 1.6s ease calc(var(--polaroid-develop-delay) + 0.62s) both;
   color: rgba(47, 38, 31, 0.67);
   font-size: 0.89rem;
   line-height: 1.65;
 }
 
 .journal-polaroid-caption time {
-  animation: polaroid-date-develop 1.45s ease 1.02s both;
+  animation: polaroid-date-develop 1.45s ease calc(var(--polaroid-develop-delay) + 0.82s) both;
   color: rgba(122, 79, 50, 0.66);
   font-family: "Bradley Hand", "Comic Sans MS", var(--font-sans);
   font-size: 0.9rem;
@@ -1442,7 +1580,6 @@ body {
   border: 1px solid rgba(36, 89, 188, 0.22);
   border-radius: 999px;
   padding: 0.3rem 0.58rem;
-  animation: polaroid-text-develop 1.25s ease 0.22s both;
   color: #2459bc;
   background: rgba(36, 89, 188, 0.08);
   font-size: 0.7rem;
@@ -1452,7 +1589,6 @@ body {
 
 .journal-polaroid-back p {
   margin: 0;
-  animation: polaroid-text-develop 1.55s ease 0.36s both;
   color: rgba(47, 38, 31, 0.74);
   font-family: var(--font-display);
   font-size: 1.08rem;
@@ -1471,6 +1607,17 @@ body {
   gap: 1rem;
   border-top: 1px solid rgba(122, 79, 50, 0.16);
   padding-top: 0.5rem;
+}
+
+.journal-polaroid-card.is-flipped .journal-polaroid-back > span {
+  animation: polaroid-text-develop 1.25s ease 0.22s both;
+}
+
+.journal-polaroid-card.is-flipped .journal-polaroid-back p {
+  animation: polaroid-text-develop 1.55s ease 0.36s both;
+}
+
+.journal-polaroid-card.is-flipped .journal-polaroid-back div {
   animation: polaroid-text-develop 1.35s ease 0.56s both;
 }
 
@@ -1534,9 +1681,16 @@ body {
   background: rgba(36, 89, 188, 0.1);
 }
 
+.journal-polaroid-shutter-action,
 .journal-polaroid-flip {
   justify-self: start;
   min-width: 8.4rem;
+}
+
+.journal-polaroid-shutter-action {
+  border-color: rgba(20, 114, 79, 0.22);
+  color: #14724f;
+  background: rgba(20, 114, 79, 0.08);
 }
 
 .journal-polaroid-controls p {
@@ -1548,18 +1702,90 @@ body {
 
 @keyframes polaroid-slide-out {
   from {
-    opacity: 0.72;
-    transform: translateY(-1.8rem) rotate(calc(var(--polaroid-tilt) - 2.3deg)) scale(0.97);
+    opacity: 0.64;
+    transform: translateY(-5.92rem) rotate(calc(var(--polaroid-tilt) - 2.3deg)) scale(0.94);
   }
 
-  62% {
+  34% {
+    opacity: 0.82;
+    transform: translateY(-3.52rem) rotate(calc(var(--polaroid-tilt) - 1.5deg)) scale(0.96);
+  }
+
+  76% {
     opacity: 1;
-    transform: translateY(0.42rem) rotate(calc(var(--polaroid-tilt) + 0.8deg)) scale(1.01);
+    transform: translateY(0.52rem) rotate(calc(var(--polaroid-tilt) + 0.8deg)) scale(1.01);
   }
 
   to {
     opacity: 1;
     transform: translateY(0) rotate(var(--polaroid-tilt)) scale(1);
+  }
+}
+
+@keyframes polaroid-camera-pulse {
+  from {
+    filter: brightness(0.98);
+    transform: translateX(-50%) rotate(-2deg) translateY(0);
+  }
+
+  18% {
+    filter: brightness(1.02);
+    transform: translateX(-50%) rotate(-2deg) translateY(-0.08rem);
+  }
+
+  58% {
+    filter: brightness(1);
+    transform: translateX(-50%) rotate(-2deg) translateY(0.04rem);
+  }
+
+  to {
+    filter: brightness(1);
+    transform: translateX(-50%) rotate(-2deg) translateY(0);
+  }
+}
+
+@keyframes polaroid-camera-flash {
+  from,
+  18% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0.16rem rgba(215, 166, 75, 0.08);
+  }
+
+  26% {
+    filter: brightness(1.75);
+    box-shadow:
+      0 0 0 0.34rem rgba(215, 166, 75, 0.18),
+      0 0 1.25rem rgba(255, 253, 244, 0.72);
+  }
+
+  to {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0.24rem rgba(215, 166, 75, 0.08);
+  }
+}
+
+@keyframes polaroid-camera-shutter {
+  from,
+  14% {
+    transform: translateY(0);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      0 0.22rem 0 rgba(154, 72, 56, 0.18);
+  }
+
+  24%,
+  42% {
+    transform: translateY(0.12rem);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 0.04rem 0 rgba(154, 72, 56, 0.2);
+  }
+
+  to {
+    transform: translateY(0);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      0 0.22rem 0 rgba(154, 72, 56, 0.18);
   }
 }
 

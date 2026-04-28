@@ -418,17 +418,31 @@ function PolaroidMemoryCard({
 function PolaroidExperience() {
   const [snapshotIndex, setSnapshotIndex] = useState(0)
   const [isFlipped, setIsFlipped] = useState(false)
+  const [printCycle, setPrintCycle] = useState(0)
   const snapshot = polaroidSnapshots[snapshotIndex]
 
   function handleSelectSnapshot(nextIndex: number) {
     setSnapshotIndex(nextIndex)
     setIsFlipped(false)
+    setPrintCycle((current) => current + 1)
+  }
+
+  function handlePrintSnapshot() {
+    setIsFlipped(false)
+    setPrintCycle((current) => current + 1)
   }
 
   return (
     <div className="journal-polaroid-console">
       <div className="journal-polaroid-stage">
-        <PolaroidMemoryCard key={snapshot.id} snapshot={snapshot} isFlipped={isFlipped} />
+        <div className="journal-polaroid-camera" key={`camera-${printCycle}`} aria-hidden="true">
+          <span className="journal-polaroid-camera-flash" />
+          <span className="journal-polaroid-camera-viewfinder" />
+          <span className="journal-polaroid-camera-lens" />
+          <span className="journal-polaroid-camera-shutter" />
+          <span className="journal-polaroid-camera-slot" />
+        </div>
+        <PolaroidMemoryCard key={`${snapshot.id}-${printCycle}`} snapshot={snapshot} isFlipped={isFlipped} />
       </div>
 
       <div className="journal-polaroid-controls" aria-label="拍立得卡片交互">
@@ -445,6 +459,10 @@ function PolaroidExperience() {
             </button>
           ))}
         </div>
+
+        <button className="journal-polaroid-shutter-action" onClick={handlePrintSnapshot} type="button">
+          按下快门
+        </button>
 
         <button
           aria-pressed={isFlipped}

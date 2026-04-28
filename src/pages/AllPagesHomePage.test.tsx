@@ -71,6 +71,11 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('button', { name: '翻回正面' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('窗边那盆植物又长出一点新叶。那一瞬间突然觉得，慢一点也可以算是在往前。')).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: '按下快门' }))
+
+    expect(screen.getByRole('button', { name: '翻到背面' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: '新叶长出来' })).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: '书页' }))
 
     expect(screen.getByRole('button', { name: '翻到背面' })).toHaveAttribute('aria-pressed', 'false')
