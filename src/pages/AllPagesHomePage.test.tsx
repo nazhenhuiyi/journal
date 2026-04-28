@@ -33,17 +33,20 @@ describe('AllPagesHomePage', () => {
     expect(screen.queryByText('批注回看')).not.toBeInTheDocument()
   })
 
-  it('shows sticky note, postcard, movie ticket, library card, and receipt studies', () => {
+  it('shows sticky note, postcard, polaroid, movie ticket, library card, and receipt studies', () => {
     renderHomePage()
 
     expect(screen.getByRole('heading', { name: '先留几种手感' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '便利贴' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '明信片' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '拍立得卡片' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '电影票' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '回忆借阅卡' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '今日小票' })).toBeInTheDocument()
     expect(screen.getByText('今天的风把窗帘吹得很轻，像有人在旁边翻书。')).toBeInTheDocument()
     expect(screen.getByText('桥下有人吹口琴，傍晚慢慢落到杯沿上。')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '便利店门口' })).toBeInTheDocument()
+    expect(screen.getByText('伞面一直滴水，灯却很亮。')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '雨停以后' })).toBeInTheDocument()
     expect(screen.getByText('去买一杯热咖啡')).toBeInTheDocument()
     expect(screen.getByText('我 / 雨后的路灯 / 一条没发出去的消息')).toBeInTheDocument()
@@ -53,6 +56,25 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('heading', { name: 'DAILY RECEIPT' })).toBeInTheDocument()
     expect(screen.getByText('热咖啡前的勇气')).toBeInTheDocument()
     expect(screen.getByText('Thank you for staying.')).toBeInTheDocument()
+  })
+
+  it('lets the polaroid study switch snapshots and flip over', () => {
+    renderHomePage()
+
+    fireEvent.click(screen.getByRole('button', { name: '窗边' }))
+
+    expect(screen.getByRole('heading', { name: '新叶长出来' })).toBeInTheDocument()
+    expect(screen.getByText('有些变化很小，但不是没有。')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '翻到背面' }))
+
+    expect(screen.getByRole('button', { name: '翻回正面' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('窗边那盆植物又长出一点新叶。那一瞬间突然觉得，慢一点也可以算是在往前。')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '书页' }))
+
+    expect(screen.getByRole('button', { name: '翻到背面' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: '风把纸页吹起' })).toBeInTheDocument()
   })
 
   it('shows both CD player display concepts', () => {

@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { BookOpen, Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
+import { BookOpen, Camera, Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
 import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
 import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
 import bookshopTicketImage from '../../assets/postcards/bookshop-ticket.png'
 import riverLightImage from '../../assets/postcards/river-light.png'
+import nightLampPhoto from '../../assets/memory-photos/night-lamp.jpg'
+import openBookPhoto from '../../assets/memory-photos/open-book.jpg'
+import rainyNightPhoto from '../../assets/memory-photos/rainy-night.jpg'
+import windowPlantPhoto from '../../assets/memory-photos/window-plant.jpg'
 import foundPostmarkImage from '../../assets/postmarks/found.png'
 import springPostmarkImage from '../../assets/postmarks/spring.png'
 import stickyPinImage from '../../assets/sticky-pin.svg'
@@ -73,6 +77,78 @@ const postcards: Array<{
     tone: 'bookshop',
     image: bookshopTicketImage,
     imageAlt: '旧书页间夹着一张泛黄票根',
+  },
+]
+
+const polaroidSnapshots: Array<{
+  id: string
+  tabLabel: string
+  title: string
+  date: string
+  dateTime: string
+  place: string
+  temperature: string
+  caption: string
+  excerpt: string
+  image: string
+  imageAlt: string
+  tone: string
+}> = [
+  {
+    id: 'rain',
+    tabLabel: '雨夜',
+    title: '便利店门口',
+    date: '2025.04.25',
+    dateTime: '2025-04-25',
+    place: '路口 / 小雨',
+    temperature: '冷一点',
+    caption: '伞面一直滴水，灯却很亮。',
+    excerpt: '下班以后没有马上回家，在便利店门口站了一会儿。热饮握在手里，像把今天暂时按住。',
+    image: rainyNightPhoto,
+    imageAlt: '雨夜里的街灯和湿润路面',
+    tone: 'rain',
+  },
+  {
+    id: 'window',
+    tabLabel: '窗边',
+    title: '新叶长出来',
+    date: '2026.03.30',
+    dateTime: '2026-03-30',
+    place: '房间 / 下午',
+    temperature: '暖绿色',
+    caption: '有些变化很小，但不是没有。',
+    excerpt: '窗边那盆植物又长出一点新叶。那一瞬间突然觉得，慢一点也可以算是在往前。',
+    image: windowPlantPhoto,
+    imageAlt: '窗边植物在柔和日光里',
+    tone: 'leaf',
+  },
+  {
+    id: 'book',
+    tabLabel: '书页',
+    title: '风把纸页吹起',
+    date: '2024.11.03',
+    dateTime: '2024-11-03',
+    place: '旧书店 / 雨停',
+    temperature: '偏暖',
+    caption: '票根夹在第 27 页。',
+    excerpt: '买下那本薄薄的散文集时，封底写着别人的名字。像是有人把一段天气留给了我。',
+    image: openBookPhoto,
+    imageAlt: '摊开的书页和柔和光线',
+    tone: 'paper',
+  },
+  {
+    id: 'lamp',
+    tabLabel: '夜灯',
+    title: '房间安静下来',
+    date: '2026.04.27',
+    dateTime: '2026-04-27',
+    place: '书桌 / 深夜',
+    temperature: '钨丝灯',
+    caption: '杯子洗干净，今天也放回今天。',
+    excerpt: '桌上只剩杯子和台灯。没有发生大事，也没有再追问自己，这样的一页也值得被留下。',
+    image: nightLampPhoto,
+    imageAlt: '夜晚书桌上的台灯和杯子',
+    tone: 'lamp',
   },
 ]
 
@@ -290,6 +366,98 @@ function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
         </div>
       </div>
     </article>
+  )
+}
+
+function PolaroidMemoryCard({
+  snapshot,
+  isFlipped,
+}: {
+  snapshot: (typeof polaroidSnapshots)[number]
+  isFlipped: boolean
+}) {
+  return (
+    <article
+      className={`journal-polaroid-card is-${snapshot.tone} ${isFlipped ? 'is-flipped' : ''}`}
+      aria-labelledby="polaroid-card-title"
+    >
+      <div className="journal-polaroid-card-inner">
+        <div className="journal-polaroid-face journal-polaroid-front">
+          <div className="journal-polaroid-photo">
+            <img alt={snapshot.imageAlt} draggable="false" src={snapshot.image} />
+            <span aria-hidden="true" className="journal-polaroid-develop" />
+          </div>
+          <div className="journal-polaroid-caption">
+            <div>
+              <h4 id="polaroid-card-title">{snapshot.title}</h4>
+              <p>{snapshot.caption}</p>
+            </div>
+            <time dateTime={snapshot.dateTime}>{snapshot.date}</time>
+          </div>
+        </div>
+
+        <div className="journal-polaroid-face journal-polaroid-back" aria-hidden={!isFlipped}>
+          <span>MEMORY SNAPSHOT</span>
+          <p>{snapshot.excerpt}</p>
+          <dl>
+            <div>
+              <dt>地点</dt>
+              <dd>{snapshot.place}</dd>
+            </div>
+            <div>
+              <dt>色温</dt>
+              <dd>{snapshot.temperature}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function PolaroidExperience() {
+  const [snapshotIndex, setSnapshotIndex] = useState(0)
+  const [isFlipped, setIsFlipped] = useState(false)
+  const snapshot = polaroidSnapshots[snapshotIndex]
+
+  function handleSelectSnapshot(nextIndex: number) {
+    setSnapshotIndex(nextIndex)
+    setIsFlipped(false)
+  }
+
+  return (
+    <div className="journal-polaroid-console">
+      <div className="journal-polaroid-stage">
+        <PolaroidMemoryCard key={snapshot.id} snapshot={snapshot} isFlipped={isFlipped} />
+      </div>
+
+      <div className="journal-polaroid-controls" aria-label="拍立得卡片交互">
+        <div className="journal-polaroid-tabs">
+          {polaroidSnapshots.map((option, index) => (
+            <button
+              aria-pressed={index === snapshotIndex}
+              className={index === snapshotIndex ? 'is-active' : ''}
+              key={option.id}
+              onClick={() => handleSelectSnapshot(index)}
+              type="button"
+            >
+              {option.tabLabel}
+            </button>
+          ))}
+        </div>
+
+        <button
+          aria-pressed={isFlipped}
+          className="journal-polaroid-flip"
+          onClick={() => setIsFlipped((current) => !current)}
+          type="button"
+        >
+          {isFlipped ? '翻回正面' : '翻到背面'}
+        </button>
+
+        <p>Memory Snapshot · {snapshot.place}</p>
+      </div>
+    </div>
   )
 }
 
@@ -701,6 +869,15 @@ function CardStyleShowcase() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="journal-polaroid-showcase">
+          <div className="journal-card-family-title">
+            <Camera aria-hidden="true" size={19} strokeWidth={2.15} />
+            <h3>拍立得卡片</h3>
+          </div>
+
+          <PolaroidExperience />
         </div>
 
         <div className="journal-movie-showcase">
