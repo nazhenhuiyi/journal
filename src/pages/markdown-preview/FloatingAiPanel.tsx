@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
+import { Undo } from '../../components/HandDrawnIcons'
 import { annotationKinds, listTransition, panelTransition } from './constants'
 import type { Annotation, LinePosition } from '../../domain/annotations'
 
@@ -84,35 +85,38 @@ function FloatingAiPanel({
     >
       <div
         className={`items-center border-b border-walnut/10 px-4 py-3 ${
-          mode === 'chat' ? 'grid grid-cols-[1fr_auto_1fr] gap-3' : 'flex justify-between'
+          mode === 'chat' ? 'grid grid-cols-[2rem_1fr_2rem] gap-3' : 'flex justify-between'
         }`}
       >
         {mode === 'chat' ? (
           <>
             <button
               aria-label="返回批注生成"
-              className="justify-self-start text-xs font-semibold text-walnut/75 underline decoration-walnut/25 underline-offset-4 transition hover:text-ink"
+              className="flex h-8 w-8 items-center justify-center text-walnut/70 transition hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
               onClick={onCloseChat}
               title="返回批注生成"
               type="button"
             >
-              ← 批注生成
+              <Undo aria-hidden="true" size={18} strokeWidth={2.1} />
             </button>
             <h2 className="justify-self-center font-display text-base font-semibold text-ink">
               深入聊批注
             </h2>
+            <span aria-hidden="true" />
           </>
         ) : (
-          <h2 className="font-display text-lg font-semibold text-ink">AI 批注</h2>
+          <>
+            <h2 className="font-display text-lg font-semibold text-ink">AI 批注</h2>
+            <button
+              className="h-8 w-8 justify-self-end border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
+              onClick={onOpen}
+              title="收起 AI 面板"
+              type="button"
+            >
+              -
+            </button>
+          </>
         )}
-        <button
-          className="h-8 w-8 justify-self-end border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
-          onClick={onOpen}
-          title="收起 AI 面板"
-          type="button"
-        >
-          -
-        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
