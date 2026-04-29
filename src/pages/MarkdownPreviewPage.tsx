@@ -43,6 +43,7 @@ type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadT
 
 const noAnnotations: Annotation[] = []
 const AUTOSAVE_DELAY_MS = 700
+const JOURNAL_MODE_STORAGE_KEY = 'journal.preview.mode'
 const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
   { value: 'write', label: '书写' },
@@ -55,6 +56,32 @@ function getJournalStore() {
 
 function getCodexStore() {
   return typeof window === 'undefined' ? undefined : window.codex
+}
+
+function readStoredJournalMode(): JournalMode {
+  if (typeof window === 'undefined') {
+    return 'write'
+  }
+
+  try {
+    const storedMode = window.localStorage.getItem(JOURNAL_MODE_STORAGE_KEY)
+
+    return storedMode === 'review' ? 'review' : 'write'
+  } catch {
+    return 'write'
+  }
+}
+
+function writeStoredJournalMode(mode: JournalMode) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(JOURNAL_MODE_STORAGE_KEY, mode)
+  } catch {
+    // localStorage can be unavailable in constrained browser contexts.
+  }
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -140,7 +167,7 @@ function formatTopbarWeatherLabel(weatherText: string | undefined) {
 }
 
 function MarkdownPreviewPage() {
-  const [journalMode, setJournalMode] = useState<JournalMode>('write')
+  const [journalMode, setJournalMode] = useState<JournalMode>(() => readStoredJournalMode())
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
   const [journalFrontMatter, setJournalFrontMatter] = useState<DayFrontMatter>({})
@@ -167,8 +194,9 @@ function MarkdownPreviewPage() {
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
+  const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
   const topbarTitle = formatJournalTopbarTitle(
-    journalFile?.date ?? journalFrontMatter.date ?? getLocalDateKey(),
+    currentJournalDate,
     journalFrontMatter.weather?.text,
   )
   const visibleAnnotations = useMemo(
@@ -179,6 +207,15 @@ function MarkdownPreviewPage() {
     () => journalAnnotations.find((annotation) => annotation.id === chatAnnotationId) ?? null,
     [chatAnnotationId, journalAnnotations],
   )
+  const hasGeneratedAiAnnotationsToday = useMemo(
+    () =>
+      currentJournalDate === realTodayDate &&
+      journalAnnotations.some((annotation) => isAiAnnotationCreatedOnDate(annotation, currentJournalDate)),
+    [currentJournalDate, journalAnnotations, realTodayDate],
+  )
+  const canGenerateAiAnnotations = !hasGeneratedAiAnnotationsToday
+  const shouldShowAiPanel = canGenerateAiAnnotations || aiPanelMode === 'chat' || aiDrafts.length > 0
+  const isAiPanelVisible = isAiPanelOpen && shouldShowAiPanel
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
     [journalMarkdown, visibleAnnotations],
@@ -291,6 +328,7 @@ function MarkdownPreviewPage() {
 
     const editableMarkdown = stripManagedFrontMatter(file.content)
     const frontMatter = parseJournalMarkdown(file.content).frontMatter
+    const initialJournalMode = isBlankJournalMarkdown(editableMarkdown) ? 'write' : readStoredJournalMode()
 
     setDaySwitchError('')
     setRealTodayDate(getLocalDateKey())
@@ -300,6 +338,7 @@ function MarkdownPreviewPage() {
     setJournalFrontMatter(frontMatter)
     setJournalFile(file)
     setJournalMarkdown(editableMarkdown)
+    setJournalMode(initialJournalMode)
     void loadAnnotationsForDate(file.date)
     void refreshTodayWeather(file)
   }, [loadAnnotationsForDate, refreshTodayWeather])
@@ -514,6 +553,7 @@ function MarkdownPreviewPage() {
 
   function handleModeChange(nextMode: JournalMode) {
     setJournalMode(nextMode)
+    writeStoredJournalMode(nextMode)
 
     if (nextMode === 'write') {
       setActiveOverlayRects([])
@@ -552,7 +592,7 @@ function MarkdownPreviewPage() {
     const date = journalFile?.date ?? realTodayDate
 
     if (!codex?.generateAnnotationDrafts) {
-      setAiPanelError('当前环境还没有接入 Codex。')
+      setAiPanelError('当前环境还没有接入 AI 批注。')
       return
     }
 
@@ -599,7 +639,7 @@ function MarkdownPreviewPage() {
 
       setAiDrafts(drafts)
       setAiPanelMode(drafts.length > 0 ? 'drafts' : 'idle')
-      setAiPanelError(drafts.length > 0 ? '' : 'Codex 没有生成可用的批注草稿。')
+      setAiPanelError(drafts.length > 0 ? '' : 'AI 没有生成可用的批注草稿。')
     } catch {
       setAiPanelMode('idle')
       setAiPanelError('生成批注失败了，稍后可以再试一次。')
@@ -710,7 +750,7 @@ function MarkdownPreviewPage() {
     }
 
     if (!codex?.chatWithAnnotation) {
-      setAiPanelError('当前环境还没有接入 Codex。')
+      setAiPanelError('当前环境还没有接入批注聊天。')
       return
     }
 
@@ -843,7 +883,8 @@ function MarkdownPreviewPage() {
         chatStatus={chatStatus}
         drafts={aiDrafts}
         error={aiPanelError}
-        isOpen={isAiPanelOpen}
+        isGenerationAvailable={canGenerateAiAnnotations}
+        isOpen={isAiPanelVisible}
         mode={aiPanelMode}
         onAcceptDraft={(draftId) => void handleAcceptDraft(draftId)}
         onCloseChat={() => {
@@ -898,6 +939,28 @@ function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude:
 
 function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function isBlankJournalMarkdown(markdown: string) {
+  return markdown.trim() === ''
+}
+
+function isAiAnnotationCreatedOnDate(annotation: Annotation, date: string) {
+  if (annotation.author !== 'ai' || annotation.status !== 'visible') {
+    return false
+  }
+
+  return getCreatedAtDateKey(annotation.createdAt) === date
+}
+
+function getCreatedAtDateKey(createdAt: string) {
+  const parsedDate = new Date(createdAt)
+
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return getLocalDateKey(parsedDate)
+  }
+
+  return /^(\d{4}-\d{2}-\d{2})/.exec(createdAt)?.[1] ?? ''
 }
 
 export default MarkdownPreviewPage

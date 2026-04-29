@@ -36,6 +36,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  window.localStorage.clear()
   highlightStore.clear()
   highlightRegistry.delete.mockClear()
   highlightRegistry.set.mockClear()
@@ -541,6 +542,61 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('hides the AI annotation launcher after today already has generated annotations', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 今天\n今天记得很轻。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const longEntryMarkdown = '# 今天\n今天记得很轻。'
+    const exact = '今天记得很轻'
+    const start = longEntryMarkdown.indexOf(exact)
+    const annotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-28',
+      source: storedJournal.filePath,
+      sourceHash: 'test-hash',
+      annotations: [
+        {
+          id: 'ann_today_generated',
+          author: 'ai',
+          kind: 'observation',
+          target: {
+            type: 'longEntryRange',
+            selector: createTextSelector(longEntryMarkdown, start, start + exact.length),
+          },
+          body: {
+            content: '这条已经是今天生成过的批注。',
+          },
+          status: 'visible',
+          createdAt: '2026-04-28T09:30:00+08:00',
+        },
+      ],
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const readAnnotations = vi.fn().mockResolvedValue(annotationFile)
+
+    vi.stubGlobal('journalStore', { loadToday, readAnnotations })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
+      expect(screen.queryByRole('button', { name: 'AI 批注' })).not.toBeInTheDocument()
+    })
+
+    enterReviewMode()
+    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+
+    expect(screen.getByRole('heading', { name: '深入聊批注' })).toBeInTheDocument()
+    expect(screen.queryByText('Codex')).not.toBeInTheDocument()
+  })
+
   it('opens an annotation chat and saves the returned Codex thread id', async () => {
     const storedJournal = {
       content: '---\ndate: 2026-04-28\n---\n\n# 从文件醒来\n今天记得很轻。\n',
@@ -600,6 +656,11 @@ describe('MarkdownPreviewPage', () => {
     enterReviewMode()
 
     fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+
+    expect(screen.getByText('摘自原文')).toBeInTheDocument()
+    expect(screen.getByText('第 2 行')).toBeInTheDocument()
+    expect(screen.getByLabelText('批注原文')).toHaveTextContent('今天记得很轻')
+
     fireEvent.change(screen.getByRole('textbox', { name: '继续聊批注' }), {
       target: { value: '展开说说' },
     })
@@ -625,6 +686,10 @@ describe('MarkdownPreviewPage', () => {
       )
       expect(screen.getByText('可以从“轻”这个词继续看。')).toBeInTheDocument()
     })
+
+    fireEvent.click(screen.getByRole('button', { name: '返回批注生成' }))
+
+    expect(screen.getByRole('heading', { name: 'AI 批注' })).toBeInTheDocument()
   })
 
   it('loads existing Codex thread messages when reopening an annotation chat', async () => {
@@ -758,6 +823,66 @@ describe('MarkdownPreviewPage', () => {
     expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()
+  })
+
+  it('restores the last selected review mode for a non-empty journal', async () => {
+    window.localStorage.setItem('journal.preview.mode', 'review')
+
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 从文件醒来\n今天记得很轻。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+
+    vi.stubGlobal('journalStore', { loadToday })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(loadToday).toHaveBeenCalledOnce()
+      expect(screen.getByRole('button', { name: '回看' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('heading', { name: '从文件醒来' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '批注' })).toBeInTheDocument()
+    })
+  })
+
+  it('opens a new blank journal in writing mode even when review was stored', async () => {
+    window.localStorage.setItem('journal.preview.mode', 'review')
+
+    const storedJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+
+    vi.stubGlobal('journalStore', { loadToday })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(loadToday).toHaveBeenCalledOnce()
+      expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('persists mode changes locally', () => {
+    render(<MarkdownPreviewPage />)
+
+    enterReviewMode()
+
+    expect(window.localStorage.getItem('journal.preview.mode')).toBe('review')
+
+    fireEvent.click(screen.getByRole('button', { name: '书写' }))
+
+    expect(window.localStorage.getItem('journal.preview.mode')).toBe('write')
   })
 
   it('shows the reading preview and annotation margin in review mode', () => {

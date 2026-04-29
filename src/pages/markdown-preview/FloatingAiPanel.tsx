@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { annotationKinds, listTransition, panelTransition } from './constants'
-import type { Annotation } from '../../domain/annotations'
+import type { Annotation, LinePosition } from '../../domain/annotations'
 
 export type AiPanelDraft = {
   id: string
@@ -21,6 +21,7 @@ type FloatingAiPanelProps = {
   chatStatus: 'idle' | 'loading' | 'sending'
   drafts: AiPanelDraft[]
   error: string
+  isGenerationAvailable: boolean
   isOpen: boolean
   mode: 'idle' | 'generating' | 'drafts' | 'chat'
   onAcceptDraft: (draftId: string) => void
@@ -40,6 +41,7 @@ function FloatingAiPanel({
   chatStatus,
   drafts,
   error,
+  isGenerationAvailable,
   isOpen,
   mode,
   onAcceptDraft,
@@ -51,6 +53,10 @@ function FloatingAiPanel({
   onUpdateChatInput,
   onUpdateDraftContent,
 }: FloatingAiPanelProps) {
+  if (!isGenerationAvailable && !isOpen) {
+    return null
+  }
+
   if (!isOpen) {
     return (
       <motion.button
@@ -70,19 +76,37 @@ function FloatingAiPanel({
   return (
     <motion.aside
       animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-6 right-6 z-40 flex max-h-[calc(100vh-6rem)] w-[390px] flex-col overflow-hidden border border-walnut/15 bg-[#fffdf7] shadow-2xl shadow-ink/15"
+      className={`fixed bottom-6 right-6 z-40 flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden border border-walnut/15 bg-[#fffdf7] shadow-2xl shadow-ink/15 ${
+        mode === 'chat' ? 'w-[560px]' : 'w-[390px]'
+      }`}
       initial={{ opacity: 0, y: 18 }}
       transition={panelTransition}
     >
-      <div className="flex items-center justify-between border-b border-walnut/10 px-4 py-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-sage">Codex</p>
-          <h2 className="font-display text-lg font-semibold text-ink">
-            {mode === 'chat' ? '深入聊批注' : 'AI 批注'}
-          </h2>
-        </div>
+      <div
+        className={`items-center border-b border-walnut/10 px-4 py-3 ${
+          mode === 'chat' ? 'grid grid-cols-[1fr_auto_1fr] gap-3' : 'flex justify-between'
+        }`}
+      >
+        {mode === 'chat' ? (
+          <>
+            <button
+              aria-label="返回批注生成"
+              className="justify-self-start text-xs font-semibold text-walnut/75 underline decoration-walnut/25 underline-offset-4 transition hover:text-ink"
+              onClick={onCloseChat}
+              title="返回批注生成"
+              type="button"
+            >
+              ← 批注生成
+            </button>
+            <h2 className="justify-self-center font-display text-base font-semibold text-ink">
+              深入聊批注
+            </h2>
+          </>
+        ) : (
+          <h2 className="font-display text-lg font-semibold text-ink">AI 批注</h2>
+        )}
         <button
-          className="h-8 w-8 border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
+          className="h-8 w-8 justify-self-end border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
           onClick={onOpen}
           title="收起 AI 面板"
           type="button"
@@ -102,13 +126,13 @@ function FloatingAiPanel({
             chatInput={chatInput}
             chatMessages={chatMessages}
             chatStatus={chatStatus}
-            onCloseChat={onCloseChat}
             onSendChat={onSendChat}
             onUpdateChatInput={onUpdateChatInput}
           />
         ) : (
           <DraftPanel
             drafts={drafts}
+            isGenerationAvailable={isGenerationAvailable}
             mode={mode}
             onAcceptDraft={onAcceptDraft}
             onGenerate={onGenerate}
@@ -123,6 +147,7 @@ function FloatingAiPanel({
 
 type DraftPanelProps = {
   drafts: AiPanelDraft[]
+  isGenerationAvailable: boolean
   mode: FloatingAiPanelProps['mode']
   onAcceptDraft: (draftId: string) => void
   onGenerate: () => void
@@ -132,6 +157,7 @@ type DraftPanelProps = {
 
 function DraftPanel({
   drafts,
+  isGenerationAvailable,
   mode,
   onAcceptDraft,
   onGenerate,
@@ -140,14 +166,16 @@ function DraftPanel({
 }: DraftPanelProps) {
   return (
     <div>
-      <button
-        className="w-full border border-sage/30 bg-sage/10 px-4 py-3 text-sm font-semibold text-ink transition hover:border-sage hover:bg-sage/15 disabled:cursor-wait disabled:opacity-60"
-        disabled={mode === 'generating'}
-        onClick={onGenerate}
-        type="button"
-      >
-        {mode === 'generating' ? '正在生成批注...' : '生成今日批注'}
-      </button>
+      {isGenerationAvailable ? (
+        <button
+          className="w-full border border-sage/30 bg-sage/10 px-4 py-3 text-sm font-semibold text-ink transition hover:border-sage hover:bg-sage/15 disabled:cursor-wait disabled:opacity-60"
+          disabled={mode === 'generating'}
+          onClick={onGenerate}
+          type="button"
+        >
+          {mode === 'generating' ? '正在生成批注...' : '生成今日批注'}
+        </button>
+      ) : null}
 
       {drafts.length > 0 ? (
         <motion.div animate="visible" className="mt-4 space-y-3" initial="hidden">
@@ -195,11 +223,11 @@ function DraftPanel({
             ))}
           </AnimatePresence>
         </motion.div>
-      ) : (
+      ) : isGenerationAvailable ? (
         <p className="mt-4 text-sm leading-6 text-ink/55">
           会按内置的温和配置读取今天的长日记，生成观察和追问类批注草稿。
         </p>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -209,7 +237,6 @@ type ChatPanelProps = {
   chatInput: string
   chatMessages: AiPanelMessage[]
   chatStatus: 'idle' | 'loading' | 'sending'
-  onCloseChat: () => void
   onSendChat: () => void
   onUpdateChatInput: (value: string) => void
 }
@@ -219,43 +246,44 @@ function ChatPanel({
   chatInput,
   chatMessages,
   chatStatus,
-  onCloseChat,
   onSendChat,
   onUpdateChatInput,
 }: ChatPanelProps) {
   return (
     <div>
-      <button
-        className="mb-3 text-xs font-semibold text-walnut underline decoration-walnut/30 underline-offset-4 transition hover:text-ink"
-        onClick={onCloseChat}
-        type="button"
-      >
-        返回批注生成
-      </button>
-      <div className="border border-sage/20 bg-sage/10 px-3 py-3">
-        <span className="text-xs font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
-        <p className="mt-2 text-sm leading-6 text-ink/75">{annotation.body.content}</p>
+      <div className="border border-sage/15 bg-[#f7f6ee] px-4 py-4 shadow-sm shadow-walnut/5">
+        <span className="text-[0.68rem] font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
+        <p className="mt-2 text-sm leading-6 text-ink/70">{annotation.body.content}</p>
+        <AnnotationSource annotation={annotation} />
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-5 space-y-3">
         {chatStatus === 'loading' && chatMessages.length === 0 ? (
           <p className="border border-walnut/10 bg-white px-3 py-2 text-sm leading-6 text-ink/55">
             正在找回之前的聊天...
           </p>
         ) : null}
 
-        {chatMessages.map((message) => (
-          <div
-            key={message.id}
-            className={`border px-3 py-2 text-sm leading-6 ${
-              message.role === 'user'
-                ? 'border-walnut/10 bg-white text-ink'
-                : 'border-sage/20 bg-[#f7f5ea] text-ink/75'
-            }`}
-          >
-            {message.content}
-          </div>
-        ))}
+        {chatMessages.map((message) => {
+          const isUser = message.role === 'user'
+
+          return (
+            <div key={message.id} className={`flex ${isUser ? 'justify-end pl-14' : 'justify-start pr-14'}`}>
+              <div
+                className={`max-w-[82%] rounded-md border px-3 py-2 text-sm leading-6 shadow-sm ${
+                  isUser
+                    ? 'border-walnut/15 bg-white text-ink shadow-walnut/5'
+                    : 'border-sage/25 bg-[#f7f5ea] text-ink/75 shadow-sage/5'
+                }`}
+              >
+                <p className={`mb-1 text-[0.68rem] font-semibold ${isUser ? 'text-walnut/70' : 'text-sage'}`}>
+                  {isUser ? '你' : '回应'}
+                </p>
+                <p>{message.content}</p>
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       <form
@@ -283,6 +311,50 @@ function ChatPanel({
       </form>
     </div>
   )
+}
+
+function AnnotationSource({ annotation }: { annotation: Annotation }) {
+  const source = getAnnotationSource(annotation)
+
+  return (
+    <div className="mt-4">
+      <blockquote
+        aria-label="批注原文"
+        className="relative max-h-28 overflow-y-auto whitespace-pre-wrap border border-walnut/5 bg-[#f9f7ef] px-4 py-3 text-sm leading-6 text-ink/60"
+      >
+        <span className="pointer-events-none absolute left-3 top-2 font-display text-3xl leading-none text-walnut/10">
+          “
+        </span>
+        <span className="mb-2 flex items-center justify-between gap-3 pl-5 text-[0.68rem] leading-none">
+          <span className="font-semibold text-walnut/60">摘自原文</span>
+          <span className="shrink-0 text-ink/40">{source.location}</span>
+        </span>
+        <span className="block pl-5">{source.quote}</span>
+      </blockquote>
+    </div>
+  )
+}
+
+function getAnnotationSource(annotation: Annotation) {
+  if (annotation.target.type !== 'longEntryRange') {
+    return {
+      location: '整篇日记',
+      quote: '这条批注是在看完整篇日记之后留下的。',
+    }
+  }
+
+  const { selector } = annotation.target
+
+  return {
+    location: formatLinePosition(selector.linePosition),
+    quote: selector.plainQuote.exact || selector.sourceQuote.exact,
+  }
+}
+
+function formatLinePosition(linePosition: LinePosition) {
+  const { startLine, endLine } = linePosition
+
+  return startLine === endLine ? `第 ${startLine} 行` : `第 ${startLine}-${endLine} 行`
 }
 
 export default FloatingAiPanel
