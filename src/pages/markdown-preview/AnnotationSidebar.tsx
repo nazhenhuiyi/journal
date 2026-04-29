@@ -5,12 +5,14 @@ import { annotationKinds, listTransition, panelTransition } from './constants'
 type AnnotationSidebarProps = {
   activeAnnotationId: string
   annotations: Annotation[]
+  onChatWithAnnotation: (annotationId: string) => void
   onSelectAnnotation: (annotationId: string) => void
 }
 
 function AnnotationSidebar({
   activeAnnotationId,
   annotations,
+  onChatWithAnnotation,
   onSelectAnnotation,
 }: AnnotationSidebarProps) {
   return (
@@ -44,10 +46,9 @@ function AnnotationSidebar({
             const isActive = annotation.id === activeAnnotationId
 
             return (
-              <motion.button
+              <motion.div
                 key={annotation.id}
                 animate={{ opacity: 1, scale: isActive ? 1.012 : 1, y: 0 }}
-                aria-pressed={isActive}
                 className={`w-full border px-4 py-3 text-left transition ${
                   isActive
                     ? 'border-sage bg-sage/10 shadow-sm'
@@ -55,9 +56,7 @@ function AnnotationSidebar({
                 }`}
                 initial={{ opacity: 0, y: 8 }}
                 layout
-                onClick={() => onSelectAnnotation(annotation.id)}
                 transition={listTransition}
-                type="button"
                 variants={{
                   hidden: { opacity: 0, y: 8 },
                   visible: { opacity: 1, y: 0 },
@@ -65,9 +64,23 @@ function AnnotationSidebar({
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.99 }}
               >
-                <span className="text-xs font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
-                <span className="mt-2 block text-sm leading-6 text-ink/75">{annotation.body.content}</span>
-              </motion.button>
+                <button
+                  aria-pressed={isActive}
+                  className="block w-full text-left"
+                  onClick={() => onSelectAnnotation(annotation.id)}
+                  type="button"
+                >
+                  <span className="text-xs font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
+                  <span className="mt-2 block text-sm leading-6 text-ink/75">{annotation.body.content}</span>
+                </button>
+                <button
+                  className="mt-3 text-xs font-semibold text-walnut underline decoration-walnut/30 underline-offset-4 transition hover:text-ink"
+                  onClick={() => onChatWithAnnotation(annotation.id)}
+                  type="button"
+                >
+                  继续聊
+                </button>
+              </motion.div>
             )
           })}
         </motion.div>

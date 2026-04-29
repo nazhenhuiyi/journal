@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import SegmentedControl from '../components/SegmentedControl'
-import { createDomRangesByAnnotation, resolveAnnotationRanges } from '../domain/annotations'
+import {
+  createAnnotationFromDraft,
+  createDomRangesByAnnotation,
+  resolveAnnotationRanges,
+} from '../domain/annotations'
 import type { Annotation } from '../domain/annotations'
 import {
   parseJournalMarkdown,
@@ -17,6 +21,8 @@ import {
 } from './markdown-preview/annotationDom'
 import AnnotationSidebar from './markdown-preview/AnnotationSidebar'
 import { panelTransition } from './markdown-preview/constants'
+import FloatingAiPanel from './markdown-preview/FloatingAiPanel'
+import type { AiPanelDraft, AiPanelMessage } from './markdown-preview/FloatingAiPanel'
 import {
   annotationTargetsEntry,
   demoAnnotations,
@@ -45,6 +51,10 @@ const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
 
 function getJournalStore() {
   return typeof window === 'undefined' ? undefined : window.journalStore
+}
+
+function getCodexStore() {
+  return typeof window === 'undefined' ? undefined : window.codex
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -140,6 +150,14 @@ function MarkdownPreviewPage() {
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false)
+  const [aiPanelMode, setAiPanelMode] = useState<'idle' | 'generating' | 'drafts' | 'chat'>('idle')
+  const [aiPanelError, setAiPanelError] = useState('')
+  const [aiDrafts, setAiDrafts] = useState<AiPanelDraft[]>([])
+  const [chatAnnotationId, setChatAnnotationId] = useState('')
+  const [chatMessages, setChatMessages] = useState<AiPanelMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatStatus, setChatStatus] = useState<'idle' | 'sending'>('idle')
   const previewRef = useRef<HTMLDivElement>(null)
   const hasLoadedJournalRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
@@ -155,6 +173,10 @@ function MarkdownPreviewPage() {
   const visibleAnnotations = useMemo(
     () => (isReviewing ? journalAnnotations.filter((annotation) => annotation.status === 'visible') : noAnnotations),
     [isReviewing, journalAnnotations],
+  )
+  const chatAnnotation = useMemo(
+    () => journalAnnotations.find((annotation) => annotation.id === chatAnnotationId) ?? null,
+    [chatAnnotationId, journalAnnotations],
   )
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
@@ -304,6 +326,23 @@ function MarkdownPreviewPage() {
 
     return null
   }, [])
+
+  const saveAnnotationsForDate = useCallback(async (date: string, nextAnnotations: Annotation[]) => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.saveAnnotations) {
+      replaceJournalAnnotations(nextAnnotations)
+      return nextAnnotations
+    }
+
+    const annotationFile = await journalStore.saveAnnotations(date, nextAnnotations)
+
+    if (journalFileRef.current?.date === date) {
+      replaceJournalAnnotations(annotationFile.annotations)
+    }
+
+    return annotationFile.annotations
+  }, [replaceJournalAnnotations])
 
   useEffect(() => {
     let isCancelled = false
@@ -507,6 +546,193 @@ function MarkdownPreviewPage() {
     setJournalMarkdown(nextMarkdown)
   }
 
+  async function handleGenerateAiAnnotations() {
+    const codex = getCodexStore()
+    const date = journalFile?.date ?? realTodayDate
+
+    if (!codex?.generateAnnotationDrafts) {
+      setAiPanelError('当前环境还没有接入 Codex。')
+      return
+    }
+
+    setIsAiPanelOpen(true)
+    setAiPanelMode('generating')
+    setAiPanelError('')
+
+    try {
+      saveRequestIdRef.current += 1
+      const savedFile = await saveJournalFile(date, journalMarkdown, journalFrontMatter)
+      const markdownForAi = savedFile ? stripManagedFrontMatter(savedFile.content) : journalMarkdown
+
+      if (savedFile) {
+        journalFileRef.current = savedFile
+        lastSavedMarkdownRef.current = markdownForAi
+        setJournalFile(savedFile)
+      }
+
+      const { longEntryMarkdown } = parseJournalMarkdown(markdownForAi)
+
+      if (!longEntryMarkdown.trim()) {
+        setAiPanelMode('idle')
+        setAiPanelError('今天还没有可读取的长日记内容。')
+        return
+      }
+
+      const result = await codex.generateAnnotationDrafts({ date, longEntryMarkdown })
+      const createdAt = new Date().toISOString()
+      const drafts = result.drafts.flatMap((draft): AiPanelDraft[] => {
+        if (!draft.content.trim()) {
+          return []
+        }
+
+        const annotation = createAnnotationFromDraft(draft, longEntryMarkdown, createdAt)
+
+        return [
+          {
+            id: annotation.id,
+            annotation,
+            matchStatus: annotation.target.type === 'longEntryRange' ? 'anchored' : 'day',
+          },
+        ]
+      })
+
+      setAiDrafts(drafts)
+      setAiPanelMode(drafts.length > 0 ? 'drafts' : 'idle')
+      setAiPanelError(drafts.length > 0 ? '' : 'Codex 没有生成可用的批注草稿。')
+    } catch {
+      setAiPanelMode('idle')
+      setAiPanelError('生成批注失败了，稍后可以再试一次。')
+    }
+  }
+
+  function handleUpdateDraftContent(draftId: string, content: string) {
+    setAiDrafts((currentDrafts) =>
+      currentDrafts.map((draft) =>
+        draft.id === draftId
+          ? {
+              ...draft,
+              annotation: {
+                ...draft.annotation,
+                body: { content },
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : draft,
+      ),
+    )
+  }
+
+  function handleIgnoreDraft(draftId: string) {
+    setAiDrafts((currentDrafts) => {
+      const nextDrafts = currentDrafts.filter((draft) => draft.id !== draftId)
+
+      if (nextDrafts.length === 0) {
+        setAiPanelMode('idle')
+      }
+
+      return nextDrafts
+    })
+  }
+
+  async function handleAcceptDraft(draftId: string) {
+    const draft = aiDrafts.find((candidate) => candidate.id === draftId)
+
+    if (!draft || !draft.annotation.body.content.trim()) {
+      return
+    }
+
+    const date = journalFile?.date ?? realTodayDate
+    const nextAnnotations = [
+      ...journalAnnotations.filter((annotation) => annotation.id !== draft.annotation.id),
+      draft.annotation,
+    ]
+
+    try {
+      await saveAnnotationsForDate(date, nextAnnotations)
+      setActiveAnnotationId(draft.annotation.id)
+      handleIgnoreDraft(draftId)
+      setAiPanelError('')
+    } catch {
+      setAiPanelError('保存批注失败了，刚才的草稿还没有写入。')
+    }
+  }
+
+  function handleChatWithAnnotation(annotationId: string) {
+    selectAnnotation(annotationId, true)
+    setChatAnnotationId(annotationId)
+    setChatMessages([])
+    setChatInput('')
+    setChatStatus('idle')
+    setAiPanelError('')
+    setAiPanelMode('chat')
+    setIsAiPanelOpen(true)
+  }
+
+  async function handleSendAnnotationChat() {
+    const codex = getCodexStore()
+    const message = chatInput.trim()
+
+    if (!message || !chatAnnotation || chatStatus === 'sending') {
+      return
+    }
+
+    if (!codex?.chatWithAnnotation) {
+      setAiPanelError('当前环境还没有接入 Codex。')
+      return
+    }
+
+    const date = journalFile?.date ?? realTodayDate
+    const userMessage: AiPanelMessage = {
+      id: createAiPanelMessageId(),
+      role: 'user',
+      content: message,
+    }
+
+    setChatMessages((currentMessages) => [...currentMessages, userMessage])
+    setChatInput('')
+    setChatStatus('sending')
+    setAiPanelError('')
+
+    try {
+      const result = await codex.chatWithAnnotation({
+        date,
+        journalMarkdown,
+        annotation: chatAnnotation,
+        message,
+        threadId: chatAnnotation.ai?.threadId,
+      })
+      const assistantMessage: AiPanelMessage = {
+        id: createAiPanelMessageId(),
+        role: 'assistant',
+        content: result.response,
+      }
+
+      setChatMessages((currentMessages) => [...currentMessages, assistantMessage])
+
+      if (result.threadId) {
+        const nextAnnotations = journalAnnotations.map((annotation) =>
+          annotation.id === chatAnnotation.id
+            ? {
+                ...annotation,
+                ai: {
+                  ...annotation.ai,
+                  threadId: result.threadId ?? undefined,
+                },
+                updatedAt: new Date().toISOString(),
+              }
+            : annotation,
+        )
+
+        await saveAnnotationsForDate(date, nextAnnotations)
+        setActiveAnnotationId(chatAnnotation.id)
+      }
+    } catch {
+      setAiPanelError('这条批注暂时聊不下去了，可以稍后重试。')
+    } finally {
+      setChatStatus('idle')
+    }
+  }
+
   return (
     <>
       <motion.header
@@ -555,6 +781,7 @@ function MarkdownPreviewPage() {
             <AnnotationSidebar
               activeAnnotationId={activeAnnotationId}
               annotations={visibleAnnotations}
+              onChatWithAnnotation={handleChatWithAnnotation}
               onSelectAnnotation={(annotationId) => selectAnnotation(annotationId, true)}
             />
           </>
@@ -575,8 +802,34 @@ function MarkdownPreviewPage() {
           </motion.article>
         )}
       </section>
+
+      <FloatingAiPanel
+        activeAnnotation={chatAnnotation}
+        chatInput={chatInput}
+        chatMessages={chatMessages}
+        chatStatus={chatStatus}
+        drafts={aiDrafts}
+        error={aiPanelError}
+        isOpen={isAiPanelOpen}
+        mode={aiPanelMode}
+        onAcceptDraft={(draftId) => void handleAcceptDraft(draftId)}
+        onCloseChat={() => {
+          setAiPanelMode(aiDrafts.length > 0 ? 'drafts' : 'idle')
+          setChatAnnotationId('')
+        }}
+        onGenerate={() => void handleGenerateAiAnnotations()}
+        onIgnoreDraft={handleIgnoreDraft}
+        onOpen={() => setIsAiPanelOpen((isOpen) => !isOpen)}
+        onSendChat={() => void handleSendAnnotationChat()}
+        onUpdateChatInput={setChatInput}
+        onUpdateDraftContent={handleUpdateDraftContent}
+      />
     </>
   )
+}
+
+function createAiPanelMessageId() {
+  return `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude: number } | undefined> {

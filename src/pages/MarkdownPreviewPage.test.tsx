@@ -459,6 +459,174 @@ describe('MarkdownPreviewPage', () => {
     expect(container.querySelector('[data-annotation-ids="ann_today_light"]')).toHaveTextContent('今天记得很轻。')
   })
 
+  it('accepts an AI annotation draft and saves it to the annotation store', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 测试日记\n今天很累，但回来写了几行。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn().mockResolvedValue(storedJournal)
+    const readAnnotations = vi.fn().mockResolvedValue({
+      version: 1,
+      date: '2026-04-28',
+      source: storedJournal.filePath,
+      sourceHash: '',
+      annotations: [],
+    } satisfies AnnotationFile)
+    const saveAnnotations = vi.fn((date: string, annotations: AnnotationFile['annotations']) =>
+      Promise.resolve({
+        version: 1,
+        date,
+        source: storedJournal.filePath,
+        sourceHash: 'saved-hash',
+        annotations,
+      } satisfies AnnotationFile),
+    )
+    const generateAnnotationDrafts = vi.fn().mockResolvedValue({
+      drafts: [
+        {
+          kind: 'observation',
+          content: '这里把累和继续写都留住了。',
+          anchorQuote: '今天很累',
+          anchorSuffix: '但回来写了几行。',
+        },
+      ],
+      threadId: 'draft-thread',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate, readAnnotations, saveAnnotations })
+    vi.stubGlobal('codex', { generateAnnotationDrafts })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('测试日记')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI 批注' }))
+    fireEvent.click(screen.getByRole('button', { name: '生成今日批注' }))
+
+    await waitFor(() => {
+      expect(generateAnnotationDrafts).toHaveBeenCalledWith({
+        date: '2026-04-28',
+        longEntryMarkdown: '# 测试日记\n今天很累，但回来写了几行。',
+      })
+      expect(screen.getByRole('textbox', { name: '批注草稿' })).toHaveValue('这里把累和继续写都留住了。')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '接受' }))
+
+    await waitFor(() => {
+      expect(saveAnnotations).toHaveBeenCalledWith(
+        '2026-04-28',
+        expect.arrayContaining([
+          expect.objectContaining({
+            author: 'ai',
+            kind: 'observation',
+            body: { content: '这里把累和继续写都留住了。' },
+            target: expect.objectContaining({ type: 'longEntryRange' }),
+          }),
+        ]),
+      )
+    })
+
+    enterReviewMode()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /这里把累和继续写都留住了/ })).toBeInTheDocument()
+    })
+  })
+
+  it('opens an annotation chat and saves the returned Codex thread id', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 从文件醒来\n今天记得很轻。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const longEntryMarkdown = '# 从文件醒来\n今天记得很轻。'
+    const exact = '今天记得很轻'
+    const start = longEntryMarkdown.indexOf(exact)
+    const annotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-28',
+      source: storedJournal.filePath,
+      sourceHash: 'test-hash',
+      annotations: [
+        {
+          id: 'ann_today_light',
+          author: 'ai',
+          kind: 'observation',
+          target: {
+            type: 'longEntryRange',
+            selector: createTextSelector(longEntryMarkdown, start, start + exact.length),
+          },
+          body: {
+            content: '这条来自今天的旁路批注文件。',
+          },
+          status: 'visible',
+          createdAt: '2026-04-28T17:20:00+08:00',
+        },
+      ],
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const readAnnotations = vi.fn().mockResolvedValue(annotationFile)
+    const saveAnnotations = vi.fn((date: string, annotations: AnnotationFile['annotations']) =>
+      Promise.resolve({
+        ...annotationFile,
+        date,
+        annotations,
+      }),
+    )
+    const chatWithAnnotation = vi.fn().mockResolvedValue({
+      response: '可以从“轻”这个词继续看。',
+      threadId: 'thread_ann_today_light',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), readAnnotations, saveAnnotations })
+    vi.stubGlobal('codex', { chatWithAnnotation })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
+    })
+    enterReviewMode()
+
+    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '继续聊批注' }), {
+      target: { value: '展开说说' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => {
+      expect(chatWithAnnotation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          date: '2026-04-28',
+          message: '展开说说',
+          threadId: undefined,
+          annotation: expect.objectContaining({ id: 'ann_today_light' }),
+        }),
+      )
+      expect(saveAnnotations).toHaveBeenCalledWith(
+        '2026-04-28',
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'ann_today_light',
+            ai: { threadId: 'thread_ann_today_light' },
+          }),
+        ]),
+      )
+      expect(screen.getByText('可以从“轻”这个词继续看。')).toBeInTheDocument()
+    })
+  })
+
   it('keeps managed front matter out of the editable journal body', () => {
     expect(stripManagedFrontMatter('---\ndate: 2026-04-28\n---\n\n今天直接写。')).toBe('今天直接写。')
     expect(createManagedJournalMarkdown('今天直接写。', '2026-04-28')).toBe(

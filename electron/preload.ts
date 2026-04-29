@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('codex', {
   ask(prompt: string) {
     return ipcRenderer.invoke('codex:ask', prompt)
   },
+  generateAnnotationDrafts(payload: unknown) {
+    return ipcRenderer.invoke('codex:generateAnnotationDrafts', payload)
+  },
+  chatWithAnnotation(payload: unknown) {
+    return ipcRenderer.invoke('codex:chatWithAnnotation', payload)
+  },
 })
 
 contextBridge.exposeInMainWorld('journalStore', {
@@ -44,6 +50,9 @@ contextBridge.exposeInMainWorld('journalStore', {
   },
   readAnnotations(date: string) {
     return ipcRenderer.invoke('journal:readAnnotations', date)
+  },
+  saveAnnotations(date: string, annotations: import('../src/domain/annotations/types').Annotation[]) {
+    return ipcRenderer.invoke('journal:saveAnnotations', date, annotations)
   },
   refreshTodayWeather(location?: { latitude?: number; longitude?: number }) {
     return ipcRenderer.invoke('journal:refreshTodayWeather', location)

@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { askCodex } from './codex'
+import { askCodex, chatWithAnnotation, generateAnnotationDrafts } from './codex'
 import {
   createJournalMarkdownWithFrontMatter,
   stripManagedFrontMatter,
@@ -43,11 +44,20 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let win: BrowserWindow | null
 
 ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, process.env.APP_ROOT))
+ipcMain.handle('codex:generateAnnotationDrafts', (_event, payload: unknown) =>
+  generateAnnotationDrafts(payload, process.env.APP_ROOT),
+)
+ipcMain.handle('codex:chatWithAnnotation', (_event, payload: unknown) =>
+  chatWithAnnotation(payload, process.env.APP_ROOT),
+)
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
 ipcMain.handle('journal:saveDate', (_event, date: unknown, content: unknown) => saveJournal(date, content))
 ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))
+ipcMain.handle('journal:saveAnnotations', (_event, date: unknown, annotations: unknown) =>
+  saveJournalAnnotations(date, annotations),
+)
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 
 type JournalFile = {
@@ -227,6 +237,40 @@ async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {
   return normalizeAnnotationFile(JSON.parse(content), date)
 }
 
+async function saveJournalAnnotations(date: unknown, payload: unknown): Promise<AnnotationFile> {
+  if (typeof date !== 'string') {
+    throw new TypeError('Annotation date must be a string.')
+  }
+
+  assertDateKey(date)
+
+  if (!Array.isArray(payload)) {
+    throw new TypeError('Annotations payload must be an array.')
+  }
+
+  const { directory, filePath, sourcePath } = getJournalAnnotationsPath(date)
+  const sourceContent = await readFile(sourcePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return createDefaultJournalMarkdown(date)
+    }
+
+    throw error
+  })
+  const { longEntryMarkdown } = parseJournalMarkdown(sourceContent)
+  const annotationFile: AnnotationFile = {
+    version: 1,
+    date,
+    source: sourcePath,
+    sourceHash: hashText(longEntryMarkdown),
+    annotations: payload.flatMap((annotation) => normalizeAnnotation(annotation)),
+  }
+
+  await mkdir(directory, { recursive: true })
+  await writeJournalFile(filePath, `${JSON.stringify(annotationFile, null, 2)}\n`)
+
+  return annotationFile
+}
+
 function normalizeAnnotationFile(payload: unknown, date: string): AnnotationFile {
   const root = asRecord(payload)
   const annotations = Array.isArray(root.annotations)
@@ -279,6 +323,7 @@ function normalizeAnnotation(payload: unknown): Annotation[] {
         status,
         createdAt,
         updatedAt: stringFromRecord(annotation, 'updatedAt'),
+        ai: normalizeAnnotationAi(asRecord(annotation.ai)),
       },
     ]
   }
@@ -308,8 +353,15 @@ function normalizeAnnotation(payload: unknown): Annotation[] {
       status,
       createdAt,
       updatedAt: stringFromRecord(annotation, 'updatedAt'),
+      ai: normalizeAnnotationAi(asRecord(annotation.ai)),
     },
   ]
+}
+
+function normalizeAnnotationAi(payload: Record<string, unknown>): Annotation['ai'] | undefined {
+  const threadId = stringFromRecord(payload, 'threadId')
+
+  return threadId ? { threadId } : undefined
 }
 
 function normalizeTextSelector(selector: Record<string, unknown>): TextSelector | null {
@@ -514,6 +566,10 @@ function hasCoordinates(location: WeatherLookupLocation): location is Required<W
 
 function hasFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function hashText(text: string) {
+  return createHash('sha256').update(text).digest('hex')
 }
 
 function numberFromRecord(record: Record<string, unknown>, key: string) {

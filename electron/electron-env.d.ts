@@ -54,6 +54,10 @@ interface Window {
       updatedAt: string | null
     }>
     readAnnotations(date: string): Promise<import('../src/domain/annotations/types').AnnotationFile>
+    saveAnnotations(
+      date: string,
+      annotations: import('../src/domain/annotations/types').Annotation[],
+    ): Promise<import('../src/domain/annotations/types').AnnotationFile>
     refreshTodayWeather(location?: { latitude?: number; longitude?: number }): Promise<{
       content: string
       date: string
@@ -72,6 +76,33 @@ interface Window {
         status?: string
         exitCode?: number
       }[]
+      threadId: string | null
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      } | null
+    }>
+    generateAnnotationDrafts(payload: {
+      date: string
+      longEntryMarkdown: string
+    }): Promise<{
+      drafts: import('../src/domain/annotations/annotationDrafts').AiAnnotationDraft[]
+      threadId: string | null
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      } | null
+    }>
+    chatWithAnnotation(payload: {
+      date: string
+      journalMarkdown: string
+      annotation: import('../src/domain/annotations/types').Annotation
+      message: string
+      threadId?: string
+    }): Promise<{
+      response: string
       threadId: string | null
       usage: {
         input_tokens: number

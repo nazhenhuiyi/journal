@@ -17,6 +17,9 @@ export type Annotation = {
   status: 'visible' | 'hidden' | 'orphaned'
   createdAt: string
   updatedAt?: string
+  ai?: {
+    threadId?: string
+  }
 }
 
 export type AnnotationTarget =
