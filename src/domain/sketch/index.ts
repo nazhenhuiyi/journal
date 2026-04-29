@@ -1,5 +1,6 @@
 export * from './drawing'
 export * from './reducer'
-export * from './SketchSessionContext'
+export * from './SketchSessionProvider'
 export * from './timeline'
 export * from './types'
+export * from './useSketchSession'

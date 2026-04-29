@@ -5,10 +5,8 @@ import SegmentedControl from '../components/SegmentedControl'
 import { createDomRangesByAnnotation, resolveAnnotationRanges } from '../domain/annotations'
 import type { Annotation } from '../domain/annotations'
 import {
-  createJournalMarkdownWithFrontMatter,
   parseJournalMarkdown,
   renderJournalMarkdown,
-  stripManagedFrontMatter as stripJournalManagedFrontMatter,
   type DayFrontMatter,
 } from '../domain/markdown'
 import { weatherPack } from '../assets/theme-packs/weather'
@@ -25,6 +23,10 @@ import {
   demoAnnotations,
 } from './markdown-preview/demoAnnotations'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
+import {
+  createManagedJournalMarkdown,
+  stripManagedFrontMatter,
+} from './markdown-preview/managedJournalMarkdown'
 import MarkdownPreviewArticle from './markdown-preview/MarkdownPreviewArticle'
 import type { AnnotationOverlayRect } from './markdown-preview/types'
 
@@ -57,18 +59,6 @@ function millisecondsUntilNextLocalDay(date = new Date()) {
   nextDay.setHours(24, 0, 0, 0)
 
   return Math.max(1, nextDay.getTime() - date.getTime())
-}
-
-export function stripManagedFrontMatter(markdown: string) {
-  return stripJournalManagedFrontMatter(markdown)
-}
-
-export function createManagedJournalMarkdown(
-  markdown: string,
-  date: string,
-  frontMatter: DayFrontMatter = {},
-) {
-  return createJournalMarkdownWithFrontMatter(markdown, { ...frontMatter, date })
 }
 
 function formatJournalTopbarTitle(dateKey: string, weatherText?: string) {

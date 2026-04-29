@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import MarkdownPreviewPage, {
+import MarkdownPreviewPage from './MarkdownPreviewPage'
+import {
   createManagedJournalMarkdown,
   stripManagedFrontMatter,
-} from './MarkdownPreviewPage'
+} from './markdown-preview/managedJournalMarkdown'
 import { createTextSelector } from '../domain/annotations'
 import type { AnnotationFile } from '../domain/annotations'
 

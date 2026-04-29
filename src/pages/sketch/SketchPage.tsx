@@ -32,18 +32,23 @@ const pointStep = 2.2
 function SketchPage() {
   const { state, dispatchSketchEvent, canUndo, canRedo } = useSketchSession()
   const [searchParams, setSearchParams] = useSearchParams()
+  const timeline = useMemo(() => createReplayTimeline(state.events), [state.events])
+  const shouldStartReplayFromQuery = searchParams.get('replay') === '1' && timeline.steps.length > 0
   const [activeTool, setActiveTool] = useState<SketchTool>('pencil')
   const [pencilSize, setPencilSize] = useState(4)
   const [eraserSize, setEraserSize] = useState(24)
   const [color, setColor] = useState(pencilColors[0])
-  const [isReplayMode, setIsReplayMode] = useState(false)
-  const [isReplayPlaying, setIsReplayPlaying] = useState(false)
+  const [isReplayMode, setIsReplayMode] = useState(() => shouldStartReplayFromQuery)
+  const [isReplayPlaybackRequested, setIsReplayPlaybackRequested] = useState(
+    () => shouldStartReplayFromQuery,
+  )
   const [replayIndex, setReplayIndex] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingStrokeIdRef = useRef<string | null>(null)
   const eventIdRef = useRef(0)
   const lastPointRef = useRef<SketchPoint | null>(null)
-  const timeline = useMemo(() => createReplayTimeline(state.events), [state.events])
+  const isReplayPlaying =
+    isReplayPlaybackRequested && timeline.steps.length > 0 && replayIndex < timeline.steps.length
   const replayEvents = useMemo(
     () => timeline.steps.slice(0, replayIndex).map((step) => step.event),
     [replayIndex, timeline.steps],
@@ -73,16 +78,6 @@ function SketchPage() {
       return
     }
 
-    if (timeline.steps.length === 0) {
-      setIsReplayPlaying(false)
-      return
-    }
-
-    if (replayIndex >= timeline.steps.length) {
-      setIsReplayPlaying(false)
-      return
-    }
-
     const timeout = window.setTimeout(
       () => setReplayIndex((currentIndex) => currentIndex + 1),
       timeline.steps[replayIndex]?.delay ?? 0,
@@ -96,10 +91,14 @@ function SketchPage() {
       return
     }
 
-    setIsReplayMode(true)
-    setReplayIndex(0)
-    setIsReplayPlaying(true)
-    setSearchParams({}, { replace: true })
+    const timeout = window.setTimeout(() => {
+      setIsReplayMode(true)
+      setReplayIndex(0)
+      setIsReplayPlaybackRequested(true)
+      setSearchParams({}, { replace: true })
+    }, 0)
+
+    return () => window.clearTimeout(timeout)
   }, [searchParams, setSearchParams, timeline.steps.length])
 
   function nextEventId(prefix: string) {
@@ -140,7 +139,7 @@ function SketchPage() {
     lastPointRef.current = point
     event.currentTarget.setPointerCapture(event.pointerId)
     setIsReplayMode(false)
-    setIsReplayPlaying(false)
+    setIsReplayPlaybackRequested(false)
     emit({
       type: 'stroke:start',
       id: nextEventId('event'),
@@ -200,7 +199,7 @@ function SketchPage() {
 
   function emitHistoryEvent(type: 'undo' | 'redo' | 'clear') {
     setIsReplayMode(false)
-    setIsReplayPlaying(false)
+    setIsReplayPlaybackRequested(false)
     emit({
       type,
       id: nextEventId('event'),
@@ -219,7 +218,7 @@ function SketchPage() {
       setReplayIndex(0)
     }
 
-    setIsReplayPlaying((isPlaying) => !isPlaying)
+    setIsReplayPlaybackRequested(!isReplayPlaying)
   }
 
   function restartReplay() {
@@ -229,7 +228,7 @@ function SketchPage() {
 
     setIsReplayMode(true)
     setReplayIndex(0)
-    setIsReplayPlaying(true)
+    setIsReplayPlaybackRequested(true)
   }
 
   return (

@@ -1,19 +1,7 @@
-import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
-import { createReplayTimeline } from './timeline'
+import { useMemo, useReducer, type ReactNode } from 'react'
 import { createInitialSketchState, sketchReducer } from './reducer'
-import type { SketchEvent, SketchState } from './types'
-
-type SketchSessionContextValue = {
-  state: SketchState
-  dispatchSketchEvent: (event: SketchEvent) => void
-  canUndo: boolean
-  canRedo: boolean
-  eventCount: number
-  originalDuration: number
-  replayDuration: number
-}
-
-const SketchSessionContext = createContext<SketchSessionContextValue | null>(null)
+import { SketchSessionContext, type SketchSessionContextValue } from './sessionContext'
+import { createReplayTimeline } from './timeline'
 
 export function SketchSessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatchSketchEvent] = useReducer(sketchReducer, undefined, createInitialSketchState)
@@ -33,14 +21,3 @@ export function SketchSessionProvider({ children }: { children: ReactNode }) {
 
   return <SketchSessionContext.Provider value={value}>{children}</SketchSessionContext.Provider>
 }
-
-export function useSketchSession() {
-  const context = useContext(SketchSessionContext)
-
-  if (!context) {
-    throw new Error('useSketchSession must be used inside SketchSessionProvider')
-  }
-
-  return context
-}
-
