@@ -567,10 +567,9 @@ function MarkdownPreviewPage() {
           >
             <div className="journal-paper">
               <div className="journal-paper-meta">
-                <span>正文</span>
+                <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
                 <span title={journalFile?.filePath}>{journalStorageLabel}</span>
               </div>
-              <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
               <JournalMarkdownEditor onChange={handleJournalMarkdownChange} value={journalMarkdown} />
             </div>
           </motion.article>

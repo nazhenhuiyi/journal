@@ -29,19 +29,18 @@ const previewClasses = {
 
 const writingClasses = {
   root: [
-    'flex items-center gap-[1.05rem]',
-    'ml-[3.8rem] mr-[2.3rem] mt-[0.58rem] -mb-[0.42rem] min-h-[2.25rem] px-[0.35rem] py-[0.14rem]',
+    'flex min-w-0 flex-1 items-center justify-start gap-[0.55rem]',
     'border-0 bg-transparent text-[rgba(47,38,31,0.5)] shadow-none',
   ].join(' '),
-  image: 'h-[1.18rem] w-[1.18rem] object-contain opacity-[0.58] [filter:none]',
-  copy: 'flex min-w-0 flex-none flex-row items-baseline gap-[0.42rem]',
-  summary: 'overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-[1.4] text-inherit',
-  temperature: 'font-sans text-[0.76rem] font-[560] leading-[1.4] text-[rgba(122,79,50,0.58)]',
-  details: 'm-0 flex min-w-0 flex-none flex-nowrap items-baseline gap-[0.62rem]',
-  detail: 'flex min-w-0 flex-none items-baseline gap-[0.18rem] whitespace-nowrap border-l-0 pl-0',
-  label: 'm-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-[1.4] text-inherit',
-  value: 'm-0 min-w-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-[1.4] text-inherit',
-  separator: 'flex-none pr-[0.2rem] text-[rgba(122,79,50,0.24)]',
+  image: 'h-[0.98rem] w-[0.98rem] flex-none object-contain opacity-[0.58] [filter:none]',
+  copy: 'flex min-w-0 flex-none flex-row items-baseline gap-[0.34rem]',
+  summary: 'max-w-[10rem] overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
+  temperature: 'flex-none font-sans text-[0.76rem] font-[560] leading-none text-[rgba(122,79,50,0.58)]',
+  details: 'm-0 flex min-w-0 flex-nowrap items-baseline gap-[0.46rem]',
+  detail: 'flex min-w-0 items-baseline gap-[0.14rem] whitespace-nowrap border-l-0 pl-0',
+  label: 'm-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
+  value: 'm-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
+  separator: 'flex-none pr-[0.08rem] text-[rgba(122,79,50,0.24)]',
 }
 
 function JournalWeatherHeader({
@@ -69,7 +68,10 @@ function JournalWeatherHeader({
       </div>
       <dl className={classes.details}>
         {weatherDetails.map((detail) => (
-          <div className={classes.detail} key={detail.label}>
+          <div
+            className={variant === 'writing' ? getWritingDetailClass(detail.label) : classes.detail}
+            key={detail.label}
+          >
             {variant === 'writing' ? (
               <span aria-hidden="true" className={writingClasses.separator}>
                 /
@@ -82,6 +84,14 @@ function JournalWeatherHeader({
       </dl>
     </section>
   )
+}
+
+function getWritingDetailClass(label: string) {
+  if (label === '地点') {
+    return `${writingClasses.detail} flex-shrink`
+  }
+
+  return `${writingClasses.detail} flex-none`
 }
 
 function formatLocationLabel(location: DayFrontMatter['location']) {

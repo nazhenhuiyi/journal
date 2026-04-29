@@ -3685,6 +3685,10 @@ body {
   font-size: 0.78rem;
 }
 
+.journal-paper-meta > span {
+  flex: 0 0 auto;
+}
+
 .journal-editor {
   flex: 1;
   width: 100%;
