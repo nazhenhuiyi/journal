@@ -38,6 +38,15 @@ contextBridge.exposeInMainWorld('codex', {
   },
 })
 
+contextBridge.exposeInMainWorld('codexSettings', {
+  load() {
+    return ipcRenderer.invoke('codexSettings:load')
+  },
+  save(payload: unknown) {
+    return ipcRenderer.invoke('codexSettings:save', payload)
+  },
+})
+
 contextBridge.exposeInMainWorld('journalStore', {
   loadToday() {
     return ipcRenderer.invoke('journal:loadToday')

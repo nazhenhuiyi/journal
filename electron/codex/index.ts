@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Codex, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
+import type { JournalCodexSettingsFile } from '../codexSettings'
 
 export type CodexActivity = {
   id: string
@@ -62,7 +63,6 @@ export type CodexAnnotationChatResult = {
   usage: CodexAskResult['usage']
 }
 
-const codex = new Codex()
 const codexSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions')
 
 const annotationDraftsSchema = {
@@ -141,17 +141,16 @@ function summarizeCodexItem(item: ThreadItem): CodexActivity {
   }
 }
 
-export async function askCodex(prompt: unknown, workingDirectory: string): Promise<CodexAskResult> {
+export async function askCodex(
+  prompt: unknown,
+  workingDirectory: string,
+  settings: JournalCodexSettingsFile,
+): Promise<CodexAskResult> {
   if (typeof prompt !== 'string' || prompt.trim().length === 0) {
     throw new Error('请输入想问 Codex 的内容。')
   }
 
-  const thread = codex.startThread({
-    approvalPolicy: 'never',
-    sandboxMode: 'read-only',
-    skipGitRepoCheck: true,
-    workingDirectory,
-  })
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
 
   const turn = await thread.run(prompt.trim())
 
@@ -166,14 +165,10 @@ export async function askCodex(prompt: unknown, workingDirectory: string): Promi
 export async function generateAnnotationDrafts(
   payload: unknown,
   workingDirectory: string,
+  settings: JournalCodexSettingsFile,
 ): Promise<CodexAnnotationDraftsResult> {
   const normalizedPayload = normalizeAnnotationDraftsPayload(payload)
-  const thread = codex.startThread({
-    approvalPolicy: 'never',
-    sandboxMode: 'read-only',
-    skipGitRepoCheck: true,
-    workingDirectory,
-  })
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
   const turn = await thread.run(buildAnnotationDraftsPrompt(normalizedPayload), {
     outputSchema: annotationDraftsSchema,
   })
@@ -189,22 +184,15 @@ export async function generateAnnotationDrafts(
 export async function chatWithAnnotation(
   payload: unknown,
   workingDirectory: string,
+  settings: JournalCodexSettingsFile,
 ): Promise<CodexAnnotationChatResult> {
   const normalizedPayload = normalizeAnnotationChatPayload(payload)
   const hasExistingThread = Boolean(normalizedPayload.threadId)
+  const codex = createCodex(settings)
+  const threadOptions = createThreadOptions(workingDirectory, settings)
   const thread = normalizedPayload.threadId
-    ? codex.resumeThread(normalizedPayload.threadId, {
-        approvalPolicy: 'never',
-        sandboxMode: 'read-only',
-        skipGitRepoCheck: true,
-        workingDirectory,
-      })
-    : codex.startThread({
-        approvalPolicy: 'never',
-        sandboxMode: 'read-only',
-        skipGitRepoCheck: true,
-        workingDirectory,
-      })
+    ? codex.resumeThread(normalizedPayload.threadId, threadOptions)
+    : codex.startThread(threadOptions)
   const turn = await thread.run(
     hasExistingThread ? normalizedPayload.message : buildAnnotationChatPrompt(normalizedPayload),
   )
@@ -230,6 +218,25 @@ export async function readAnnotationThread(threadId: unknown): Promise<{ message
   const content = await fs.readFile(sessionPath, 'utf8')
 
   return { messages: parseAnnotationThreadMessages(content) }
+}
+
+function createCodex(settings: JournalCodexSettingsFile) {
+  return new Codex({
+    config: {
+      model_instructions_file: settings.systemPromptPath,
+    },
+  })
+}
+
+function createThreadOptions(workingDirectory: string, settings: JournalCodexSettingsFile) {
+  return {
+    approvalPolicy: 'never' as const,
+    model: settings.model,
+    modelReasoningEffort: settings.modelReasoningEffort,
+    sandboxMode: 'read-only' as const,
+    skipGitRepoCheck: true,
+    workingDirectory,
+  }
 }
 
 function normalizeAnnotationDraftsPayload(payload: unknown): CodexAnnotationDraftsPayload {

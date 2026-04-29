@@ -118,4 +118,28 @@ interface Window {
       }[]
     }>
   }
+  codexSettings?: {
+    load(): Promise<{
+      version: 1
+      model: string
+      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+      systemPrompt: string
+      directory: string
+      settingsPath: string
+      systemPromptPath: string
+    }>
+    save(payload: {
+      model: string
+      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+      systemPrompt: string
+    }): Promise<{
+      version: 1
+      model: string
+      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+      systemPrompt: string
+      directory: string
+      settingsPath: string
+      systemPromptPath: string
+    }>
+  }
 }

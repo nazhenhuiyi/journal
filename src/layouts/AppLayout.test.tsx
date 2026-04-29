@@ -23,6 +23,7 @@ describe('AppLayout', () => {
     renderLayout()
 
     expect(screen.getByRole('link', { name: /今日/ })).toHaveTextContent('4月28日')
+    expect(screen.getByRole('link', { name: /设置/ })).toHaveAttribute('href', '/settings')
   })
 
   it('refreshes the today menu date after midnight', () => {

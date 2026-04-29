@@ -24,7 +24,7 @@ const menuItems: Array<{
   { label: '画板', description: '涂鸦过程', icon: StickyNote, to: '/sketch' },
   { label: '相册', description: '照片记录', icon: Image, disabled: true },
   { label: '日历', description: '时间索引', icon: CalendarDays, disabled: true },
-  { label: '设置', description: '外观与边界', icon: Settings, disabled: true },
+  { label: '设置', description: '偏好与助手', icon: Settings, to: '/settings' },
 ]
 
 function formatMenuDate(date = new Date()) {

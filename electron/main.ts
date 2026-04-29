@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
+import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
 import {
   createJournalMarkdownWithFrontMatter,
   stripManagedFrontMatter,
@@ -43,16 +44,26 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
-ipcMain.handle('codex:ask', async (_event, prompt: unknown) =>
-  askCodex(prompt, await getCodexWorkingDirectory()),
-)
-ipcMain.handle('codex:generateAnnotationDrafts', async (_event, payload: unknown) =>
-  generateAnnotationDrafts(payload, await getCodexWorkingDirectory()),
-)
-ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) =>
-  chatWithAnnotation(payload, await getCodexWorkingDirectory()),
-)
+ipcMain.handle('codex:ask', async (_event, prompt: unknown) => {
+  const runtime = await getCodexRuntime()
+
+  return askCodex(prompt, runtime.workingDirectory, runtime.settings)
+})
+ipcMain.handle('codex:generateAnnotationDrafts', async (_event, payload: unknown) => {
+  const runtime = await getCodexRuntime()
+
+  return generateAnnotationDrafts(payload, runtime.workingDirectory, runtime.settings)
+})
+ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) => {
+  const runtime = await getCodexRuntime()
+
+  return chatWithAnnotation(payload, runtime.workingDirectory, runtime.settings)
+})
 ipcMain.handle('codex:readAnnotationThread', (_event, threadId: unknown) => readAnnotationThread(threadId))
+ipcMain.handle('codexSettings:load', () => loadJournalCodexSettings(getJournalDirectory()))
+ipcMain.handle('codexSettings:save', (_event, payload: unknown) =>
+  saveJournalCodexSettings(getJournalDirectory(), payload),
+)
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
@@ -107,6 +118,16 @@ async function getCodexWorkingDirectory() {
   await mkdir(directory, { recursive: true })
 
   return directory
+}
+
+async function getCodexRuntime() {
+  const workingDirectory = await getCodexWorkingDirectory()
+  const settings = await loadJournalCodexSettings(workingDirectory)
+
+  return {
+    settings,
+    workingDirectory,
+  }
 }
 
 function getJournalPath(date: string) {
