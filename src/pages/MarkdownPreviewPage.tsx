@@ -9,7 +9,6 @@ import {
   renderJournalMarkdown,
   type DayFrontMatter,
 } from '../domain/markdown'
-import { weatherPack } from '../assets/theme-packs/weather'
 import {
   getAnnotationIds,
   registerAnnotationHighlights,
@@ -22,6 +21,9 @@ import {
   annotationTargetsEntry,
   demoAnnotations,
 } from './markdown-preview/demoAnnotations'
+import JournalWeatherHeader, {
+  type WeatherStatus,
+} from './markdown-preview/JournalWeatherHeader'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
 import {
   createManagedJournalMarkdown,
@@ -32,7 +34,6 @@ import type { AnnotationOverlayRect } from './markdown-preview/types'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
-type WeatherStatus = 'idle' | 'loading' | 'ready' | 'failed'
 
 const noAnnotations: Annotation[] = []
 const AUTOSAVE_DELAY_MS = 700
@@ -569,53 +570,13 @@ function MarkdownPreviewPage() {
                 <span>正文</span>
                 <span title={journalFile?.filePath}>{journalStorageLabel}</span>
               </div>
-              <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} />
+              <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
               <JournalMarkdownEditor onChange={handleJournalMarkdownChange} value={journalMarkdown} />
             </div>
           </motion.article>
         )}
       </section>
     </>
-  )
-}
-
-function JournalWeatherHeader({
-  frontMatter,
-  status,
-}: {
-  frontMatter: DayFrontMatter
-  status: WeatherStatus
-}) {
-  const weather = frontMatter.weather
-  const locationLabel = formatLocationLabel(frontMatter.location)
-  const weatherImage = getWeatherImage(weather?.text)
-
-  return (
-    <section className="journal-weather-strip" aria-label="今日天气">
-      <img alt="" aria-hidden="true" className="journal-weather-strip-image" src={weatherImage} />
-      <div className="journal-weather-strip-copy">
-        <span>{weather?.text ?? getWeatherStatusLabel(status)}</span>
-        <strong>{formatTemperature(weather?.temperature)}</strong>
-      </div>
-      <dl className="journal-weather-strip-details">
-        <div>
-          <dt>体感</dt>
-          <dd>{formatTemperature(weather?.feelsLike)}</dd>
-        </div>
-        <div>
-          <dt>湿度</dt>
-          <dd>{formatPercent(weather?.humidity)}</dd>
-        </div>
-        <div>
-          <dt>风</dt>
-          <dd>{formatWindSpeed(weather?.windSpeed)}</dd>
-        </div>
-        <div>
-          <dt>地点</dt>
-          <dd>{locationLabel}</dd>
-        </div>
-      </dl>
-    </section>
   )
 }
 
@@ -648,71 +609,8 @@ function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude:
   })
 }
 
-function formatLocationLabel(location: DayFrontMatter['location']) {
-  return location?.name ?? location?.region ?? location?.country ?? '未定位'
-}
-
-function formatTemperature(temperature: number | undefined) {
-  return temperature === undefined ? '--' : `${Math.round(temperature)}°C`
-}
-
-function formatPercent(value: number | undefined) {
-  return value === undefined ? '--' : `${Math.round(value)}%`
-}
-
-function formatWindSpeed(value: number | undefined) {
-  return value === undefined ? '--' : `${Math.round(value)} km/h`
-}
-
-function getWeatherStatusLabel(status: WeatherStatus) {
-  if (status === 'loading') {
-    return '天气同步中'
-  }
-
-  if (status === 'failed') {
-    return '天气未同步'
-  }
-
-  return '今日天气'
-}
-
 function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
-}
-
-function getWeatherImage(weatherText: string | undefined) {
-  const normalizedText = weatherText ?? ''
-  const item = weatherPack.items.find((weatherItem) => {
-    const searchableText = [weatherItem.label, ...weatherItem.keywords].join(' ')
-
-    return searchableText.includes(normalizedText) || normalizedText.includes(weatherItem.label)
-  })
-
-  if (item) {
-    return item.image
-  }
-
-  if (/雷|暴/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.thunder')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雨|淋|阵雨/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.rain')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雪|冰/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.snow')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雾|霾|阴/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.fog')?.image ?? weatherPack.previewImage
-  }
-
-  if (/风/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.wind')?.image ?? weatherPack.previewImage
-  }
-
-  return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.sunny')?.image ?? weatherPack.previewImage
 }
 
 export default MarkdownPreviewPage
