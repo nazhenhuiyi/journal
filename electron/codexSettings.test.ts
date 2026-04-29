@@ -31,6 +31,7 @@ describe('journal Codex settings', () => {
     expect(settings.model).toBe('gpt-5.5')
     expect(settings.modelReasoningEffort).toBe('high')
     expect(settings.systemPrompt).toBe(defaultJournalCodexSystemPrompt)
+    expect(settings.workingDirectory).toBe(journalDirectory)
     await expect(readFile(settings.settingsPath, 'utf8')).resolves.toContain('"model": "gpt-5.5"')
     await expect(readFile(settings.systemPromptPath, 'utf8')).resolves.toBe(defaultJournalCodexSystemPrompt)
   })

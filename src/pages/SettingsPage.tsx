@@ -10,6 +10,7 @@ type CodexSettingsForm = {
 }
 
 type CodexSettingsFile = CodexSettingsForm & {
+  workingDirectory: string
   directory: string
   settingsPath: string
   systemPromptPath: string
@@ -28,6 +29,7 @@ const emptySettings: CodexSettingsFile = {
   model: 'gpt-5.5',
   modelReasoningEffort: 'high',
   systemPrompt: '',
+  workingDirectory: '~/.journal',
   directory: '~/.journal/codex',
   settingsPath: '~/.journal/codex/settings.json',
   systemPromptPath: '~/.journal/codex/system-prompt.md',
@@ -157,6 +159,16 @@ function SettingsPage() {
 
       <div className="min-h-0 flex-1 overflow-auto px-8 py-7">
         <section className="mx-auto flex w-full max-w-[980px] flex-col gap-6">
+          <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 rounded-[8px] border border-[rgba(122,79,50,0.12)] bg-[rgba(255,253,244,0.52)] px-4 py-3 text-[0.88rem]">
+            <span className="font-semibold text-[rgba(47,38,31,0.68)]">数据位置</span>
+            <span
+              className="truncate text-[rgba(47,38,31,0.58)]"
+              title={settings.workingDirectory}
+            >
+              {settings.workingDirectory}
+            </span>
+          </div>
+
           <div className="grid grid-cols-[minmax(0,1fr)_24rem] gap-6">
             <label className="flex flex-col gap-2">
               <span className="text-[0.86rem] font-semibold text-[rgba(47,38,31,0.7)]">
@@ -236,6 +248,12 @@ function SettingsPage() {
               保存位置
             </summary>
             <dl className="m-0 mt-2 grid min-w-[42rem] gap-1 rounded-[8px] border border-[rgba(122,79,50,0.1)] bg-[rgba(255,253,244,0.52)] px-3 py-2">
+              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
+                <dt>数据位置</dt>
+                <dd className="m-0 truncate" title={settings.workingDirectory}>
+                  {settings.workingDirectory}
+                </dd>
+              </div>
               <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
                 <dt>目录</dt>
                 <dd className="m-0 truncate" title={settings.directory}>

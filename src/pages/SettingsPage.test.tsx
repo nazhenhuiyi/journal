@@ -7,6 +7,7 @@ const loadedSettings = {
   model: 'gpt-5.5',
   modelReasoningEffort: 'high' as const,
   systemPrompt: '默认日记助手 prompt',
+  workingDirectory: '/Users/zilin/.journal',
   directory: '/Users/zilin/.journal/codex',
   settingsPath: '/Users/zilin/.journal/codex/settings.json',
   systemPromptPath: '/Users/zilin/.journal/codex/system-prompt.md',
@@ -30,6 +31,7 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('combobox')).toHaveValue('gpt-5.5')
     expect(screen.getByPlaceholderText('输入模型名')).toHaveValue('gpt-5.5')
     expect(screen.getByLabelText('提示词')).toHaveValue('默认日记助手 prompt')
+    expect(screen.getAllByText('/Users/zilin/.journal')).toHaveLength(2)
     expect(screen.getByText('/Users/zilin/.journal/codex/settings.json')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '高' })).toHaveAttribute('aria-pressed', 'true')
   })

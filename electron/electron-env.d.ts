@@ -124,6 +124,7 @@ interface Window {
       model: string
       modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
       systemPrompt: string
+      workingDirectory: string
       directory: string
       settingsPath: string
       systemPromptPath: string
@@ -137,6 +138,7 @@ interface Window {
       model: string
       modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
       systemPrompt: string
+      workingDirectory: string
       directory: string
       settingsPath: string
       systemPromptPath: string

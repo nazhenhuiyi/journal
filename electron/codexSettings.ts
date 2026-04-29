@@ -11,6 +11,7 @@ export type JournalCodexSettings = {
 
 export type JournalCodexSettingsFile = JournalCodexSettings & {
   systemPrompt: string
+  workingDirectory: string
   directory: string
   settingsPath: string
   systemPromptPath: string
@@ -75,6 +76,7 @@ export async function loadJournalCodexSettings(
   return {
     ...settings,
     systemPrompt,
+    workingDirectory: journalDirectory,
     ...paths,
   }
 }
@@ -99,6 +101,7 @@ export async function saveJournalCodexSettings(
     model: settings.model,
     modelReasoningEffort: settings.modelReasoningEffort,
     systemPrompt: settings.systemPrompt,
+    workingDirectory: journalDirectory,
     ...paths,
   }
 }
