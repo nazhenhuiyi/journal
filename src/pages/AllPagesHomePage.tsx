@@ -27,6 +27,7 @@ import rainyNightPhoto from '../assets/memory-photos/rainy-night.jpg'
 import windowPlantPhoto from '../assets/memory-photos/window-plant.jpg'
 import CardStyleShowcase from './all-pages/CardStyleShowcase'
 import { panelTransition } from './markdown-preview/constants'
+import { brand } from '../brand'
 
 const quickActions: Array<{
   title: string
@@ -35,20 +36,20 @@ const quickActions: Array<{
   className: string
 }> = [
   {
-    title: '写日记',
-    description: '记录今天的长日记',
+    title: '写一页',
+    description: '把今天慢慢放下',
     icon: PenLine,
     className: 'all-pages-action all-pages-action-primary',
   },
   {
-    title: '碎碎念',
-    description: '随手记一念',
+    title: '留一句',
+    description: '不用解释完整',
     icon: MessageSquareText,
     className: 'all-pages-action all-pages-action-note',
   },
   {
-    title: '放照片',
-    description: '留住风景',
+    title: '收照片',
+    description: '让画面替你说',
     icon: Camera,
     className: 'all-pages-action all-pages-action-photo',
   },
@@ -119,10 +120,10 @@ function AllPagesHomePage() {
         <section aria-labelledby="all-pages-quote" className="all-pages-quote-card">
           <p className="all-pages-date">
             <CalendarDays aria-hidden="true" size={16} strokeWidth={2.15} />
-            4月25日 · 星期六 · 已安放 18 页
+            {brand.name} · 4月25日 · 星期六 · 已安放 18 页
           </p>
-          <h1 id="all-pages-quote">有些日子不必被解释，只要被留下。</h1>
-          <p className="all-pages-subtitle">写一页、留一句、放一张照片，都算数。</p>
+          <h1 id="all-pages-quote">{brand.tagline}</h1>
+          <p className="all-pages-subtitle">{brand.promise}</p>
         </section>
 
         <section aria-label="快捷入口" className="all-pages-action-cluster">
@@ -149,23 +150,23 @@ function AllPagesHomePage() {
 
       <section aria-labelledby="recent-sketch-title" className="all-pages-sketch-shelf">
         <div className="all-pages-sketch-copy">
-          <p>过程回放</p>
-          <h2 id="recent-sketch-title">最近涂鸦</h2>
+          <p>落笔回放</p>
+          <h2 id="recent-sketch-title">最近随画</h2>
           <span>
             {eventCount > 0
               ? `${eventCount} 个事件 · 原始 ${formatSketchDuration(originalDuration)} · 回放 ${formatSketchDuration(replayDuration)}`
-              : '还没有落笔，先去画一小页。'}
+              : '还没有落笔，先留一小页。'}
           </span>
           <div className="all-pages-sketch-actions">
-            <Link to="/sketch">继续画</Link>
+            <Link to="/sketch">留一笔</Link>
             <Link aria-disabled={eventCount === 0} className={eventCount === 0 ? 'is-disabled' : ''} to="/sketch?replay=1">
-              播放过程
+              看回放
             </Link>
           </div>
         </div>
         <div className="all-pages-sketch-preview">
           <canvas
-            aria-label="最近涂鸦预览"
+            aria-label="最近随画预览"
             height={SKETCH_THUMBNAIL_HEIGHT}
             ref={sketchPreviewRef}
             width={SKETCH_THUMBNAIL_WIDTH}
@@ -177,7 +178,7 @@ function AllPagesHomePage() {
       <section aria-labelledby="old-pages-title" className="all-pages-memory-shelf">
         <div className="all-pages-memory-header">
           <BookOpen aria-hidden="true" size={19} strokeWidth={2.15} />
-          <h2 id="old-pages-title">翻到几页旧日</h2>
+          <h2 id="old-pages-title">翻到几声回声</h2>
         </div>
 
         <div className="all-pages-memory-board">

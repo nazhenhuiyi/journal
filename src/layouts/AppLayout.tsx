@@ -10,6 +10,7 @@ import {
   StickyNote,
   type HandDrawnIcon,
 } from '../components/HandDrawnIcons'
+import { brand } from '../brand'
 import { panelTransition } from '../pages/markdown-preview/constants'
 
 const menuItems: Array<{
@@ -20,11 +21,11 @@ const menuItems: Array<{
   disabled?: boolean
 }> = [
   { label: '今日', description: '', icon: PenLine, to: '/preview' },
-  { label: '回廊', description: '记忆策展', icon: BookOpen, to: '/pages' },
-  { label: '画板', description: '涂鸦过程', icon: StickyNote, to: '/sketch' },
-  { label: '相册', description: '照片记录', icon: Image, disabled: true },
+  { label: '回声', description: '旧页轻轻翻起', icon: BookOpen, to: '/pages' },
+  { label: '随画', description: '落笔也留下', icon: StickyNote, to: '/sketch' },
+  { label: '照片', description: '画面待安放', icon: Image, disabled: true },
   { label: '日历', description: '时间索引', icon: CalendarDays, disabled: true },
-  { label: '设置', description: '偏好与助手', icon: Settings, to: '/settings' },
+  { label: '设置', description: '页边与偏好', icon: Settings, to: '/settings' },
 ]
 
 function formatMenuDate(date = new Date()) {
@@ -77,8 +78,14 @@ function AppLayout() {
         transition={panelTransition}
       >
         <nav aria-label="主菜单" className="journal-menu">
-          <div aria-hidden="true" className="journal-menu-mark">
-            <BookOpen size={25} strokeWidth={2.05} />
+          <div className="journal-menu-brand">
+            <div aria-hidden="true" className="journal-menu-mark">
+              <BookOpen size={25} strokeWidth={2.05} />
+            </div>
+            <div className="journal-menu-title">
+              <span>{brand.name}</span>
+              <span>{brand.tagline}</span>
+            </div>
           </div>
           <div className="journal-menu-list">
             {menuItems.map((item) => {

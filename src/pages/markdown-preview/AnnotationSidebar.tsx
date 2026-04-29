@@ -1,5 +1,6 @@
 import type { Annotation } from '../../domain/annotations'
 import { annotationKinds } from './constants'
+import { brand } from '../../brand'
 
 const annotationKindStyles: Record<Annotation['kind'], string> = {
   observation: 'text-sage',
@@ -26,7 +27,9 @@ function AnnotationSidebar({
       <div className="sticky top-5">
         <div className="mb-5 flex items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-semibold leading-none text-ink">批注</h2>
+            <h2 className="font-display text-xl font-semibold leading-none text-ink">
+              {brand.assistantName}
+            </h2>
           </div>
           <span className="mb-0.5 text-xs font-medium text-ink/40">
             {annotations.length} 条
@@ -74,7 +77,7 @@ function AnnotationSidebar({
                   onClick={() => onChatWithAnnotation(annotation.id)}
                   type="button"
                 >
-                  继续聊
+                  沿着聊
                 </button>
               </div>
             )

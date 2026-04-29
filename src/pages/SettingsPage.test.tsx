@@ -6,7 +6,7 @@ const loadedSettings = {
   version: 1 as const,
   model: 'gpt-5.5',
   modelReasoningEffort: 'high' as const,
-  systemPrompt: '默认日记助手 prompt',
+  systemPrompt: '默认页边分寸',
   workingDirectory: '/Users/zilin/.journal',
   directory: '/Users/zilin/.journal/codex',
   settingsPath: '/Users/zilin/.journal/codex/settings.json',
@@ -26,11 +26,11 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />)
 
-    await screen.findByText('已载入')
+    await screen.findByText('已翻到设置')
 
     expect(screen.getByRole('combobox')).toHaveValue('gpt-5.5')
-    expect(screen.getByPlaceholderText('输入模型名')).toHaveValue('gpt-5.5')
-    expect(screen.getByLabelText('提示词')).toHaveValue('默认日记助手 prompt')
+    expect(screen.getByPlaceholderText('模型名')).toHaveValue('gpt-5.5')
+    expect(screen.getByLabelText('页边分寸')).toHaveValue('默认页边分寸')
     expect(screen.getAllByText('/Users/zilin/.journal')).toHaveLength(2)
     expect(screen.getByText('/Users/zilin/.journal/codex/settings.json')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '高' })).toHaveAttribute('aria-pressed', 'true')
@@ -51,17 +51,17 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />)
 
-    await screen.findByText('已载入')
+    await screen.findByText('已翻到设置')
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'gpt-5.4-mini' } })
-    fireEvent.change(screen.getByPlaceholderText('输入模型名'), {
+    fireEvent.change(screen.getByPlaceholderText('模型名'), {
       target: { value: 'future-model' },
     })
     fireEvent.click(screen.getByRole('button', { name: '中' }))
-    fireEvent.change(screen.getByLabelText('提示词'), {
+    fireEvent.change(screen.getByLabelText('页边分寸'), {
       target: { value: '新的 prompt' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.click(screen.getByRole('button', { name: '收好' }))
 
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({
@@ -70,7 +70,7 @@ describe('SettingsPage', () => {
         systemPrompt: '新的 prompt',
       })
     })
-    expect(await screen.findByText('已保存，下一次回应会使用这份设置')).toBeInTheDocument()
+    expect(await screen.findByText('已收好，下一次页边回应会照这份分寸来')).toBeInTheDocument()
   })
 
   it('shows validation errors and does not save empty fields', async () => {
@@ -83,19 +83,19 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />)
 
-    await screen.findByText('已载入')
+    await screen.findByText('已翻到设置')
 
-    fireEvent.change(screen.getByPlaceholderText('输入模型名'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.change(screen.getByPlaceholderText('模型名'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '收好' }))
 
     expect(await screen.findByText('模型名称不能为空，也不能包含换行。')).toBeInTheDocument()
     expect(save).not.toHaveBeenCalled()
 
-    fireEvent.change(screen.getByPlaceholderText('输入模型名'), { target: { value: 'gpt-5.5' } })
-    fireEvent.change(screen.getByLabelText('提示词'), { target: { value: '   ' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.change(screen.getByPlaceholderText('模型名'), { target: { value: 'gpt-5.5' } })
+    fireEvent.change(screen.getByLabelText('页边分寸'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: '收好' }))
 
-    expect(await screen.findByText('提示词不能为空。')).toBeInTheDocument()
+    expect(await screen.findByText('页边分寸不能为空。')).toBeInTheDocument()
     expect(save).not.toHaveBeenCalled()
   })
 })

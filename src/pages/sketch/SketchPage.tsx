@@ -240,8 +240,8 @@ function SketchPage() {
         transition={{ ...panelTransition, delay: 0.05 }}
       >
         <div>
-          <p>简易画板</p>
-          <h1>今天的涂鸦过程</h1>
+          <p>随画</p>
+          <h1>把落笔的过程也留下</h1>
         </div>
         <div aria-label="画作状态" className="sketch-stats" role="status">
           <span>{state.events.length} 个事件</span>
@@ -377,7 +377,7 @@ function SketchPage() {
             />
           </div>
           <div className="sketch-stage-footer">
-            <span>{isReplayMode ? `回放进度 ${Math.min(replayIndex, timeline.steps.length)} / ${timeline.steps.length}` : '铅笔线条会记录为可回放事件'}</span>
+            <span>{isReplayMode ? `回放进度 ${Math.min(replayIndex, timeline.steps.length)} / ${timeline.steps.length}` : '每一笔会悄悄记录成回放'}</span>
             {isReplayMode ? (
               <button onClick={() => setIsReplayMode(false)} type="button">
                 回到画布

@@ -196,11 +196,20 @@ body {
   transform: rotate(-2deg);
 }
 
+.journal-menu-brand {
+  display: grid;
+  grid-template-columns: 2.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.3rem;
+}
+
 .journal-menu-title {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  padding: 0.25rem 0.75rem 0.35rem;
+  min-width: 0;
+  padding: 0.25rem 0.1rem 0.35rem;
 }
 
 .journal-menu-title span:first-child {
@@ -211,6 +220,9 @@ body {
 }
 
 .journal-menu-title span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: rgba(47, 38, 31, 0.5);
   font-size: 0.76rem;
 }

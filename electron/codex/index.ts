@@ -241,14 +241,14 @@ function createThreadOptions(workingDirectory: string, settings: JournalCodexSet
 
 function normalizeAnnotationDraftsPayload(payload: unknown): CodexAnnotationDraftsPayload {
   if (!isRecord(payload)) {
-    throw new Error('AI 批注请求格式不正确。')
+    throw new Error('页边批注请求格式不正确。')
   }
 
   const date = stringFromRecord(payload, 'date')
   const longEntryMarkdown = stringFromRecord(payload, 'longEntryMarkdown')
 
   if (!date || !longEntryMarkdown) {
-    throw new Error('AI 批注需要日期和日记正文。')
+    throw new Error('页边批注需要日期和日记正文。')
   }
 
   return { date, longEntryMarkdown }
@@ -278,13 +278,13 @@ function normalizeAnnotationChatPayload(payload: unknown): CodexAnnotationChatPa
 }
 
 function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
-  return `你是一个温和、克制的日记阅读助手。请只基于下面这一天的长日记生成 3-5 条 AI 批注草稿。
+  return `你是「且留」里的页边批注者。请只基于下面这一天的长日记生成 3-5 条页边批注草稿。
 
 要求：
 - 不做心理诊断，不使用病理化措辞。
 - 优先生成情绪观察、复盘追问、轻量的模式提醒。
 - kind 只能是 observation 或 question。
-- content 使用中文，短一些，像写在页边的批注。
+- content 使用中文，短一些，像写在页边的批注，不要替用户解释人生。
 - 如果批注能绑定到具体原文，anchorQuote 必须是 LONG_ENTRY_MARKDOWN 中连续出现的精确 Markdown 子串。
 - anchorPrefix 和 anchorSuffix 是 anchorQuote 前后的短上下文，用于重复文本定位。
 - 如果是整天层面的观察，anchorQuote、anchorPrefix、anchorSuffix 都返回 null。
@@ -297,7 +297,7 @@ ${payload.longEntryMarkdown}`
 }
 
 function buildAnnotationChatPrompt(payload: CodexAnnotationChatPayload) {
-  return `你正在和用户围绕一条日记批注继续深入聊天。保持温和、具体、克制，不做诊断。
+  return `你正在和用户围绕一条日记页边批注继续聊天。保持温和、具体、克制，不做诊断。
 
 日期：${payload.date}
 

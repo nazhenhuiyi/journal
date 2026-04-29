@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import SegmentedControl from '../components/SegmentedControl'
+import { brand } from '../brand'
 
 type CodexReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 
@@ -42,7 +43,7 @@ function getCodexSettingsStore() {
 function SettingsPage() {
   const [settings, setSettings] = useState<CodexSettingsFile>(emptySettings)
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading')
-  const [message, setMessage] = useState('正在读取设置')
+  const [message, setMessage] = useState('正在取出页边设置')
   const selectedModel = modelOptions.includes(settings.model as (typeof modelOptions)[number])
     ? settings.model
     : 'custom'
@@ -58,7 +59,7 @@ function SettingsPage() {
         }
 
         setStatus('error')
-        setMessage('当前环境无法读取设置。')
+        setMessage('当前环境还读不到页边设置。')
       })
       return
     }
@@ -72,7 +73,7 @@ function SettingsPage() {
 
         setSettings(loadedSettings)
         setStatus('ready')
-        setMessage('已载入')
+        setMessage('已翻到设置')
       })
       .catch((error: unknown) => {
         if (!isMounted) {
@@ -80,7 +81,7 @@ function SettingsPage() {
         }
 
         setStatus('error')
-        setMessage(formatSettingsError(error, '读取设置失败，请重试。'))
+        setMessage(formatSettingsError(error, '设置暂时没有读到，请重试。'))
       })
 
     return () => {
@@ -95,7 +96,7 @@ function SettingsPage() {
 
     if (!store) {
       setStatus('error')
-      setMessage('当前环境无法保存设置。')
+      setMessage('当前环境还不能收好设置。')
       return
     }
 
@@ -107,12 +108,12 @@ function SettingsPage() {
 
     if (!systemPrompt) {
       setStatus('error')
-      setMessage('提示词不能为空。')
+      setMessage('页边分寸不能为空。')
       return
     }
 
     setStatus('saving')
-    setMessage('正在保存')
+    setMessage('正在收好')
 
     try {
       const savedSettings = await store.save({
@@ -123,10 +124,10 @@ function SettingsPage() {
 
       setSettings(savedSettings)
       setStatus('saved')
-      setMessage('已保存，下一次回应会使用这份设置')
+      setMessage(`已收好，下一次${brand.assistantName}回应会照这份分寸来`)
     } catch (error) {
       setStatus('error')
-      setMessage(formatSettingsError(error, '保存设置失败，请重试。'))
+      setMessage(formatSettingsError(error, '设置暂时没有收好，请重试。'))
     }
   }
 
@@ -134,9 +135,11 @@ function SettingsPage() {
     <div className="flex h-full min-h-0 flex-col bg-[rgba(255,250,240,0.42)]">
       <header className="journal-topbar flex min-h-14 items-center justify-between gap-4 px-8 py-3">
         <div>
-          <h1 className="m-0 font-display text-[1.4rem] font-semibold text-ink">设置</h1>
+          <h1 className="m-0 font-display text-[1.4rem] font-semibold text-ink">
+            {brand.assistantName}设置
+          </h1>
           <p className="m-0 mt-1 text-[0.82rem] text-[rgba(47,38,31,0.54)]">
-            调整日记助手的回应方式
+            调整页边批注的分寸
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -152,7 +155,7 @@ function SettingsPage() {
             onClick={handleSave}
             type="button"
           >
-            {status === 'saving' ? '保存中' : '保存'}
+            {status === 'saving' ? '收好中' : '收好'}
           </button>
         </div>
       </header>
@@ -172,7 +175,7 @@ function SettingsPage() {
           <div className="grid grid-cols-[minmax(0,1fr)_24rem] gap-6">
             <label className="flex flex-col gap-2">
               <span className="text-[0.86rem] font-semibold text-[rgba(47,38,31,0.7)]">
-                默认模型
+              回应模型
               </span>
               <div className="grid grid-cols-[13rem_minmax(0,1fr)] gap-3">
                 <select
@@ -201,7 +204,7 @@ function SettingsPage() {
                       model: event.target.value,
                     }))
                   }
-                  placeholder="输入模型名"
+                  placeholder="模型名"
                   value={settings.model}
                 />
               </div>
@@ -209,11 +212,11 @@ function SettingsPage() {
 
             <div className="flex flex-col gap-2">
               <span className="text-[0.86rem] font-semibold text-[rgba(47,38,31,0.7)]">
-                推理强度
+                思考深度
               </span>
               <div className="inline-flex w-fit rounded-[10px] border border-[rgba(122,79,50,0.12)] bg-[rgba(255,253,244,0.68)] p-1">
                 <SegmentedControl
-                  ariaLabel="推理强度"
+                  ariaLabel="思考深度"
                   onChange={(modelReasoningEffort) =>
                     setSettings((currentSettings) => ({
                       ...currentSettings,
@@ -229,7 +232,7 @@ function SettingsPage() {
 
           <label className="flex min-h-0 flex-1 flex-col gap-2">
             <span className="text-[0.86rem] font-semibold text-[rgba(47,38,31,0.7)]">
-              提示词
+              页边分寸
             </span>
             <textarea
               className="min-h-[25rem] resize-none rounded-[8px] border border-[rgba(122,79,50,0.14)] bg-[rgba(255,253,244,0.72)] p-4 font-sans text-[0.96rem] leading-7 text-ink outline-none shadow-[0_14px_38px_rgba(122,79,50,0.06)] focus:border-[rgba(20,114,79,0.38)]"
@@ -245,7 +248,7 @@ function SettingsPage() {
 
           <details className="w-fit text-[0.8rem] text-[rgba(47,38,31,0.52)]">
             <summary className="cursor-pointer select-none rounded-[7px] px-1 py-1 text-[rgba(47,38,31,0.58)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(111,126,99,0.28)]">
-              保存位置
+              本地位置
             </summary>
             <dl className="m-0 mt-2 grid min-w-[42rem] gap-1 rounded-[8px] border border-[rgba(122,79,50,0.1)] bg-[rgba(255,253,244,0.52)] px-3 py-2">
               <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
@@ -293,7 +296,7 @@ function formatSettingsError(error: unknown, fallback: string) {
     error.message.includes('提示词不能为空') ||
     error.message.includes('System prompt 不能为空')
   ) {
-    return error.message.replace('System prompt', '提示词')
+    return error.message.replace('System prompt', '页边分寸').replace('提示词', '页边分寸')
   }
 
   return fallback

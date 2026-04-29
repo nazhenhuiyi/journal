@@ -37,6 +37,7 @@ import {
 } from './markdown-preview/managedJournalMarkdown'
 import MarkdownPreviewArticle from './markdown-preview/MarkdownPreviewArticle'
 import type { AnnotationOverlayRect } from './markdown-preview/types'
+import { brand } from '../brand'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
@@ -192,7 +193,7 @@ function MarkdownPreviewPage() {
   const saveRequestIdRef = useRef(0)
   const chatLoadRequestIdRef = useRef(0)
   const isReviewing = journalMode === 'review'
-  const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
+  const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
   const topbarTitle = formatJournalTopbarTitle(
@@ -592,7 +593,7 @@ function MarkdownPreviewPage() {
     const date = journalFile?.date ?? realTodayDate
 
     if (!codex?.generateAnnotationDrafts) {
-      setAiPanelError('当前环境还没有接入 AI 批注。')
+      setAiPanelError(`当前环境还没有接入${brand.assistantLabel}。`)
       return
     }
 
@@ -615,7 +616,7 @@ function MarkdownPreviewPage() {
 
       if (!longEntryMarkdown.trim()) {
         setAiPanelMode('idle')
-        setAiPanelError('今天还没有可读取的长日记内容。')
+        setAiPanelError(`今天还没有可读取的长日记，${brand.assistantName}先不打扰。`)
         return
       }
 
@@ -639,10 +640,10 @@ function MarkdownPreviewPage() {
 
       setAiDrafts(drafts)
       setAiPanelMode(drafts.length > 0 ? 'drafts' : 'idle')
-      setAiPanelError(drafts.length > 0 ? '' : 'AI 没有生成可用的批注草稿。')
+      setAiPanelError(drafts.length > 0 ? '' : `${brand.assistantName}没有留下可用的页边话。`)
     } catch {
       setAiPanelMode('idle')
-      setAiPanelError('生成批注失败了，稍后可以再试一次。')
+      setAiPanelError(`${brand.assistantName}刚才没有读完，稍后可以再试一次。`)
     }
   }
 
@@ -694,7 +695,7 @@ function MarkdownPreviewPage() {
       handleIgnoreDraft(draftId)
       setAiPanelError('')
     } catch {
-      setAiPanelError('保存批注失败了，刚才的草稿还没有写入。')
+      setAiPanelError('刚才的页边话还没有写入。')
     }
   }
 
@@ -732,7 +733,7 @@ function MarkdownPreviewPage() {
       }
     } catch {
       if (chatLoadRequestIdRef.current === loadRequestId) {
-        setAiPanelError('之前的聊天记录暂时没有读到，可以直接继续聊。')
+        setAiPanelError('之前的对话暂时没有读到，可以直接继续聊。')
       }
     } finally {
       if (chatLoadRequestIdRef.current === loadRequestId) {
@@ -750,7 +751,7 @@ function MarkdownPreviewPage() {
     }
 
     if (!codex?.chatWithAnnotation) {
-      setAiPanelError('当前环境还没有接入批注聊天。')
+      setAiPanelError(`当前环境还没有接入${brand.assistantName}对话。`)
       return
     }
 
@@ -800,7 +801,7 @@ function MarkdownPreviewPage() {
         setActiveAnnotationId(chatAnnotation.id)
       }
     } catch {
-      setAiPanelError('这条批注暂时聊不下去了，可以稍后重试。')
+      setAiPanelError('这句页边话暂时接不上，可以稍后重试。')
     } finally {
       setChatStatus('idle')
     }

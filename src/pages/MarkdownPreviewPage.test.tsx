@@ -508,8 +508,8 @@ describe('MarkdownPreviewPage', () => {
       expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('测试日记')
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI 批注' }))
-    fireEvent.click(screen.getByRole('button', { name: '生成今日批注' }))
+    fireEvent.click(screen.getByRole('button', { name: '页边批注' }))
+    fireEvent.click(screen.getByRole('button', { name: '请页边读一遍今天' }))
 
     await waitFor(() => {
       expect(generateAnnotationDrafts).toHaveBeenCalledWith({
@@ -587,13 +587,13 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
-      expect(screen.queryByRole('button', { name: 'AI 批注' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '页边批注' })).not.toBeInTheDocument()
     })
 
     enterReviewMode()
-    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+    fireEvent.click(await screen.findByRole('button', { name: '沿着聊' }))
 
-    expect(screen.getByRole('heading', { name: '深入聊批注' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '沿着这句聊' })).toBeInTheDocument()
     expect(screen.queryByText('Codex')).not.toBeInTheDocument()
   })
 
@@ -655,13 +655,13 @@ describe('MarkdownPreviewPage', () => {
     })
     enterReviewMode()
 
-    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+    fireEvent.click(await screen.findByRole('button', { name: '沿着聊' }))
 
     expect(screen.getByText('摘自原文')).toBeInTheDocument()
     expect(screen.getByText('第 2 行')).toBeInTheDocument()
     expect(screen.getByLabelText('批注原文')).toHaveTextContent('今天记得很轻')
 
-    fireEvent.change(screen.getByRole('textbox', { name: '继续聊批注' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '继续聊页边批注' }), {
       target: { value: '展开说说' },
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -687,9 +687,9 @@ describe('MarkdownPreviewPage', () => {
       expect(screen.getByText('可以从“轻”这个词继续看。')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '返回批注生成' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回页边批注' }))
 
-    expect(screen.getByRole('heading', { name: 'AI 批注' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '页边批注' })).toBeInTheDocument()
   })
 
   it('loads existing Codex thread messages when reopening an annotation chat', async () => {
@@ -744,7 +744,7 @@ describe('MarkdownPreviewPage', () => {
       expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
     })
     enterReviewMode()
-    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+    fireEvent.click(await screen.findByRole('button', { name: '沿着聊' }))
 
     await waitFor(() => {
       expect(readAnnotationThread).toHaveBeenCalledWith('thread_ann_threaded')
@@ -822,7 +822,7 @@ describe('MarkdownPreviewPage', () => {
     expect(screen.getByRole('heading', { name: /\d+月\d+日 · 周./ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '页边' })).not.toBeInTheDocument()
   })
 
   it('restores the last selected review mode for a non-empty journal', async () => {
@@ -845,7 +845,7 @@ describe('MarkdownPreviewPage', () => {
       expect(loadToday).toHaveBeenCalledOnce()
       expect(screen.getByRole('button', { name: '回看' })).toHaveAttribute('aria-pressed', 'true')
       expect(screen.getByRole('heading', { name: '从文件醒来' })).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: '批注' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '页边' })).toBeInTheDocument()
     })
   })
 
@@ -869,7 +869,7 @@ describe('MarkdownPreviewPage', () => {
       expect(loadToday).toHaveBeenCalledOnce()
       expect(screen.getByRole('button', { name: '书写' })).toHaveAttribute('aria-pressed', 'true')
       expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
-      expect(screen.queryByRole('heading', { name: '批注' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: '页边' })).not.toBeInTheDocument()
     })
   })
 
@@ -892,7 +892,7 @@ describe('MarkdownPreviewPage', () => {
 
     expect(screen.getByRole('button', { name: '回看' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { name: '批注目标' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '批注' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '页边' })).toBeInTheDocument()
   })
 
   it('mounts the writing surface as a CodeMirror editor', () => {

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Undo } from '../../components/HandDrawnIcons'
 import { annotationKinds, listTransition, panelTransition } from './constants'
 import type { Annotation, LinePosition } from '../../domain/annotations'
+import { brand } from '../../brand'
 
 export type AiPanelDraft = {
   id: string
@@ -65,11 +66,11 @@ function FloatingAiPanel({
         className="fixed bottom-6 right-6 z-40 h-12 rounded-full border border-sage/30 bg-ink px-5 text-sm font-semibold text-white shadow-lg shadow-ink/15 transition hover:bg-walnut focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
         initial={{ opacity: 0, y: 12 }}
         onClick={onOpen}
-        title="打开 AI 批注"
+        title={`打开${brand.assistantLabel}`}
         transition={panelTransition}
         type="button"
       >
-        AI 批注
+        {brand.assistantLabel}
       </motion.button>
     )
   }
@@ -91,26 +92,26 @@ function FloatingAiPanel({
         {mode === 'chat' ? (
           <>
             <button
-              aria-label="返回批注生成"
+              aria-label={`返回${brand.assistantLabel}`}
               className="flex h-8 w-8 items-center justify-center text-walnut/70 transition hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
               onClick={onCloseChat}
-              title="返回批注生成"
+              title={`返回${brand.assistantLabel}`}
               type="button"
             >
               <Undo aria-hidden="true" size={18} strokeWidth={2.1} />
             </button>
             <h2 className="justify-self-center font-display text-base font-semibold text-ink">
-              深入聊批注
+              沿着这句聊
             </h2>
             <span aria-hidden="true" />
           </>
         ) : (
           <>
-            <h2 className="font-display text-lg font-semibold text-ink">AI 批注</h2>
+            <h2 className="font-display text-lg font-semibold text-ink">{brand.assistantLabel}</h2>
             <button
               className="h-8 w-8 justify-self-end border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
               onClick={onOpen}
-              title="收起 AI 面板"
+              title={`收起${brand.assistantName}`}
               type="button"
             >
               -
@@ -177,7 +178,7 @@ function DraftPanel({
           onClick={onGenerate}
           type="button"
         >
-          {mode === 'generating' ? '正在生成批注...' : '生成今日批注'}
+          {mode === 'generating' ? `${brand.assistantName}正在读...` : `请${brand.assistantName}读一遍今天`}
         </button>
       ) : null}
 
@@ -229,7 +230,7 @@ function DraftPanel({
         </motion.div>
       ) : isGenerationAvailable ? (
         <p className="mt-4 text-sm leading-6 text-ink/55">
-          会按内置的温和配置读取今天的长日记，生成观察和追问类批注草稿。
+          {brand.assistantDescription}只读取今天的长日记。
         </p>
       ) : null}
     </div>
@@ -264,7 +265,7 @@ function ChatPanel({
       <div className="mt-5 space-y-3">
         {chatStatus === 'loading' && chatMessages.length === 0 ? (
           <p className="border border-walnut/10 bg-white px-3 py-2 text-sm leading-6 text-ink/55">
-            正在找回之前的聊天...
+            正在翻回之前的对话...
           </p>
         ) : null}
 
@@ -281,7 +282,7 @@ function ChatPanel({
                 }`}
               >
                 <p className={`mb-1 text-[0.68rem] font-semibold ${isUser ? 'text-walnut/70' : 'text-sage'}`}>
-                  {isUser ? '你' : '回应'}
+                  {isUser ? '你' : brand.assistantName}
                 </p>
                 <p>{message.content}</p>
               </div>
@@ -298,11 +299,11 @@ function ChatPanel({
         }}
       >
         <textarea
-          aria-label="继续聊批注"
+          aria-label={`继续聊${brand.assistantLabel}`}
           className="min-h-24 w-full resize-none border border-walnut/10 bg-white px-3 py-2 text-sm leading-6 text-ink outline-none transition focus:border-sage"
           disabled={chatStatus === 'loading'}
           onChange={(event) => onUpdateChatInput(event.target.value)}
-          placeholder="围绕这条批注继续问..."
+          placeholder="沿着这句页边话继续问..."
           value={chatInput}
         />
         <button
@@ -343,7 +344,7 @@ function getAnnotationSource(annotation: Annotation) {
   if (annotation.target.type !== 'longEntryRange') {
     return {
       location: '整篇日记',
-      quote: '这条批注是在看完整篇日记之后留下的。',
+      quote: '这句话是在看完整篇日记之后留在页边的。',
     }
   }
 
