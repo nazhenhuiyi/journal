@@ -157,12 +157,13 @@ function MarkdownPreviewPage() {
   const [chatAnnotationId, setChatAnnotationId] = useState('')
   const [chatMessages, setChatMessages] = useState<AiPanelMessage[]>([])
   const [chatInput, setChatInput] = useState('')
-  const [chatStatus, setChatStatus] = useState<'idle' | 'sending'>('idle')
+  const [chatStatus, setChatStatus] = useState<'idle' | 'loading' | 'sending'>('idle')
   const previewRef = useRef<HTMLDivElement>(null)
   const hasLoadedJournalRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef(annotationTargetsEntry)
   const saveRequestIdRef = useRef(0)
+  const chatLoadRequestIdRef = useRef(0)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
@@ -657,22 +658,54 @@ function MarkdownPreviewPage() {
     }
   }
 
-  function handleChatWithAnnotation(annotationId: string) {
+  async function handleChatWithAnnotation(annotationId: string) {
+    const annotation = journalAnnotations.find((currentAnnotation) => currentAnnotation.id === annotationId) ?? null
+    const threadId = annotation?.ai?.threadId
+    const loadRequestId = chatLoadRequestIdRef.current + 1
+
+    chatLoadRequestIdRef.current = loadRequestId
     selectAnnotation(annotationId, true)
     setChatAnnotationId(annotationId)
     setChatMessages([])
     setChatInput('')
-    setChatStatus('idle')
+    setChatStatus(threadId ? 'loading' : 'idle')
     setAiPanelError('')
     setAiPanelMode('chat')
     setIsAiPanelOpen(true)
+
+    if (!threadId) {
+      return
+    }
+
+    const codex = getCodexStore()
+
+    if (!codex?.readAnnotationThread) {
+      setChatStatus('idle')
+      return
+    }
+
+    try {
+      const result = await codex.readAnnotationThread(threadId)
+
+      if (chatLoadRequestIdRef.current === loadRequestId) {
+        setChatMessages(result.messages)
+      }
+    } catch {
+      if (chatLoadRequestIdRef.current === loadRequestId) {
+        setAiPanelError('之前的聊天记录暂时没有读到，可以直接继续聊。')
+      }
+    } finally {
+      if (chatLoadRequestIdRef.current === loadRequestId) {
+        setChatStatus('idle')
+      }
+    }
   }
 
   async function handleSendAnnotationChat() {
     const codex = getCodexStore()
     const message = chatInput.trim()
 
-    if (!message || !chatAnnotation || chatStatus === 'sending') {
+    if (!message || !chatAnnotation || chatStatus !== 'idle') {
       return
     }
 
@@ -814,8 +847,10 @@ function MarkdownPreviewPage() {
         mode={aiPanelMode}
         onAcceptDraft={(draftId) => void handleAcceptDraft(draftId)}
         onCloseChat={() => {
+          chatLoadRequestIdRef.current += 1
           setAiPanelMode(aiDrafts.length > 0 ? 'drafts' : 'idle')
           setChatAnnotationId('')
+          setChatStatus('idle')
         }}
         onGenerate={() => void handleGenerateAiAnnotations()}
         onIgnoreDraft={handleIgnoreDraft}

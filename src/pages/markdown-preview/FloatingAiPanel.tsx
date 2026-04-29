@@ -18,7 +18,7 @@ type FloatingAiPanelProps = {
   activeAnnotation: Annotation | null
   chatInput: string
   chatMessages: AiPanelMessage[]
-  chatStatus: 'idle' | 'sending'
+  chatStatus: 'idle' | 'loading' | 'sending'
   drafts: AiPanelDraft[]
   error: string
   isOpen: boolean
@@ -208,7 +208,7 @@ type ChatPanelProps = {
   annotation: Annotation
   chatInput: string
   chatMessages: AiPanelMessage[]
-  chatStatus: 'idle' | 'sending'
+  chatStatus: 'idle' | 'loading' | 'sending'
   onCloseChat: () => void
   onSendChat: () => void
   onUpdateChatInput: (value: string) => void
@@ -238,6 +238,12 @@ function ChatPanel({
       </div>
 
       <div className="mt-4 space-y-3">
+        {chatStatus === 'loading' && chatMessages.length === 0 ? (
+          <p className="border border-walnut/10 bg-white px-3 py-2 text-sm leading-6 text-ink/55">
+            正在找回之前的聊天...
+          </p>
+        ) : null}
+
         {chatMessages.map((message) => (
           <div
             key={message.id}
@@ -262,16 +268,17 @@ function ChatPanel({
         <textarea
           aria-label="继续聊批注"
           className="min-h-24 w-full resize-none border border-walnut/10 bg-white px-3 py-2 text-sm leading-6 text-ink outline-none transition focus:border-sage"
+          disabled={chatStatus === 'loading'}
           onChange={(event) => onUpdateChatInput(event.target.value)}
           placeholder="围绕这条批注继续问..."
           value={chatInput}
         />
         <button
           className="mt-2 w-full border border-ink/15 bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-walnut disabled:cursor-wait disabled:opacity-60"
-          disabled={chatStatus === 'sending' || !chatInput.trim()}
+          disabled={chatStatus !== 'idle' || !chatInput.trim()}
           type="submit"
         >
-          {chatStatus === 'sending' ? '正在回复...' : '发送'}
+          {chatStatus === 'loading' ? '正在加载...' : chatStatus === 'sending' ? '正在回复...' : '发送'}
         </button>
       </form>
     </div>

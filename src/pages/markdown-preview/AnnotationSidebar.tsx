@@ -49,7 +49,7 @@ function AnnotationSidebar({
               <motion.div
                 key={annotation.id}
                 animate={{ opacity: 1, scale: isActive ? 1.012 : 1, y: 0 }}
-                className={`w-full border px-4 py-3 text-left transition ${
+                className={`group w-full border px-4 py-3 text-left transition ${
                   isActive
                     ? 'border-sage bg-sage/10 shadow-sm'
                     : 'border-walnut/10 bg-[#fbf8ef] hover:border-sage/40 hover:bg-white'
@@ -74,7 +74,7 @@ function AnnotationSidebar({
                   <span className="mt-2 block text-sm leading-6 text-ink/75">{annotation.body.content}</span>
                 </button>
                 <button
-                  className="mt-3 text-xs font-semibold text-walnut underline decoration-walnut/30 underline-offset-4 transition hover:text-ink"
+                  className="mt-3 text-xs font-semibold text-walnut opacity-0 underline decoration-walnut/30 underline-offset-4 transition hover:text-ink group-hover:opacity-100 group-focus-within:opacity-100"
                   onClick={() => onChatWithAnnotation(annotation.id)}
                   type="button"
                 >

@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld('codex', {
   chatWithAnnotation(payload: unknown) {
     return ipcRenderer.invoke('codex:chatWithAnnotation', payload)
   },
+  readAnnotationThread(threadId: string) {
+    return ipcRenderer.invoke('codex:readAnnotationThread', threadId)
+  },
 })
 
 contextBridge.exposeInMainWorld('journalStore', {

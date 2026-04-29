@@ -1,3 +1,6 @@
+import { type Dirent, promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { Codex, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
 
@@ -40,6 +43,7 @@ export type CodexAnnotationDraftsResult = {
 }
 
 export type CodexAnnotationChatMessage = {
+  id: string
   role: 'user' | 'assistant'
   content: string
 }
@@ -59,6 +63,7 @@ export type CodexAnnotationChatResult = {
 }
 
 const codex = new Codex()
+const codexSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions')
 
 const annotationDraftsSchema = {
   type: 'object',
@@ -144,6 +149,7 @@ export async function askCodex(prompt: unknown, workingDirectory: string): Promi
   const thread = codex.startThread({
     approvalPolicy: 'never',
     sandboxMode: 'read-only',
+    skipGitRepoCheck: true,
     workingDirectory,
   })
 
@@ -165,6 +171,7 @@ export async function generateAnnotationDrafts(
   const thread = codex.startThread({
     approvalPolicy: 'never',
     sandboxMode: 'read-only',
+    skipGitRepoCheck: true,
     workingDirectory,
   })
   const turn = await thread.run(buildAnnotationDraftsPrompt(normalizedPayload), {
@@ -184,24 +191,45 @@ export async function chatWithAnnotation(
   workingDirectory: string,
 ): Promise<CodexAnnotationChatResult> {
   const normalizedPayload = normalizeAnnotationChatPayload(payload)
+  const hasExistingThread = Boolean(normalizedPayload.threadId)
   const thread = normalizedPayload.threadId
     ? codex.resumeThread(normalizedPayload.threadId, {
         approvalPolicy: 'never',
         sandboxMode: 'read-only',
+        skipGitRepoCheck: true,
         workingDirectory,
       })
     : codex.startThread({
         approvalPolicy: 'never',
         sandboxMode: 'read-only',
+        skipGitRepoCheck: true,
         workingDirectory,
       })
-  const turn = await thread.run(buildAnnotationChatPrompt(normalizedPayload))
+  const turn = await thread.run(
+    hasExistingThread ? normalizedPayload.message : buildAnnotationChatPrompt(normalizedPayload),
+  )
 
   return {
     response: turn.finalResponse,
     threadId: thread.id,
     usage: turn.usage,
   }
+}
+
+export async function readAnnotationThread(threadId: unknown): Promise<{ messages: CodexAnnotationChatMessage[] }> {
+  if (typeof threadId !== 'string' || !threadId.trim()) {
+    throw new Error('批注聊天 threadId 不正确。')
+  }
+
+  const sessionPath = await findCodexSessionPath(threadId.trim())
+
+  if (!sessionPath) {
+    return { messages: [] }
+  }
+
+  const content = await fs.readFile(sessionPath, 'utf8')
+
+  return { messages: parseAnnotationThreadMessages(content) }
 }
 
 function normalizeAnnotationDraftsPayload(payload: unknown): CodexAnnotationDraftsPayload {
@@ -276,6 +304,116 @@ ${payload.journalMarkdown}
 ${payload.message}`
 }
 
+async function findCodexSessionPath(threadId: string) {
+  const matchingPaths: string[] = []
+
+  await collectCodexSessionPaths(codexSessionsDirectory, threadId, matchingPaths)
+
+  return matchingPaths.sort().at(-1) ?? null
+}
+
+async function collectCodexSessionPaths(directory: string, threadId: string, matchingPaths: string[]) {
+  let entries: Dirent[]
+
+  try {
+    entries = await fs.readdir(directory, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(directory, entry.name)
+
+      if (entry.isDirectory()) {
+        await collectCodexSessionPaths(entryPath, threadId, matchingPaths)
+        return
+      }
+
+      if (entry.isFile() && entry.name.includes(threadId) && entry.name.endsWith('.jsonl')) {
+        matchingPaths.push(entryPath)
+      }
+    }),
+  )
+}
+
+function parseAnnotationThreadMessages(content: string): CodexAnnotationChatMessage[] {
+  return content
+    .split(/\r?\n/)
+    .flatMap((line, index) => normalizeCodexSessionMessage(line, index))
+}
+
+function normalizeCodexSessionMessage(line: string, index: number): CodexAnnotationChatMessage[] {
+  if (!line.trim()) {
+    return []
+  }
+
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(line) as unknown
+  } catch {
+    return []
+  }
+
+  if (!isRecord(parsed) || parsed.type !== 'response_item') {
+    return []
+  }
+
+  const payload = asRecord(parsed.payload)
+
+  if (payload.type !== 'message') {
+    return []
+  }
+
+  const role = stringFromRecord(payload, 'role')
+
+  if (role !== 'user' && role !== 'assistant') {
+    return []
+  }
+
+  const content = extractCodexMessageContent(payload.content)
+  const displayContent = role === 'user' ? extractAnnotationUserMessage(content) : content
+
+  if (!displayContent) {
+    return []
+  }
+
+  return [
+    {
+      id: `thread_${index.toString(36)}`,
+      role,
+      content: displayContent,
+    },
+  ]
+}
+
+function extractCodexMessageContent(content: unknown) {
+  if (typeof content === 'string') {
+    return content.trim()
+  }
+
+  if (!Array.isArray(content)) {
+    return ''
+  }
+
+  return content
+    .flatMap((item) => {
+      const block = asRecord(item)
+      const text = stringFromRecord(block, 'text')
+
+      return text ? [text] : []
+    })
+    .join('\n\n')
+    .trim()
+}
+
+function extractAnnotationUserMessage(content: string) {
+  const promptMessageMatch = content.match(/用户想继续聊：\s*([\s\S]+)$/)
+
+  return (promptMessageMatch?.[1] ?? content).trim()
+}
+
 function parseAnnotationDraftsResponse(response: string): CodexAnnotationDraft[] {
   const parsed = JSON.parse(response) as unknown
 
@@ -313,6 +451,10 @@ function stringFromRecord(record: Record<string, unknown>, key: string) {
   const value = record[key]
 
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {}
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

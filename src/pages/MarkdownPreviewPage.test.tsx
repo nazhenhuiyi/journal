@@ -627,6 +627,67 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('loads existing Codex thread messages when reopening an annotation chat', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 今天\n今天的光很轻。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T08:00:00.000Z',
+    }
+    const longEntryMarkdown = '# 今天\n今天的光很轻。'
+    const exact = '今天的光很轻'
+    const start = longEntryMarkdown.indexOf(exact)
+    const annotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-28',
+      source: storedJournal.filePath,
+      sourceHash: 'hash',
+      annotations: [
+        {
+          id: 'ann_threaded',
+          author: 'ai',
+          kind: 'observation',
+          target: {
+            type: 'longEntryRange',
+            selector: createTextSelector(longEntryMarkdown, start, start + exact.length),
+          },
+          body: {
+            content: '这里有一点很轻的感觉。',
+          },
+          status: 'visible',
+          createdAt: '2026-04-28T17:20:00+08:00',
+          ai: { threadId: 'thread_ann_threaded' },
+        },
+      ],
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const readAnnotations = vi.fn().mockResolvedValue(annotationFile)
+    const readAnnotationThread = vi.fn().mockResolvedValue({
+      messages: [
+        { id: 'thread_1', role: 'user', content: '为什么是轻？' },
+        { id: 'thread_2', role: 'assistant', content: '可能是因为你在描述一种没有压迫感的亮。' },
+      ],
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, readAnnotations })
+    vi.stubGlobal('codex', { readAnnotationThread })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
+    })
+    enterReviewMode()
+    fireEvent.click(await screen.findByRole('button', { name: '继续聊' }))
+
+    await waitFor(() => {
+      expect(readAnnotationThread).toHaveBeenCalledWith('thread_ann_threaded')
+      expect(screen.getByText('为什么是轻？')).toBeInTheDocument()
+      expect(screen.getByText('可能是因为你在描述一种没有压迫感的亮。')).toBeInTheDocument()
+    })
+  })
+
   it('keeps managed front matter out of the editable journal body', () => {
     expect(stripManagedFrontMatter('---\ndate: 2026-04-28\n---\n\n今天直接写。')).toBe('今天直接写。')
     expect(createManagedJournalMarkdown('今天直接写。', '2026-04-28')).toBe(

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { askCodex, chatWithAnnotation, generateAnnotationDrafts } from './codex'
+import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
 import {
   createJournalMarkdownWithFrontMatter,
   stripManagedFrontMatter,
@@ -43,13 +43,16 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
-ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, process.env.APP_ROOT))
-ipcMain.handle('codex:generateAnnotationDrafts', (_event, payload: unknown) =>
-  generateAnnotationDrafts(payload, process.env.APP_ROOT),
+ipcMain.handle('codex:ask', async (_event, prompt: unknown) =>
+  askCodex(prompt, await getCodexWorkingDirectory()),
 )
-ipcMain.handle('codex:chatWithAnnotation', (_event, payload: unknown) =>
-  chatWithAnnotation(payload, process.env.APP_ROOT),
+ipcMain.handle('codex:generateAnnotationDrafts', async (_event, payload: unknown) =>
+  generateAnnotationDrafts(payload, await getCodexWorkingDirectory()),
 )
+ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) =>
+  chatWithAnnotation(payload, await getCodexWorkingDirectory()),
+)
+ipcMain.handle('codex:readAnnotationThread', (_event, threadId: unknown) => readAnnotationThread(threadId))
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
@@ -94,11 +97,23 @@ function getTodayJournalPath() {
   return getJournalPath(getTodayDateKey())
 }
 
+function getJournalDirectory() {
+  return path.join(app.getPath('home'), JOURNAL_DIR_NAME)
+}
+
+async function getCodexWorkingDirectory() {
+  const directory = getJournalDirectory()
+
+  await mkdir(directory, { recursive: true })
+
+  return directory
+}
+
 function getJournalPath(date: string) {
   assertDateKey(date)
 
   const fileName = `${date}.md`
-  const directory = path.join(app.getPath('home'), JOURNAL_DIR_NAME)
+  const directory = getJournalDirectory()
 
   return {
     date,
@@ -111,7 +126,7 @@ function getJournalPath(date: string) {
 function getJournalAnnotationsPath(date: string) {
   assertDateKey(date)
 
-  const directory = path.join(app.getPath('home'), JOURNAL_DIR_NAME)
+  const directory = getJournalDirectory()
   const annotationsDirectory = path.join(directory, 'annotations')
   const fileName = `${date}.json`
 

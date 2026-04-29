@@ -110,5 +110,12 @@ interface Window {
         output_tokens: number
       } | null
     }>
+    readAnnotationThread(threadId: string): Promise<{
+      messages: {
+        id: string
+        role: 'user' | 'assistant'
+        content: string
+      }[]
+    }>
   }
 }
