@@ -26,6 +26,12 @@ class TestHighlight {
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
+  Range.prototype.getBoundingClientRect = vi.fn(() => new DOMRect())
+  Range.prototype.getClientRects = vi.fn(() => ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* iterateRects() {},
+  }) as DOMRectList)
 })
 
 beforeEach(() => {
@@ -37,11 +43,59 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
 function enterReviewMode() {
   fireEvent.click(screen.getByRole('button', { name: '回看' }))
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
+function insertEditorText(text: string) {
+  const textbox = screen.getByRole('textbox', { name: '日记正文' })
+  const targetText = findLastTextNode(textbox)
+  const selection = window.getSelection()
+  if (targetText && selection) {
+    const range = document.createRange()
+    range.setStart(targetText, targetText.data.length)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+
+  fireEvent.focus(textbox)
+  fireEvent.paste(textbox, {
+    clipboardData: {
+      getData: (type: string) => (type === 'text/plain' ? text : ''),
+    },
+  })
+}
+
+function findLastTextNode(node: Node): Text | null {
+  if (node instanceof Text) {
+    return node
+  }
+
+  for (let index = node.childNodes.length - 1; index >= 0; index -= 1) {
+    const text = findLastTextNode(node.childNodes[index])
+
+    if (text) {
+      return text
+    }
+  }
+
+  return null
 }
 
 describe('MarkdownPreviewPage', () => {
@@ -68,6 +122,287 @@ describe('MarkdownPreviewPage', () => {
       expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('date: 2026-04-28')
     })
     expect(saveToday).not.toHaveBeenCalled()
+  })
+
+  it('prompts before moving to the real today after the calendar day changes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))
+
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n昨天的内容。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const newJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValueOnce(oldJournal).mockResolvedValueOnce(newJournal)
+    const saveToday = vi.fn().mockResolvedValue(newJournal)
+    const saveDate = vi.fn().mockResolvedValue(oldJournal)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday, saveDate })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '4月28日 · 周二' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+
+    vi.setSystemTime(new Date(2026, 3, 29, 0, 0, 10))
+    window.dispatchEvent(new Event('focus'))
+
+    await waitFor(() => {
+      expect(loadToday).toHaveBeenCalledOnce()
+      expect(screen.getByRole('status')).toHaveTextContent('现在是 4月29日')
+      expect(screen.getByRole('status')).toHaveTextContent('你还在写 4月28日')
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '去今天' }))
+
+    await waitFor(() => {
+      expect(loadToday).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('heading', { name: '4月29日 · 周三' })).toBeInTheDocument()
+      expect(screen.getByText('~/.journal/2026-04-29.md')).toHaveAttribute('title', newJournal.filePath)
+      expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('旧的一天')
+    })
+    expect(saveToday).not.toHaveBeenCalled()
+    expect(saveDate).not.toHaveBeenCalled()
+  })
+
+  it('keeps the current day open when switching to today cannot save dirty content', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))
+
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n昨天的内容。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const newJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 新的一天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValueOnce(oldJournal).mockResolvedValueOnce(newJournal)
+    const saveDate = vi.fn().mockRejectedValue(new Error('disk full'))
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), saveDate })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+
+    vi.setSystemTime(new Date(2026, 3, 29, 0, 0, 10))
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('现在是 4月29日')
+    })
+
+    insertEditorText('\n补一句还没保存的话。')
+    fireEvent.click(screen.getByRole('button', { name: '去今天' }))
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith('2026-04-28', expect.stringContaining('补一句还没保存的话。'))
+      expect(screen.getByRole('status')).toHaveTextContent('刚才的内容还没有保存成功')
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+    expect(loadToday).toHaveBeenCalledOnce()
+  })
+
+  it('saves dirty previous-day content before switching to today', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))
+
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n昨天的内容。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const savedOldJournal = {
+      ...oldJournal,
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n昨天的内容。\n补一句还没保存的话。',
+      updatedAt: '2026-04-28T16:01:00.000Z',
+    }
+    const newJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 新的一天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValueOnce(oldJournal).mockResolvedValueOnce(newJournal)
+    const saveDate = vi.fn().mockResolvedValue(savedOldJournal)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), saveDate })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+
+    vi.setSystemTime(new Date(2026, 3, 29, 0, 0, 10))
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('现在是 4月29日')
+    })
+
+    insertEditorText('\n补一句还没保存的话。')
+    fireEvent.click(screen.getByRole('button', { name: '去今天' }))
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith('2026-04-28', expect.stringContaining('补一句还没保存的话。'))
+      expect(loadToday).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('heading', { name: '4月29日 · 周三' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('新的一天')
+    })
+  })
+
+  it('ignores stale weather refreshes that return a different date', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
+
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const wrongDateWeatherJournal = {
+      content: [
+        '---',
+        'date: 2026-04-29',
+        'weather:',
+        '  text: 小雨',
+        '  updatedAt: 2026-04-29T00:00:05+08:00',
+        '---',
+        '',
+        '# 新的一天',
+      ].join('\n'),
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:05.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(oldJournal)
+    const refreshTodayWeather = vi.fn().mockResolvedValue(wrongDateWeatherJournal)
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), refreshTodayWeather })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(refreshTodayWeather).toHaveBeenCalledOnce()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '4月28日 · 周二' })).toBeInTheDocument()
+      expect(screen.getByText('~/.journal/2026-04-28.md')).toHaveAttribute('title', oldJournal.filePath)
+      expect(screen.queryByRole('heading', { name: '4月29日 · 周三 · 雨天' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('ignores stale annotations from a previous date', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))
+
+    const oldAnnotations = createDeferred<AnnotationFile>()
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const newJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 新的一天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const newAnnotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-29',
+      source: newJournal.filePath,
+      sourceHash: 'new-hash',
+      annotations: [
+        {
+          id: 'ann_new_day',
+          author: 'ai',
+          kind: 'observation',
+          target: { type: 'day' },
+          body: { content: '这是今天的批注。' },
+          status: 'visible',
+          createdAt: '2026-04-29T00:10:00+08:00',
+        },
+      ],
+    }
+    const staleAnnotationFile: AnnotationFile = {
+      version: 1,
+      date: '2026-04-28',
+      source: oldJournal.filePath,
+      sourceHash: 'old-hash',
+      annotations: [
+        {
+          id: 'ann_old_day',
+          author: 'ai',
+          kind: 'observation',
+          target: { type: 'day' },
+          body: { content: '这是昨天的批注。' },
+          status: 'visible',
+          createdAt: '2026-04-28T23:50:00+08:00',
+        },
+      ],
+    }
+    const loadToday = vi.fn().mockResolvedValueOnce(oldJournal).mockResolvedValueOnce(newJournal)
+    const readAnnotations = vi.fn((date: string) =>
+      date === '2026-04-28' ? oldAnnotations.promise : Promise.resolve(newAnnotationFile),
+    )
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), readAnnotations })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-28')
+    })
+
+    vi.setSystemTime(new Date(2026, 3, 29, 0, 0, 10))
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('现在是 4月29日')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '去今天' }))
+    await waitFor(() => {
+      expect(readAnnotations).toHaveBeenCalledWith('2026-04-29')
+    })
+
+    oldAnnotations.resolve(staleAnnotationFile)
+    enterReviewMode()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /这是今天的批注/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /这是昨天的批注/ })).not.toBeInTheDocument()
+    })
   })
 
   it('loads same-day annotations from the desktop journal store in review mode', async () => {
@@ -140,6 +475,9 @@ describe('MarkdownPreviewPage', () => {
   })
 
   it('refreshes missing weather and shows it above the writing area', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
+
     const storedJournal = {
       content: '---\ndate: 2026-04-28\n---\n\n# 等天气来\n',
       date: '2026-04-28',

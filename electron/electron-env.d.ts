@@ -39,6 +39,20 @@ interface Window {
       filePath: string
       updatedAt: string | null
     }>
+    loadDate?(date: string): Promise<{
+      content: string
+      date: string
+      fileName: string
+      filePath: string
+      updatedAt: string | null
+    }>
+    saveDate?(date: string, content: string): Promise<{
+      content: string
+      date: string
+      fileName: string
+      filePath: string
+      updatedAt: string | null
+    }>
     readAnnotations(date: string): Promise<import('../src/domain/annotations/types').AnnotationFile>
     refreshTodayWeather(location?: { latitude?: number; longitude?: number }): Promise<{
       content: string

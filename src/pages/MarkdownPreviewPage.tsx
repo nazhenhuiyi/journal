@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import SegmentedControl from '../components/SegmentedControl'
@@ -52,6 +52,13 @@ function getLocalDateKey(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function millisecondsUntilNextLocalDay(date = new Date()) {
+  const nextDay = new Date(date)
+  nextDay.setHours(24, 0, 0, 0)
+
+  return Math.max(1, nextDay.getTime() - date.getTime())
+}
+
 export function stripManagedFrontMatter(markdown: string) {
   return stripJournalManagedFrontMatter(markdown)
 }
@@ -71,6 +78,16 @@ function formatJournalTopbarTitle(dateKey: string, weatherText?: string) {
   const weatherLabel = formatTopbarWeatherLabel(weatherText)
 
   return [dateLabel, weekdayLabel, weatherLabel].filter(Boolean).join(' · ')
+}
+
+function formatDateNudgeLabel(dateKey: string) {
+  const date = parseLocalDateKey(dateKey)
+
+  if (!date) {
+    return dateKey
+  }
+
+  return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
 function parseLocalDateKey(dateKey: string) {
@@ -126,16 +143,20 @@ function MarkdownPreviewPage() {
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
   const [journalFrontMatter, setJournalFrontMatter] = useState<DayFrontMatter>({})
+  const [realTodayDate, setRealTodayDate] = useState(() => getLocalDateKey())
+  const [daySwitchError, setDaySwitchError] = useState('')
   const [journalAnnotations, setJournalAnnotations] = useState<Annotation[]>(demoAnnotations)
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
   const previewRef = useRef<HTMLDivElement>(null)
   const hasLoadedJournalRef = useRef(false)
+  const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef(annotationTargetsEntry)
   const saveRequestIdRef = useRef(0)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : '页边保持安静'
+  const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const topbarTitle = formatJournalTopbarTitle(
     journalFile?.date ?? journalFrontMatter.date ?? getLocalDateKey(),
     journalFrontMatter.weather?.text,
@@ -153,13 +174,22 @@ function MarkdownPreviewPage() {
     [journalMarkdown, visibleAnnotations],
   )
 
-  async function refreshTodayWeather(loadedFile: JournalFile) {
+  const replaceJournalAnnotations = useCallback((nextAnnotations: Annotation[]) => {
+    setJournalAnnotations(nextAnnotations)
+    setActiveAnnotationId(
+      nextAnnotations.find((annotation) => annotation.status === 'visible')?.id ?? '',
+    )
+  }, [])
+
+  const refreshTodayWeather = useCallback(async (loadedFile: JournalFile) => {
     const journalStore = getJournalStore()
 
     if (!journalStore?.refreshTodayWeather) {
       const frontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
 
-      setWeatherStatus(frontMatter.weather?.text ? 'ready' : 'failed')
+      if (journalFileRef.current?.date === loadedFile.date) {
+        setWeatherStatus(frontMatter.weather?.text ? 'ready' : 'failed')
+      }
       return
     }
 
@@ -170,46 +200,68 @@ function MarkdownPreviewPage() {
       return
     }
 
+    if (loadedFile.date !== getLocalDateKey()) {
+      setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
+      return
+    }
+
     setWeatherStatus('loading')
 
     try {
       const location = await resolveBrowserWeatherLocation()
+
+      if (journalFileRef.current?.date !== loadedFile.date || loadedFile.date !== getLocalDateKey()) {
+        if (journalFileRef.current?.date === loadedFile.date) {
+          setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
+        }
+        return
+      }
+
       const refreshedFile = await journalStore.refreshTodayWeather(location)
       const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
 
+      if (journalFileRef.current?.date !== loadedFile.date || refreshedFile.date !== loadedFile.date) {
+        if (journalFileRef.current?.date === loadedFile.date) {
+          setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
+        }
+        return
+      }
+
+      journalFileRef.current = refreshedFile
       setJournalFrontMatter(refreshedFrontMatter)
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
     } catch {
-      setWeatherStatus('failed')
+      if (journalFileRef.current?.date === loadedFile.date) {
+        setWeatherStatus('failed')
+      }
     }
-  }
+  }, [])
 
-  async function loadAnnotationsForDate(date: string) {
+  const loadAnnotationsForDate = useCallback(async (date: string) => {
     const journalStore = getJournalStore()
 
     if (!journalStore?.readAnnotations) {
-      replaceJournalAnnotations(noAnnotations)
+      if (journalFileRef.current?.date === date) {
+        replaceJournalAnnotations(noAnnotations)
+      }
       return
     }
 
     try {
       const annotationFile = await journalStore.readAnnotations(date)
 
-      replaceJournalAnnotations(annotationFile.annotations)
+      if (journalFileRef.current?.date === date) {
+        replaceJournalAnnotations(annotationFile.annotations)
+      }
     } catch {
-      replaceJournalAnnotations(noAnnotations)
+      if (journalFileRef.current?.date === date) {
+        replaceJournalAnnotations(noAnnotations)
+      }
     }
-  }
+  }, [replaceJournalAnnotations])
 
-  function replaceJournalAnnotations(nextAnnotations: Annotation[]) {
-    setJournalAnnotations(nextAnnotations)
-    setActiveAnnotationId(
-      nextAnnotations.find((annotation) => annotation.status === 'visible')?.id ?? '',
-    )
-  }
-
-  useEffect(() => {
+  const loadTodayJournal = useCallback(async (shouldApply: () => boolean = () => true) => {
     const journalStore = getJournalStore()
 
     if (!journalStore) {
@@ -217,26 +269,56 @@ function MarkdownPreviewPage() {
       return
     }
 
+    const file = await journalStore.loadToday()
+
+    if (!shouldApply()) {
+      return
+    }
+
+    const editableMarkdown = stripManagedFrontMatter(file.content)
+    const frontMatter = parseJournalMarkdown(file.content).frontMatter
+
+    setDaySwitchError('')
+    setRealTodayDate(getLocalDateKey())
+    journalFileRef.current = file
+    lastSavedMarkdownRef.current = editableMarkdown
+    hasLoadedJournalRef.current = true
+    setJournalFrontMatter(frontMatter)
+    setJournalFile(file)
+    setJournalMarkdown(editableMarkdown)
+    void loadAnnotationsForDate(file.date)
+    void refreshTodayWeather(file)
+  }, [loadAnnotationsForDate, refreshTodayWeather])
+
+  const saveJournalFile = useCallback(async (
+    date: string,
+    markdown: string,
+    frontMatter: DayFrontMatter,
+  ) => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore) {
+      return null
+    }
+
+    const fileMarkdown = createManagedJournalMarkdown(markdown, date, frontMatter)
+
+    if (journalStore.saveDate) {
+      return journalStore.saveDate(date, fileMarkdown)
+    }
+
+    if (date === getLocalDateKey()) {
+      return journalStore.saveToday(fileMarkdown)
+    }
+
+    return null
+  }, [])
+
+  useEffect(() => {
     let isCancelled = false
 
-    journalStore
-      .loadToday()
-      .then((file) => {
-        if (isCancelled) {
-          return
-        }
-
-        const editableMarkdown = stripManagedFrontMatter(file.content)
-        const frontMatter = parseJournalMarkdown(file.content).frontMatter
-
-        lastSavedMarkdownRef.current = editableMarkdown
-        hasLoadedJournalRef.current = true
-        setJournalFrontMatter(frontMatter)
-        setJournalFile(file)
-        setJournalMarkdown(editableMarkdown)
-        void loadAnnotationsForDate(file.date)
-        void refreshTodayWeather(file)
-      })
+    void Promise.resolve()
+      .then(() => loadTodayJournal(() => !isCancelled))
       .catch(() => {
         if (isCancelled) {
           return
@@ -247,6 +329,41 @@ function MarkdownPreviewPage() {
 
     return () => {
       isCancelled = true
+    }
+  }, [loadTodayJournal])
+
+  useEffect(() => {
+    journalFileRef.current = journalFile
+  }, [journalFile])
+
+  useEffect(() => {
+    let timeoutId: number | undefined
+
+    function updateRealTodayDate() {
+      setRealTodayDate(getLocalDateKey())
+    }
+
+    function scheduleNextDayCheck() {
+      timeoutId = window.setTimeout(() => {
+        updateRealTodayDate()
+        scheduleNextDayCheck()
+      }, millisecondsUntilNextLocalDay())
+    }
+
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        updateRealTodayDate()
+      }
+    }
+
+    scheduleNextDayCheck()
+    window.addEventListener('focus', updateRealTodayDate)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      window.removeEventListener('focus', updateRealTodayDate)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 
@@ -261,24 +378,23 @@ function MarkdownPreviewPage() {
     saveRequestIdRef.current = requestId
 
     const timeoutId = window.setTimeout(() => {
-      const date = journalFile?.date ?? getLocalDateKey()
-      const fileMarkdown = createManagedJournalMarkdown(journalMarkdown, date, journalFrontMatter)
+      const date = journalFile?.date ?? realTodayDate
 
-      journalStore
-        .saveToday(fileMarkdown)
+      saveJournalFile(date, journalMarkdown, journalFrontMatter)
         .then((file) => {
-          if (saveRequestIdRef.current !== requestId) {
+          if (!file || saveRequestIdRef.current !== requestId) {
             return
           }
 
           lastSavedMarkdownRef.current = stripManagedFrontMatter(file.content)
+          journalFileRef.current = file
           setJournalFile(file)
         })
         .catch(() => undefined)
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timeoutId)
-  }, [journalFile?.date, journalFrontMatter, journalMarkdown])
+  }, [journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -373,7 +489,30 @@ function MarkdownPreviewPage() {
     }
   }
 
+  async function handleGoToToday() {
+    const currentDate = journalFile?.date
+
+    saveRequestIdRef.current += 1
+
+    if (currentDate && journalMarkdown !== lastSavedMarkdownRef.current) {
+      const savedFile = await saveJournalFile(currentDate, journalMarkdown, journalFrontMatter).catch(() => null)
+
+      if (!savedFile) {
+        setDaySwitchError('刚才的内容还没有保存成功，先留在这一天。')
+        return
+      }
+
+      setDaySwitchError('')
+      journalFileRef.current = savedFile
+      lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
+      setJournalFile(savedFile)
+    }
+
+    await loadTodayJournal().catch(() => undefined)
+  }
+
   function handleJournalMarkdownChange(nextMarkdown: string) {
+    setDaySwitchError('')
     setJournalMarkdown(nextMarkdown)
   }
 
@@ -386,6 +525,17 @@ function MarkdownPreviewPage() {
         transition={{ ...panelTransition, delay: 0.05 }}
       >
         <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">{topbarTitle}</h1>
+        {isViewingAnotherDay ? (
+          <div className="journal-day-nudge" role="status">
+            <span>
+              {daySwitchError ||
+                `现在是 ${formatDateNudgeLabel(realTodayDate)}，你还在写 ${formatDateNudgeLabel(journalFile?.date ?? '')}`}
+            </span>
+            <button onClick={() => void handleGoToToday()} type="button">
+              去今天
+            </button>
+          </div>
+        ) : null}
         <div className="flex shrink-0 items-center gap-2 text-sm text-ink/60">
           <SegmentedControl
             ariaLabel="纸面状态"

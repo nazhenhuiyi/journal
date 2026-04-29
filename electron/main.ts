@@ -45,6 +45,8 @@ let win: BrowserWindow | null
 ipcMain.handle('codex:ask', (_event, prompt: unknown) => askCodex(prompt, process.env.APP_ROOT))
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
+ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
+ipcMain.handle('journal:saveDate', (_event, date: unknown, content: unknown) => saveJournal(date, content))
 ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 
@@ -118,8 +120,8 @@ function assertDateKey(date: string) {
   }
 }
 
-async function journalFilePayload(content: string): Promise<JournalFile> {
-  const { date, fileName, filePath } = getTodayJournalPath()
+async function journalFilePayload(content: string, date = getTodayDateKey()): Promise<JournalFile> {
+  const { fileName, filePath } = getJournalPath(date)
   const fileStat = await stat(filePath).catch(() => null)
 
   return {
@@ -132,7 +134,15 @@ async function journalFilePayload(content: string): Promise<JournalFile> {
 }
 
 async function loadTodayJournal() {
-  const { date, directory, filePath } = getTodayJournalPath()
+  return loadJournal(getTodayDateKey())
+}
+
+async function loadJournal(date: unknown) {
+  if (typeof date !== 'string') {
+    throw new TypeError('Journal date must be a string.')
+  }
+
+  const { date: dateKey, directory, filePath } = getJournalPath(date)
 
   await mkdir(directory, { recursive: true })
 
@@ -145,27 +155,49 @@ async function loadTodayJournal() {
   })
 
   if (existingContent !== null) {
-    return journalFilePayload(existingContent)
+    return journalFilePayload(existingContent, dateKey)
   }
 
-  const content = createDefaultJournalMarkdown(date)
+  const content = createDefaultJournalMarkdown(dateKey)
 
   await writeFile(filePath, content, 'utf8')
 
-  return journalFilePayload(content)
+  return journalFilePayload(content, dateKey)
 }
 
 async function saveTodayJournal(content: unknown) {
+  return saveJournal(getTodayDateKey(), content)
+}
+
+async function saveJournal(date: unknown, content: unknown) {
+  if (typeof date !== 'string') {
+    throw new TypeError('Journal date must be a string.')
+  }
+
   if (typeof content !== 'string') {
     throw new TypeError('Journal content must be a string.')
   }
 
-  const { directory, filePath } = getTodayJournalPath()
+  const { date: dateKey, directory, filePath } = getJournalPath(date)
+  const parsedEntry = parseJournalMarkdown(content)
+  const nextFrontMatter: DayFrontMatter = {
+    ...parsedEntry.frontMatter,
+    date: dateKey,
+  }
+
+  if (!hasFreshWeather(nextFrontMatter.weather, dateKey)) {
+    delete nextFrontMatter.weather
+  }
+
+  const todayContent = createJournalMarkdownWithFrontMatter(
+    stripManagedFrontMatter(content),
+    nextFrontMatter,
+  )
 
   await mkdir(directory, { recursive: true })
-  await writeJournalFile(filePath, content)
+  await writeJournalFile(filePath, todayContent)
 
-  return journalFilePayload(content)
+  return journalFilePayload(todayContent, dateKey)
 }
 
 async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {

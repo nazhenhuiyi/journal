@@ -97,6 +97,56 @@ body {
   background: rgba(255, 252, 243, 0.76);
 }
 
+.journal-day-nudge {
+  display: inline-flex;
+  max-width: 31rem;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  margin-left: auto;
+  padding: 0.24rem 0.3rem 0.24rem 0.72rem;
+  border: 1px solid rgba(20, 114, 79, 0.2);
+  border-radius: 8px;
+  color: rgba(47, 38, 31, 0.68);
+  background: rgba(236, 246, 232, 0.74);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.journal-day-nudge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-day-nudge button {
+  flex: 0 0 auto;
+  min-height: 1.95rem;
+  border: 1px solid rgba(20, 114, 79, 0.28);
+  border-radius: 7px;
+  padding: 0.28rem 0.7rem;
+  color: #174f3a;
+  background: rgba(255, 253, 244, 0.78);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.journal-day-nudge button:hover {
+  border-color: rgba(20, 114, 79, 0.42);
+  color: #123d2e;
+  background: rgba(255, 253, 244, 0.96);
+}
+
+.journal-day-nudge button:focus-visible {
+  outline: 2px solid rgba(20, 114, 79, 0.3);
+  outline-offset: 2px;
+}
+
 .journal-page {
   min-height: 0;
   overflow: hidden;

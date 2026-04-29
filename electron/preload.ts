@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('journalStore', {
   saveToday(content: string) {
     return ipcRenderer.invoke('journal:saveToday', content)
   },
+  loadDate(date: string) {
+    return ipcRenderer.invoke('journal:loadDate', date)
+  },
+  saveDate(date: string, content: string) {
+    return ipcRenderer.invoke('journal:saveDate', date, content)
+  },
   readAnnotations(date: string) {
     return ipcRenderer.invoke('journal:readAnnotations', date)
   },
