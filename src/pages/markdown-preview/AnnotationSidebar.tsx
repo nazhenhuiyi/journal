@@ -1,6 +1,12 @@
-import { motion } from 'motion/react'
 import type { Annotation } from '../../domain/annotations'
-import { annotationKinds, listTransition, panelTransition } from './constants'
+import { annotationKinds } from './constants'
+
+const annotationKindStyles: Record<Annotation['kind'], string> = {
+  observation: 'text-sage',
+  question: 'text-walnut/75',
+  format: 'text-walnut/70',
+  spelling: 'text-ink/50',
+}
 
 type AnnotationSidebarProps = {
   activeAnnotationId: string
@@ -16,76 +22,66 @@ function AnnotationSidebar({
   onSelectAnnotation,
 }: AnnotationSidebarProps) {
   return (
-    <motion.aside
-      animate={{ opacity: 1, x: 0 }}
-      className="annotation-sidebar border-l border-walnut/10 bg-white/70 px-4 py-5"
-      initial={{ opacity: 0, x: 14 }}
-      transition={{ ...panelTransition, delay: 0.14 }}
-    >
+    <aside className="annotation-sidebar border-l border-walnut/10 bg-[#f7f3ea]/70 px-5 py-5">
       <div className="sticky top-5">
-        <div className="mb-4">
-          <p className="text-xs font-semibold uppercase text-sage">Annotations</p>
-          <h2 className="mt-2 font-display text-xl font-semibold text-ink">批注</h2>
+        <div className="mb-5 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold leading-none text-ink">批注</h2>
+          </div>
+          <span className="mb-0.5 text-xs font-medium text-ink/40">
+            {annotations.length} 条
+          </span>
         </div>
 
-        <motion.div
-          animate="visible"
-          className="space-y-3"
-          initial="hidden"
-          variants={{
-            hidden: {},
-            visible: {
-              transition: {
-                delayChildren: 0.18,
-                staggerChildren: 0.035,
-              },
-            },
-          }}
-        >
+        <div className="divide-y divide-walnut/8">
           {annotations.map((annotation) => {
             const isActive = annotation.id === activeAnnotationId
 
             return (
-              <motion.div
+              <div
                 key={annotation.id}
-                animate={{ opacity: 1, scale: isActive ? 1.012 : 1, y: 0 }}
-                className={`group w-full border px-4 py-3 text-left transition ${
+                className={`group relative w-full overflow-hidden px-4 py-4 text-left ${
                   isActive
-                    ? 'border-sage bg-sage/10 shadow-sm'
-                    : 'border-walnut/10 bg-[#fbf8ef] hover:border-sage/40 hover:bg-white'
+                    ? 'bg-white/38'
+                    : 'bg-transparent hover:bg-white/28'
                 }`}
-                initial={{ opacity: 0, y: 8 }}
-                layout
-                transition={listTransition}
-                variants={{
-                  hidden: { opacity: 0, y: 8 },
-                  visible: { opacity: 1, y: 0 },
-                }}
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.99 }}
               >
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-y-4 left-0 w-0.5 rounded-r-full ${
+                    isActive ? 'bg-sage/85' : 'bg-transparent'
+                  }`}
+                />
                 <button
                   aria-pressed={isActive}
                   className="block w-full text-left"
                   onClick={() => onSelectAnnotation(annotation.id)}
                   type="button"
                 >
-                  <span className="text-xs font-semibold text-sage">{annotationKinds[annotation.kind]}</span>
-                  <span className="mt-2 block text-sm leading-6 text-ink/75">{annotation.body.content}</span>
+                  <span
+                    className={`block text-[0.68rem] font-semibold leading-none ${
+                      annotationKindStyles[annotation.kind]
+                    }`}
+                  >
+                    {annotationKinds[annotation.kind]}
+                  </span>
+                  <span className="mt-2.5 block text-[0.9rem] leading-[1.65] text-ink/68">
+                    {annotation.body.content}
+                  </span>
                 </button>
                 <button
-                  className="mt-3 text-xs font-semibold text-walnut opacity-0 underline decoration-walnut/30 underline-offset-4 transition hover:text-ink group-hover:opacity-100 group-focus-within:opacity-100"
+                  className="mt-2.5 text-xs font-semibold text-walnut/65 opacity-0 underline decoration-walnut/20 underline-offset-4 hover:text-ink group-hover:opacity-100 group-focus-within:opacity-100"
                   onClick={() => onChatWithAnnotation(annotation.id)}
                   type="button"
                 >
                   继续聊
                 </button>
-              </motion.div>
+              </div>
             )
           })}
-        </motion.div>
+        </div>
       </div>
-    </motion.aside>
+    </aside>
   )
 }
 
