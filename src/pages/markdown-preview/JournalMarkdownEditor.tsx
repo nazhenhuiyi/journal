@@ -1,15 +1,18 @@
 import { useEffect, useRef } from 'react'
+import { indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { EditorView, minimalSetup } from 'codemirror'
 import {
   Decoration,
+  keymap,
   ViewPlugin,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
+import { indentMarkdownListWithTab } from './markdownListIndent'
 
 type JournalMarkdownEditorProps = {
   value: string
@@ -278,9 +281,11 @@ function JournalMarkdownEditor({ value, onChange }: JournalMarkdownEditorProps) 
       parent: hostRef.current,
       extensions: [
         minimalSetup,
+        indentUnit.of('    '),
         markdown({ extensions: [GFM] }),
         syntaxHighlighting(journalHighlightStyle),
         journalMarkdownLineDecorations,
+        keymap.of([{ key: 'Tab', run: indentMarkdownListWithTab, shift: indentWithTab.shift }]),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ 'aria-label': '日记正文' }),
         journalEditorTheme,

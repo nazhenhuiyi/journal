@@ -28,6 +28,27 @@ describe('renderJournalMarkdown', () => {
     expect(screen.getByText('晚上整理了书桌')).toBeInTheDocument()
   })
 
+  it('renders nested ordered lists through three levels', () => {
+    const { container } = render(
+      <>
+        {renderJournalMarkdown({
+          markdown: `# 清单
+
+1. 第一层
+    1. 第二层
+        1. 第三层`,
+        })}
+      </>,
+    )
+
+    expect(screen.getAllByRole('list')).toHaveLength(3)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    expect(container.querySelector('ol ol ol')).toBeInTheDocument()
+    expect(screen.getByText('第一层')).toBeInTheDocument()
+    expect(screen.getByText('第二层')).toBeInTheDocument()
+    expect(screen.getByText('第三层')).toBeInTheDocument()
+  })
+
   it('renders GFM task lists, tables, strikethrough, links, and footnotes', () => {
     const { container } = render(<>{renderJournalMarkdown({ markdown: gfmEntry })}</>)
     const checkboxes = screen.getAllByRole('checkbox')

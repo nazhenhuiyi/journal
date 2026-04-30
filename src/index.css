@@ -3851,6 +3851,14 @@ body {
   list-style: decimal;
 }
 
+.markdown-preview ol ol {
+  list-style: lower-alpha;
+}
+
+.markdown-preview ol ol ol {
+  list-style: lower-roman;
+}
+
 .markdown-preview ul ul {
   list-style: circle;
 }
