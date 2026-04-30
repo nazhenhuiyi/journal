@@ -3,6 +3,7 @@ import annotationTargetsEntry from '../__fixtures__/annotation-targets.md?raw'
 import basicEntry from '../__fixtures__/basic-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
 import { parseJournalMarkdown } from '../parseJournalMarkdown'
+import { serializeJournalMarkdownBody } from '../serializeJournalMarkdown'
 
 describe('parseJournalMarkdown', () => {
   it('normalizes front matter and removes it from long entry markdown', () => {
@@ -41,6 +42,34 @@ describe('parseJournalMarkdown', () => {
     })
     expect(parsed.murmurs[1].body).toBe('')
     expect(parsed.murmurs[1].images).toHaveLength(2)
+  })
+
+  it('serializes long entries, murmurs, and image metadata as readable markdown blocks', () => {
+    const markdown = serializeJournalMarkdownBody('# 今天\n长日记。', [
+      {
+        id: 'm_20260429_213800',
+        time: '2026-04-29T21:38:00+08:00',
+        body: '窗外下雨了。',
+        images: [
+          {
+            id: 'img_20260429_213801',
+            src: '2026-04-29.media/img_20260429_213801.jpg',
+            caption: '雨窗',
+            tags: ['雨', '窗户'],
+          },
+        ],
+      },
+    ])
+
+    expect(markdown).toContain('# 今天\n长日记。')
+    expect(markdown).toContain(':::murmur\nid: m_20260429_213800')
+    expect(markdown).toContain('::image\nid: img_20260429_213801')
+    expect(markdown).toContain('src: 2026-04-29.media/img_20260429_213801.jpg')
+    expect(markdown).toContain('tags: [雨, 窗户]')
+    expect(parseJournalMarkdown(markdown).murmurs[0].images[0]).toMatchObject({
+      caption: '雨窗',
+      tags: ['雨', '窗户'],
+    })
   })
 
   it('preserves annotation-target markdown for later anchoring', () => {

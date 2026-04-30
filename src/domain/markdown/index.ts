@@ -5,6 +5,10 @@ export {
   serializeJournalFrontMatter,
   stripManagedFrontMatter,
 } from './frontMatter'
+export {
+  serializeJournalMarkdownBody,
+  serializeMurmurBlock,
+} from './serializeJournalMarkdown'
 export { rehypeAnnotationAttributes } from './plugins/rehypeAnnotationAttributes'
 export { remarkJournalDirectives } from './plugins/remarkJournalDirectives'
 export type {

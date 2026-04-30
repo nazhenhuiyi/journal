@@ -902,6 +902,201 @@ describe('MarkdownPreviewPage', () => {
     expect(container.querySelector('.cm-editor')).toBeInTheDocument()
   })
 
+  it('keeps murmur metadata out of the long-entry editor and shows it in the murmur panel', async () => {
+    const storedJournal = {
+      content: `---
+date: 2026-04-29
+---
+
+# 今天
+
+长日记写在这里。
+
+:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+窗外下雨了。
+:::`,
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T13:38:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+
+    vi.stubGlobal('journalStore', { loadToday })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('长日记写在这里。')
+      expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('m_20260429_213800')
+      expect(screen.getByLabelText('碎碎念')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /窗外下雨了/ })).toBeInTheDocument()
+    })
+  })
+
+  it('adds and edits a murmur through the form, then autosaves readable markdown', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 29, 21, 38, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 今天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T13:30:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn((date: string, content: string) =>
+      Promise.resolve({
+        ...storedJournal,
+        date,
+        content,
+      }),
+    )
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('今天')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '添一条' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '碎碎念正文' }), {
+      target: { value: '刚才下雨了。' },
+    })
+    vi.advanceTimersByTime(800)
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-04-29',
+        expect.stringContaining(':::murmur\nid: m_20260429_213800'),
+      )
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-04-29',
+        expect.stringContaining('刚才下雨了。\n:::'),
+      )
+    })
+  })
+
+  it('imports images into the selected murmur and writes image blocks', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: `---
+date: 2026-04-29
+---
+
+# 今天
+
+:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+窗外下雨了。
+:::`,
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T13:38:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn((date: string, content: string) => Promise.resolve({ ...storedJournal, date, content }))
+    const importImages = vi.fn().mockResolvedValue([
+      {
+        id: 'img_20260429_213801',
+        src: '2026-04-29.media/img_20260429_213801.jpg',
+        fileName: 'img_20260429_213801.jpg',
+        filePath: '/Users/zilin/.journal/2026-04-29.media/img_20260429_213801.jpg',
+      },
+    ])
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate, importImages })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /窗外下雨了/ })).toBeInTheDocument()
+    })
+    await screen.findByRole('textbox', { name: '碎碎念正文' })
+
+    fireEvent.click(screen.getByRole('button', { name: '加图片' }))
+
+    await waitFor(() => {
+      expect(importImages).toHaveBeenCalledWith('2026-04-29')
+      expect(screen.getByText('2026-04-29.media/img_20260429_213801.jpg')).toBeInTheDocument()
+    })
+
+    vi.advanceTimersByTime(800)
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-04-29',
+        expect.stringContaining('::image\nid: img_20260429_213801'),
+      )
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-04-29',
+        expect.stringContaining('src: 2026-04-29.media/img_20260429_213801.jpg'),
+      )
+    })
+  })
+
+  it('removes an image block without deleting the media file', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: `---
+date: 2026-04-29
+---
+
+# 今天
+
+:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+窗外下雨了。
+
+::image
+id: img_20260429_213801
+src: 2026-04-29.media/img_20260429_213801.jpg
+caption: 雨窗
+tags: [雨]
+::
+:::`,
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T13:38:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn((date: string, content: string) => Promise.resolve({ ...storedJournal, date, content }))
+    const deleteImage = vi.fn()
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate, deleteImage })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('雨窗')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '移除图片' }))
+    vi.advanceTimersByTime(800)
+
+    await waitFor(() => {
+      const savedContent = saveDate.mock.calls.at(-1)?.[1] ?? ''
+
+      expect(savedContent).not.toContain('img_20260429_213801')
+      expect(savedContent).toContain('窗外下雨了。')
+    })
+    expect(deleteImage).not.toHaveBeenCalled()
+  })
+
   it('selects an annotation from the sidebar and marks the matching preview block active', () => {
     const { container } = render(<MarkdownPreviewPage />)
 

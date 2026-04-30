@@ -65,6 +65,14 @@ interface Window {
       filePath: string
       updatedAt: string | null
     }>
+    importImages(date: string): Promise<
+      {
+        id: string
+        src: string
+        fileName: string
+        filePath: string
+      }[]
+    >
   }
   codex?: {
     ask(prompt: string): Promise<{

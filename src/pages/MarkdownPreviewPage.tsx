@@ -11,7 +11,9 @@ import type { Annotation } from '../domain/annotations'
 import {
   parseJournalMarkdown,
   renderJournalMarkdown,
+  serializeJournalMarkdownBody,
   type DayFrontMatter,
+  type MurmurBlock,
 } from '../domain/markdown'
 import {
   getAnnotationIds,
@@ -31,6 +33,7 @@ import JournalWeatherHeader, {
   type WeatherStatus,
 } from './markdown-preview/JournalWeatherHeader'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
+import JournalMurmurPanel from './markdown-preview/JournalMurmurPanel'
 import {
   createManagedJournalMarkdown,
   stripManagedFrontMatter,
@@ -196,6 +199,7 @@ function MarkdownPreviewPage() {
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
+  const parsedJournalEntry = useMemo(() => parseJournalMarkdown(journalMarkdown), [journalMarkdown])
   const topbarTitle = formatJournalTopbarTitle(
     currentJournalDate,
     journalFrontMatter.weather?.text,
@@ -218,12 +222,17 @@ function MarkdownPreviewPage() {
   const shouldShowAiPanel = canGenerateAiAnnotations || aiPanelMode === 'chat' || aiDrafts.length > 0
   const isAiPanelVisible = isAiPanelOpen && shouldShowAiPanel
   const annotationRanges = useMemo(
-    () => resolveAnnotationRanges(parseJournalMarkdown(journalMarkdown).longEntryMarkdown, visibleAnnotations),
-    [journalMarkdown, visibleAnnotations],
+    () => resolveAnnotationRanges(parsedJournalEntry.longEntryMarkdown, visibleAnnotations),
+    [parsedJournalEntry.longEntryMarkdown, visibleAnnotations],
   )
   const renderedMarkdown = useMemo(
-    () => renderJournalMarkdown({ markdown: journalMarkdown, annotations: visibleAnnotations }),
-    [journalMarkdown, visibleAnnotations],
+    () =>
+      renderJournalMarkdown({
+        markdown: journalMarkdown,
+        annotations: visibleAnnotations,
+        sourceFilePath: journalFile?.filePath,
+      }),
+    [journalFile?.filePath, journalMarkdown, visibleAnnotations],
   )
 
   const replaceJournalAnnotations = useCallback((nextAnnotations: Annotation[]) => {
@@ -327,8 +336,9 @@ function MarkdownPreviewPage() {
       return
     }
 
-    const editableMarkdown = stripManagedFrontMatter(file.content)
-    const frontMatter = parseJournalMarkdown(file.content).frontMatter
+    const parsedFile = parseJournalMarkdown(file.content)
+    const editableMarkdown = serializeJournalMarkdownBody(parsedFile.longEntryMarkdown, parsedFile.murmurs)
+    const frontMatter = parsedFile.frontMatter
     const initialJournalMode = isBlankJournalMarkdown(editableMarkdown) ? 'write' : readStoredJournalMode()
 
     setDaySwitchError('')
@@ -585,7 +595,30 @@ function MarkdownPreviewPage() {
 
   function handleJournalMarkdownChange(nextMarkdown: string) {
     setDaySwitchError('')
-    setJournalMarkdown(nextMarkdown)
+    setJournalMarkdown((currentMarkdown) => {
+      const currentEntry = parseJournalMarkdown(currentMarkdown)
+
+      return serializeJournalMarkdownBody(nextMarkdown, currentEntry.murmurs)
+    })
+  }
+
+  function handleJournalMurmursChange(nextMurmurs: MurmurBlock[]) {
+    setDaySwitchError('')
+    setJournalMarkdown((currentMarkdown) => {
+      const currentEntry = parseJournalMarkdown(currentMarkdown)
+
+      return serializeJournalMarkdownBody(currentEntry.longEntryMarkdown, nextMurmurs)
+    })
+  }
+
+  async function handleImportMurmurImages() {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.importImages) {
+      throw new Error('当前环境还不能导入图片。')
+    }
+
+    return journalStore.importImages(currentJournalDate)
   }
 
   async function handleGenerateAiAnnotations() {
@@ -871,8 +904,17 @@ function MarkdownPreviewPage() {
                 <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
                 <span title={journalFile?.filePath}>{journalStorageLabel}</span>
               </div>
-              <JournalMarkdownEditor onChange={handleJournalMarkdownChange} value={journalMarkdown} />
+              <JournalMarkdownEditor
+                onChange={handleJournalMarkdownChange}
+                value={parsedJournalEntry.longEntryMarkdown}
+              />
             </div>
+            <JournalMurmurPanel
+              date={currentJournalDate}
+              murmurs={parsedJournalEntry.murmurs}
+              onChange={handleJournalMurmursChange}
+              onImportImages={handleImportMurmurImages}
+            />
           </motion.article>
         )}
       </section>

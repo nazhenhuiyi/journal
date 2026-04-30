@@ -57,5 +57,6 @@ export type ParsedJournalEntry = {
 export type RenderJournalMarkdownOptions = {
   markdown: string
   annotations?: Annotation[]
+  sourceFilePath?: string
 }
 import type { Annotation } from '../annotations'

@@ -69,4 +69,7 @@ contextBridge.exposeInMainWorld('journalStore', {
   refreshTodayWeather(location?: { latitude?: number; longitude?: number }) {
     return ipcRenderer.invoke('journal:refreshTodayWeather', location)
   },
+  importImages(date: string) {
+    return ipcRenderer.invoke('journal:importImages', date)
+  },
 })

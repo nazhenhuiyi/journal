@@ -11,6 +11,7 @@ import { unified } from 'unified'
 import { parseJournalMarkdown, stripJournalFrontMatter } from './parseJournalMarkdown'
 import { rehypeAnnotationAttributes } from './plugins/rehypeAnnotationAttributes'
 import { remarkJournalDirectives } from './plugins/remarkJournalDirectives'
+import type { ImageBlock, MurmurBlock } from './types'
 import type { RenderJournalMarkdownOptions } from './types'
 
 const sanitizeSchema = {
@@ -46,14 +47,19 @@ const sanitizeSchema = {
       'dataJournalDirective',
     ],
   },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), 'journal-media'],
+  },
 }
 
 export function renderJournalMarkdown({
   markdown,
   annotations = [],
+  sourceFilePath,
 }: RenderJournalMarkdownOptions): ReactNode {
   const parsedEntry = parseJournalMarkdown(markdown)
-  const content = stripJournalFrontMatter(markdown)
+  const content = createRenderableJournalMarkdown(markdown, parsedEntry.murmurs, sourceFilePath)
   const file = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -75,4 +81,71 @@ export function renderJournalMarkdown({
     .processSync(content)
 
   return file.result as ReactNode
+}
+
+function createRenderableJournalMarkdown(
+  markdown: string,
+  murmurs: MurmurBlock[],
+  sourceFilePath: string | undefined,
+) {
+  if (murmurs.length === 0) {
+    return stripJournalFrontMatter(markdown)
+  }
+
+  const { longEntryMarkdown } = parseJournalMarkdown(markdown)
+  const renderableMurmurs = murmurs.map((murmur) => ({
+    ...murmur,
+    images: murmur.images.map((image) => ({
+      ...image,
+      src: resolveJournalImageSrc(image.src, sourceFilePath),
+    })),
+  }))
+
+  return [longEntryMarkdown.trimEnd(), ...renderableMurmurs.map(serializeRenderableMurmur)]
+    .filter((chunk) => chunk.trim())
+    .join('\n\n')
+}
+
+function serializeRenderableMurmur(murmur: MurmurBlock) {
+  const imageMarkdown = murmur.images.map(serializeRenderableImage).join('\n\n')
+  const body = murmur.body.trim()
+
+  return [
+    ':::murmur',
+    body,
+    imageMarkdown,
+    ':::',
+  ].filter((line) => line.trim()).join('\n\n')
+}
+
+function serializeRenderableImage(image: ImageBlock) {
+  const alt = image.caption?.trim() || image.id
+  const caption = image.caption?.trim()
+  const imageMarkdown = `![${escapeImageLabel(alt)}](${encodeImageUrl(image.src)})`
+
+  if (!caption) {
+    return imageMarkdown
+  }
+
+  return `${imageMarkdown}\n\n${caption}`
+}
+
+function resolveJournalImageSrc(src: string, sourceFilePath: string | undefined) {
+  if (!sourceFilePath || isAbsoluteUrl(src) || src.startsWith('/')) {
+    return src
+  }
+
+  return `journal-media://local/${src.split('/').map(encodeURIComponent).join('/')}`
+}
+
+function isAbsoluteUrl(src: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(src)
+}
+
+function encodeImageUrl(src: string) {
+  return src.replace(/[()]/g, (match) => `%${match.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
+function escapeImageLabel(value: string) {
+  return value.replace(/[[\]\\]/g, '\\$&')
 }

@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
+import { importJournalImagesForDate } from './journalMedia'
 import {
   createJournalMarkdownWithFrontMatter,
   stripManagedFrontMatter,
@@ -23,6 +24,7 @@ import type {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const APP_MIN_WIDTH = 1180
 const JOURNAL_DIR_NAME = '.journal'
+const JOURNAL_MEDIA_PROTOCOL = 'journal-media'
 
 // The built directory structure
 //
@@ -43,6 +45,18 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: JOURNAL_MEDIA_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+])
 
 ipcMain.handle('codex:ask', async (_event, prompt: unknown) => {
   const runtime = await getCodexRuntime()
@@ -73,6 +87,7 @@ ipcMain.handle('journal:saveAnnotations', (_event, date: unknown, annotations: u
   saveJournalAnnotations(date, annotations),
 )
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
+ipcMain.handle('journal:importImages', (_event, date: unknown) => importJournalImages(date))
 
 type JournalFile = {
   content: string
@@ -160,8 +175,8 @@ function getJournalAnnotationsPath(date: string) {
   }
 }
 
-function assertDateKey(date: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+function assertDateKey(date: unknown): asserts date is string {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new TypeError('Journal date must use YYYY-MM-DD format.')
   }
 }
@@ -305,6 +320,64 @@ async function saveJournalAnnotations(date: unknown, payload: unknown): Promise<
   await writeJournalFile(filePath, `${JSON.stringify(annotationFile, null, 2)}\n`)
 
   return annotationFile
+}
+
+async function importJournalImages(date: unknown) {
+  assertDateKey(date)
+
+  const options = {
+    title: '选择要放进今天的图片',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      {
+        name: 'Images',
+        extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'tif', 'tiff', 'bmp'],
+      },
+    ],
+  } satisfies Electron.OpenDialogOptions
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+
+  if (result.canceled) {
+    return []
+  }
+
+  return importJournalImagesForDate(date, getJournalDirectory(), result.filePaths)
+}
+
+function registerJournalMediaProtocol() {
+  protocol.handle(JOURNAL_MEDIA_PROTOCOL, (request) => {
+    const filePath = resolveJournalMediaRequestPath(request.url)
+
+    if (!filePath) {
+      return new Response('Not found', { status: 404 })
+    }
+
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+}
+
+function resolveJournalMediaRequestPath(requestUrl: string) {
+  const url = new URL(requestUrl)
+  const relativePath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+
+  if (!relativePath || path.isAbsolute(relativePath)) {
+    return null
+  }
+
+  const journalDirectory = getJournalDirectory()
+  const filePath = path.resolve(journalDirectory, relativePath)
+  const isInsideJournalDirectory =
+    filePath === journalDirectory || filePath.startsWith(`${journalDirectory}${path.sep}`)
+
+  if (!isInsideJournalDirectory || !isSupportedJournalMediaPath(filePath)) {
+    return null
+  }
+
+  return filePath
+}
+
+function isSupportedJournalMediaPath(filePath: string) {
+  return /\.(bmp|gif|heic|heif|jpe?g|png|tiff?|webp)$/i.test(filePath)
 }
 
 function normalizeAnnotationFile(payload: unknown, date: string): AnnotationFile {
@@ -683,4 +756,7 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  registerJournalMediaProtocol()
+  createWindow()
+})

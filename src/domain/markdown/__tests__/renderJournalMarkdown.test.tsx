@@ -95,6 +95,37 @@ describe('renderJournalMarkdown', () => {
     expect(within(image as HTMLElement).getByText('雨打在窗户上')).toBeInTheDocument()
   })
 
+  it('renders stored murmur image blocks as local images when a source file path is available', () => {
+    render(
+      <>
+        {renderJournalMarkdown({
+          markdown: `# 今天
+
+:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+窗外下雨了。
+
+::image
+id: img_20260429_213801
+src: 2026-04-29.media/rain.jpg
+caption: 雨窗
+tags: [雨]
+::
+:::`,
+          sourceFilePath: '/Users/zilin/.journal/2026-04-29.md',
+        })}
+      </>,
+    )
+
+    expect(screen.getByText('窗外下雨了。')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '雨窗' })).toHaveAttribute(
+      'src',
+      'journal-media://local/2026-04-29.media/rain.jpg',
+    )
+  })
+
   it('renders annotation target markdown without flattening inline content', () => {
     render(<>{renderJournalMarkdown({ markdown: annotationTargetsEntry })}</>)
 
