@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
+import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import { importJournalImagesForDate } from './journalMedia'
 import {
   createJournalMarkdownWithFrontMatter,
@@ -78,6 +79,10 @@ ipcMain.handle('codexSettings:load', () => loadJournalCodexSettings(getJournalDi
 ipcMain.handle('codexSettings:save', (_event, payload: unknown) =>
   saveJournalCodexSettings(getJournalDirectory(), payload),
 )
+ipcMain.handle('journalSettings:load', () => loadJournalSettings(getJournalDirectory()))
+ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
+  saveJournalSettings(getJournalDirectory(), payload),
+)
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
@@ -100,6 +105,7 @@ type JournalFile = {
 type WeatherLookupLocation = {
   latitude?: number
   longitude?: number
+  query?: string
 }
 
 type WeatherLookupPayload = {
@@ -559,12 +565,15 @@ async function refreshTodayWeather(location: unknown) {
     throw error
   })
   const parsedEntry = parseJournalMarkdown(existingContent)
+  const journalSettings = await loadJournalSettings(getJournalDirectory())
 
-  if (hasFreshWeather(parsedEntry.frontMatter.weather, date)) {
+  if (hasFreshWeatherForLocation(parsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
     return journalFilePayload(existingContent)
   }
 
-  const weatherPayload = await fetchTodayWeather(normalizeWeatherLookupLocation(location))
+  const weatherPayload = await fetchTodayWeather(
+    resolveWeatherLookupLocation(journalSettings.weatherLocation, location),
+  )
   const latestContent = await readFile(filePath, 'utf8').catch((error: unknown) => {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return existingContent
@@ -574,7 +583,7 @@ async function refreshTodayWeather(location: unknown) {
   })
   const latestParsedEntry = parseJournalMarkdown(latestContent)
 
-  if (hasFreshWeather(latestParsedEntry.frontMatter.weather, date)) {
+  if (hasFreshWeatherForLocation(latestParsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
     return journalFilePayload(latestContent)
   }
 
@@ -582,7 +591,10 @@ async function refreshTodayWeather(location: unknown) {
     ...latestParsedEntry.frontMatter,
     date,
     weather: weatherPayload.weather,
-    location: weatherPayload.location ?? latestParsedEntry.frontMatter.location,
+    location: withWeatherLocationQuery(
+      weatherPayload.location ?? latestParsedEntry.frontMatter.location,
+      journalSettings.weatherLocation,
+    ),
   }
   const nextContent = createJournalMarkdownWithFrontMatter(
     stripManagedFrontMatter(latestContent),
@@ -602,9 +614,7 @@ async function writeJournalFile(filePath: string, content: string) {
 }
 
 async function fetchTodayWeather(location: WeatherLookupLocation): Promise<WeatherLookupPayload> {
-  const weatherTarget = hasCoordinates(location)
-    ? `${location.latitude},${location.longitude}`
-    : ''
+  const weatherTarget = getWeatherTarget(location)
   const requestUrl = `https://wttr.in/${weatherTarget}?format=j1&lang=zh`
   const response = await fetch(requestUrl, {
     headers: {
@@ -617,6 +627,22 @@ async function fetchTodayWeather(location: WeatherLookupLocation): Promise<Weath
   }
 
   return parseWttrWeather(await response.json())
+}
+
+function getWeatherTarget(location: WeatherLookupLocation) {
+  if (location.query) {
+    return encodeWeatherTarget(location.query)
+  }
+
+  if (hasCoordinates(location)) {
+    return encodeWeatherTarget(`${location.latitude},${location.longitude}`)
+  }
+
+  return ''
+}
+
+function encodeWeatherTarget(target: string) {
+  return encodeURIComponent(target).replace(/%2C/g, ',')
 }
 
 function parseWttrWeather(payload: unknown): WeatherLookupPayload {
@@ -665,16 +691,57 @@ function normalizeWeatherLookupLocation(location: unknown): WeatherLookupLocatio
   }
 }
 
+function resolveWeatherLookupLocation(
+  weatherLocation: string,
+  browserLocation: unknown,
+): WeatherLookupLocation {
+  const query = weatherLocation.trim()
+
+  if (query) {
+    return { query }
+  }
+
+  return normalizeWeatherLookupLocation(browserLocation)
+}
+
+function withWeatherLocationQuery(
+  location: DayFrontMatter['location'],
+  weatherLocation: string,
+): DayFrontMatter['location'] {
+  const query = weatherLocation.trim()
+
+  if (!query || !location) {
+    return location
+  }
+
+  return {
+    ...location,
+    query,
+  }
+}
+
 function normalizeCoordinate(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function hasCoordinates(location: WeatherLookupLocation): location is Required<WeatherLookupLocation> {
+function hasCoordinates(
+  location: WeatherLookupLocation,
+): location is WeatherLookupLocation & { latitude: number; longitude: number } {
   return location.latitude !== undefined && location.longitude !== undefined
 }
 
 function hasFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function hasFreshWeatherForLocation(frontMatter: DayFrontMatter, date: string, weatherLocation: string) {
+  if (!hasFreshWeather(frontMatter.weather, date)) {
+    return false
+  }
+
+  const query = weatherLocation.trim()
+
+  return !query || frontMatter.location?.query === query
 }
 
 function hashText(text: string) {

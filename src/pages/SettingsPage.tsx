@@ -8,6 +8,7 @@ type CodexSettingsForm = {
   model: string
   modelReasoningEffort: CodexReasoningEffort
   systemPrompt: string
+  weatherLocation: string
 }
 
 type CodexSettingsFile = CodexSettingsForm & {
@@ -15,6 +16,7 @@ type CodexSettingsFile = CodexSettingsForm & {
   directory: string
   settingsPath: string
   systemPromptPath: string
+  journalSettingsPath: string
 }
 
 const modelOptions = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'] as const
@@ -30,14 +32,20 @@ const emptySettings: CodexSettingsFile = {
   model: 'gpt-5.5',
   modelReasoningEffort: 'high',
   systemPrompt: '',
+  weatherLocation: '',
   workingDirectory: '~/.journal',
   directory: '~/.journal/codex',
   settingsPath: '~/.journal/codex/settings.json',
   systemPromptPath: '~/.journal/codex/system-prompt.md',
+  journalSettingsPath: '~/.journal/settings.json',
 }
 
 function getCodexSettingsStore() {
   return typeof window === 'undefined' ? undefined : window.codexSettings
+}
+
+function getJournalSettingsStore() {
+  return typeof window === 'undefined' ? undefined : window.journalSettings
 }
 
 function SettingsPage() {
@@ -64,14 +72,20 @@ function SettingsPage() {
       return
     }
 
-    store
-      .load()
-      .then((loadedSettings) => {
+    Promise.all([
+      store.load(),
+      getJournalSettingsStore()?.load().catch(() => null) ?? Promise.resolve(null),
+    ])
+      .then(([loadedSettings, loadedJournalSettings]) => {
         if (!isMounted) {
           return
         }
 
-        setSettings(loadedSettings)
+        setSettings({
+          ...loadedSettings,
+          weatherLocation: loadedJournalSettings?.weatherLocation ?? '',
+          journalSettingsPath: loadedJournalSettings?.settingsPath ?? emptySettings.journalSettingsPath,
+        })
         setStatus('ready')
         setMessage('已翻到设置')
       })
@@ -91,8 +105,10 @@ function SettingsPage() {
 
   async function handleSave() {
     const store = getCodexSettingsStore()
+    const journalSettingsStore = getJournalSettingsStore()
     const model = settings.model.trim()
     const systemPrompt = settings.systemPrompt.trim()
+    const weatherLocation = settings.weatherLocation.trim()
 
     if (!store) {
       setStatus('error')
@@ -112,17 +128,30 @@ function SettingsPage() {
       return
     }
 
+    if (/[\r\n]/.test(weatherLocation)) {
+      setStatus('error')
+      setMessage('天气位置不能包含换行。')
+      return
+    }
+
     setStatus('saving')
     setMessage('正在收好')
 
     try {
-      const savedSettings = await store.save({
-        model,
-        modelReasoningEffort: settings.modelReasoningEffort,
-        systemPrompt,
-      })
+      const [savedSettings, savedJournalSettings] = await Promise.all([
+        store.save({
+          model,
+          modelReasoningEffort: settings.modelReasoningEffort,
+          systemPrompt,
+        }),
+        journalSettingsStore?.save({ weatherLocation }) ?? Promise.resolve(null),
+      ])
 
-      setSettings(savedSettings)
+      setSettings({
+        ...savedSettings,
+        weatherLocation: savedJournalSettings?.weatherLocation ?? weatherLocation,
+        journalSettingsPath: savedJournalSettings?.settingsPath ?? settings.journalSettingsPath,
+      })
       setStatus('saved')
       setMessage(`已收好，下一次${brand.assistantName}回应会照这份分寸来`)
     } catch (error) {
@@ -172,10 +201,26 @@ function SettingsPage() {
             </span>
           </div>
 
+          <label className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 rounded-[8px] border border-[rgba(122,79,50,0.12)] bg-[rgba(255,253,244,0.52)] px-4 py-3 text-[0.88rem]">
+            <span className="font-semibold text-[rgba(47,38,31,0.68)]">天气位置</span>
+            <input
+              aria-label="天气位置"
+              className="h-10 min-w-0 rounded-[8px] border border-[rgba(122,79,50,0.18)] bg-[rgba(255,253,244,0.78)] px-3 text-[0.92rem] text-ink outline-none focus:border-[rgba(20,114,79,0.45)]"
+              onChange={(event) =>
+                setSettings((currentSettings) => ({
+                  ...currentSettings,
+                  weatherLocation: event.target.value,
+                }))
+              }
+              placeholder="上海 / Shanghai / 31.2304,121.4737"
+              value={settings.weatherLocation}
+            />
+          </label>
+
           <div className="grid grid-cols-[minmax(0,1fr)_24rem] gap-6">
             <label className="flex flex-col gap-2">
               <span className="text-[0.86rem] font-semibold text-[rgba(47,38,31,0.7)]">
-              回应模型
+                回应模型
               </span>
               <div className="grid grid-cols-[13rem_minmax(0,1fr)] gap-3">
                 <select
@@ -270,6 +315,12 @@ function SettingsPage() {
                 </dd>
               </div>
               <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
+                <dt>偏好文件</dt>
+                <dd className="m-0 truncate" title={settings.journalSettingsPath}>
+                  {settings.journalSettingsPath}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
                 <dt>Prompt 文件</dt>
                 <dd className="m-0 truncate" title={settings.systemPromptPath}>
                   {settings.systemPromptPath}
@@ -293,6 +344,7 @@ function formatSettingsError(error: unknown, fallback: string) {
   if (
     error.message.includes('模型名称不能为空') ||
     error.message.includes('推理强度不正确') ||
+    error.message.includes('天气位置不能包含换行') ||
     error.message.includes('提示词不能为空') ||
     error.message.includes('System prompt 不能为空')
   ) {

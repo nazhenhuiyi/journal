@@ -14,6 +14,7 @@ export type DayFrontMatter = {
     name?: string
     region?: string
     country?: string
+    query?: string
   }
   [key: string]: unknown
 }

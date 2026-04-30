@@ -152,4 +152,20 @@ interface Window {
       systemPromptPath: string
     }>
   }
+  journalSettings?: {
+    load(): Promise<{
+      version: 1
+      weatherLocation: string
+      workingDirectory: string
+      settingsPath: string
+    }>
+    save(payload: {
+      weatherLocation: string
+    }): Promise<{
+      version: 1
+      weatherLocation: string
+      workingDirectory: string
+      settingsPath: string
+    }>
+  }
 }

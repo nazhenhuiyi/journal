@@ -13,6 +13,13 @@ const loadedSettings = {
   systemPromptPath: '/Users/zilin/.journal/codex/system-prompt.md',
 }
 
+const loadedJournalSettings = {
+  version: 1 as const,
+  weatherLocation: '上海',
+  workingDirectory: '/Users/zilin/.journal',
+  settingsPath: '/Users/zilin/.journal/settings.json',
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -23,6 +30,10 @@ describe('SettingsPage', () => {
       load: vi.fn().mockResolvedValue(loadedSettings),
       save: vi.fn(),
     })
+    vi.stubGlobal('journalSettings', {
+      load: vi.fn().mockResolvedValue(loadedJournalSettings),
+      save: vi.fn(),
+    })
 
     render(<SettingsPage />)
 
@@ -30,8 +41,10 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('combobox')).toHaveValue('gpt-5.5')
     expect(screen.getByPlaceholderText('模型名')).toHaveValue('gpt-5.5')
+    expect(screen.getByLabelText('天气位置')).toHaveValue('上海')
     expect(screen.getByLabelText('页边分寸')).toHaveValue('默认页边分寸')
     expect(screen.getAllByText('/Users/zilin/.journal')).toHaveLength(2)
+    expect(screen.getByText('/Users/zilin/.journal/settings.json')).toBeInTheDocument()
     expect(screen.getByText('/Users/zilin/.journal/codex/settings.json')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '高' })).toHaveAttribute('aria-pressed', 'true')
   })
@@ -43,10 +56,22 @@ describe('SettingsPage', () => {
         ...payload,
       }),
     )
+    const saveJournalSettings = vi.fn().mockImplementation((
+      payload: Parameters<NonNullable<Window['journalSettings']>['save']>[0],
+    ) =>
+      Promise.resolve({
+        ...loadedJournalSettings,
+        ...payload,
+      }),
+    )
 
     vi.stubGlobal('codexSettings', {
       load: vi.fn().mockResolvedValue(loadedSettings),
       save,
+    })
+    vi.stubGlobal('journalSettings', {
+      load: vi.fn().mockResolvedValue(loadedJournalSettings),
+      save: saveJournalSettings,
     })
 
     render(<SettingsPage />)
@@ -58,6 +83,9 @@ describe('SettingsPage', () => {
       target: { value: 'future-model' },
     })
     fireEvent.click(screen.getByRole('button', { name: '中' }))
+    fireEvent.change(screen.getByLabelText('天气位置'), {
+      target: { value: 'Shanghai' },
+    })
     fireEvent.change(screen.getByLabelText('页边分寸'), {
       target: { value: '新的 prompt' },
     })
@@ -69,6 +97,9 @@ describe('SettingsPage', () => {
         modelReasoningEffort: 'medium',
         systemPrompt: '新的 prompt',
       })
+      expect(saveJournalSettings).toHaveBeenCalledWith({
+        weatherLocation: 'Shanghai',
+      })
     })
     expect(await screen.findByText('已收好，下一次页边回应会照这份分寸来')).toBeInTheDocument()
   })
@@ -79,6 +110,10 @@ describe('SettingsPage', () => {
     vi.stubGlobal('codexSettings', {
       load: vi.fn().mockResolvedValue(loadedSettings),
       save,
+    })
+    vi.stubGlobal('journalSettings', {
+      load: vi.fn().mockResolvedValue(loadedJournalSettings),
+      save: vi.fn(),
     })
 
     render(<SettingsPage />)
