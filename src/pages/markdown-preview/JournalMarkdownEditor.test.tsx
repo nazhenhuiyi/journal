@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { EditorView } from 'codemirror'
 import { describe, expect, it, vi } from 'vitest'
-import JournalMarkdownEditor from './JournalMarkdownEditor'
+import JournalMarkdownEditor, { quoteMultilinePasteInActiveQuote } from './JournalMarkdownEditor'
 import { indentMarkdownListWithTab } from './markdownListIndent'
 
 describe('JournalMarkdownEditor', () => {
@@ -48,6 +48,54 @@ const mood = 'quiet'
     expect(view.state.doc.toString()).toBe(`1. 第一件事
 2. 第二件事
     1. 补充说明`)
+
+    view.destroy()
+  })
+
+  it('keeps every pasted paragraph inside the active quote block', () => {
+    const view = new EditorView({
+      doc: '> ',
+      selection: { anchor: 2 },
+    })
+
+    expect(quoteMultilinePasteInActiveQuote(view, '第一段\n\n第二段')).toBe(true)
+    expect(view.state.doc.toString()).toBe('> 第一段\n> \n> 第二段')
+
+    view.destroy()
+  })
+
+  it('does not add a dangling quote marker for pasted text that ends with a newline', () => {
+    const view = new EditorView({
+      doc: '> ',
+      selection: { anchor: 2 },
+    })
+
+    expect(quoteMultilinePasteInActiveQuote(view, '第一段\n\n第二段\n')).toBe(true)
+    expect(view.state.doc.toString()).toBe('> 第一段\n> \n> 第二段\n')
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('')
+
+    view.destroy()
+  })
+
+  it('leaves multiline paste alone outside quote blocks', () => {
+    const view = new EditorView({
+      doc: '',
+    })
+
+    expect(quoteMultilinePasteInActiveQuote(view, '第一段\n\n第二段')).toBe(false)
+    expect(view.state.doc.toString()).toBe('')
+
+    view.destroy()
+  })
+
+  it('leaves multiline paste alone before the quote marker', () => {
+    const view = new EditorView({
+      doc: '> 引用',
+      selection: { anchor: 0 },
+    })
+
+    expect(quoteMultilinePasteInActiveQuote(view, '第一段\n第二段')).toBe(false)
+    expect(view.state.doc.toString()).toBe('> 引用')
 
     view.destroy()
   })

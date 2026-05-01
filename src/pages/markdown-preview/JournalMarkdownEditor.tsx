@@ -87,6 +87,41 @@ function buildMarkdownLineDecorations(view: EditorView) {
   return Decoration.set(decorations, true)
 }
 
+function getActiveQuotePrefix(view: EditorView) {
+  const selection = view.state.selection.main
+
+  if (!selection.empty) {
+    return null
+  }
+
+  const line = view.state.doc.lineAt(selection.head)
+  const quoteMatch = /^(\s*(?:>\s*)+)/.exec(line.text)
+
+  if (!quoteMatch || selection.head - line.from < quoteMatch[1].length) {
+    return null
+  }
+
+  return quoteMatch[1]
+}
+
+export function quoteMultilinePasteInActiveQuote(view: EditorView, text: string) {
+  if (!/[\r\n]/.test(text)) {
+    return false
+  }
+
+  const quotePrefix = getActiveQuotePrefix(view)
+
+  if (!quotePrefix) {
+    return false
+  }
+
+  const normalizedText = text.replace(/\r\n?/g, '\n')
+  const quotedText = normalizedText.replace(/\n(?!$)/g, `\n${quotePrefix}`)
+
+  view.dispatch(view.state.replaceSelection(quotedText))
+  return true
+}
+
 const journalMarkdownLineDecorations = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
@@ -288,6 +323,18 @@ function JournalMarkdownEditor({ value, onChange }: JournalMarkdownEditorProps) 
         keymap.of([{ key: 'Tab', run: indentMarkdownListWithTab, shift: indentWithTab.shift }]),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ 'aria-label': '日记正文' }),
+        EditorView.domEventHandlers({
+          paste(event, view) {
+            const text = event.clipboardData?.getData('text/plain') ?? ''
+
+            if (!quoteMultilinePasteInActiveQuote(view, text)) {
+              return false
+            }
+
+            event.preventDefault()
+            return true
+          },
+        }),
         journalEditorTheme,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
