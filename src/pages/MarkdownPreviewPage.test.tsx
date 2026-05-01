@@ -321,6 +321,69 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('refreshes today weather when the cached location differs from settings', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
+
+    const storedJournal = {
+      content: [
+        '---',
+        'date: 2026-04-28',
+        'weather:',
+        '  text: 小雨',
+        '  temperature: 16',
+        '  updatedAt: 2026-04-28T01:00:00+08:00',
+        'location:',
+        '  name: Pihsien',
+        '---',
+        '',
+        '# 已有天气',
+        '',
+      ].join('\n'),
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T01:00:00.000Z',
+    }
+    const refreshedJournal = {
+      ...storedJournal,
+      content: [
+        '---',
+        'date: 2026-04-28',
+        'weather:',
+        '  text: 小雨',
+        '  temperature: 15',
+        '  updatedAt: 2026-04-28T02:00:00+08:00',
+        'location:',
+        '  name: 成都',
+        '  query: 成都',
+        '---',
+        '',
+        '# 已有天气',
+        '',
+      ].join('\n'),
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const refreshTodayWeather = vi.fn().mockResolvedValue(refreshedJournal)
+    const loadSettings = vi.fn().mockResolvedValue({
+      version: 1,
+      weatherLocation: '成都',
+      workingDirectory: '/Users/zilin/.journal',
+      settingsPath: '/Users/zilin/.journal/settings.json',
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, saveToday: vi.fn(), refreshTodayWeather })
+    vi.stubGlobal('journalSettings', { load: loadSettings })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(refreshTodayWeather).toHaveBeenCalledWith(undefined)
+      expect(screen.getByLabelText('今日天气')).toHaveTextContent('成都')
+      expect(screen.getByLabelText('今日天气')).toHaveTextContent('15°C')
+    })
+  })
+
   it('ignores stale annotations from a previous date', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))

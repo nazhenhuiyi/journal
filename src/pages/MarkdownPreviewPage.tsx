@@ -62,6 +62,10 @@ function getCodexStore() {
   return typeof window === 'undefined' ? undefined : window.codex
 }
 
+function getJournalSettingsStore() {
+  return typeof window === 'undefined' ? undefined : window.journalSettings
+}
+
 function readStoredJournalMode(): JournalMode {
   if (typeof window === 'undefined') {
     return 'write'
@@ -256,20 +260,22 @@ function MarkdownPreviewPage() {
 
     const loadedFrontMatter = parseJournalMarkdown(loadedFile.content).frontMatter
 
-    if (isFreshWeather(loadedFrontMatter.weather, loadedFile.date)) {
-      setWeatherStatus('ready')
+    if (loadedFile.date !== getLocalDateKey()) {
+      setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
       return
     }
 
-    if (loadedFile.date !== getLocalDateKey()) {
-      setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
+    const weatherLocation = await loadConfiguredWeatherLocation()
+
+    if (isFreshWeatherForLocation(loadedFrontMatter, loadedFile.date, weatherLocation)) {
+      setWeatherStatus('ready')
       return
     }
 
     setWeatherStatus('loading')
 
     try {
-      const location = await resolveBrowserWeatherLocation()
+      const location = weatherLocation ? undefined : await resolveBrowserWeatherLocation()
 
       if (journalFileRef.current?.date !== loadedFile.date || loadedFile.date !== getLocalDateKey()) {
         if (journalFileRef.current?.date === loadedFile.date) {
@@ -982,6 +988,24 @@ function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude:
 
 function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
+}
+
+function isFreshWeatherForLocation(frontMatter: DayFrontMatter, date: string, weatherLocation: string) {
+  if (!isFreshWeather(frontMatter.weather, date)) {
+    return false
+  }
+
+  const query = weatherLocation.trim()
+
+  return !query || (frontMatter.location?.query === query && frontMatter.location?.name === query)
+}
+
+async function loadConfiguredWeatherLocation() {
+  try {
+    return (await getJournalSettingsStore()?.load())?.weatherLocation.trim() ?? ''
+  } catch {
+    return ''
+  }
 }
 
 function isBlankJournalMarkdown(markdown: string) {

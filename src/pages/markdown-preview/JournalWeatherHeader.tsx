@@ -95,7 +95,7 @@ function getWritingDetailClass(label: string) {
 }
 
 function formatLocationLabel(location: DayFrontMatter['location']) {
-  return location?.name ?? location?.region ?? location?.country ?? '未定位'
+  return location?.query ?? location?.name ?? location?.region ?? location?.country ?? '未定位'
 }
 
 function formatTemperature(temperature: number | undefined) {

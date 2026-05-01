@@ -7,6 +7,7 @@ import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationT
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import { importJournalImagesForDate } from './journalMedia'
+import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
   createJournalMarkdownWithFrontMatter,
   stripManagedFrontMatter,
@@ -631,7 +632,7 @@ async function fetchTodayWeather(location: WeatherLookupLocation): Promise<Weath
 
 function getWeatherTarget(location: WeatherLookupLocation) {
   if (location.query) {
-    return encodeWeatherTarget(location.query)
+    return encodeWeatherTarget(normalizeWeatherQueryForWttr(location.query))
   }
 
   if (hasCoordinates(location)) {
@@ -716,6 +717,7 @@ function withWeatherLocationQuery(
 
   return {
     ...location,
+    name: query,
     query,
   }
 }
@@ -741,7 +743,7 @@ function hasFreshWeatherForLocation(frontMatter: DayFrontMatter, date: string, w
 
   const query = weatherLocation.trim()
 
-  return !query || frontMatter.location?.query === query
+  return !query || (frontMatter.location?.query === query && frontMatter.location?.name === query)
 }
 
 function hashText(text: string) {
