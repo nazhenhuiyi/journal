@@ -202,6 +202,9 @@ function DraftPanel({
                     {draft.matchStatus === 'anchored' ? '已定位原文' : '整天批注'}
                   </span>
                 </div>
+                {draft.matchStatus === 'anchored' ? (
+                  <AnnotationSource annotation={draft.annotation} className="mb-3 mt-0" />
+                ) : null}
                 <textarea
                   aria-label="批注草稿"
                   className="min-h-24 w-full resize-none border border-walnut/10 bg-[#fffdf7] px-3 py-2 text-sm leading-6 text-ink outline-none transition focus:border-sage"
@@ -318,11 +321,17 @@ function ChatPanel({
   )
 }
 
-function AnnotationSource({ annotation }: { annotation: Annotation }) {
+function AnnotationSource({
+  annotation,
+  className = 'mt-4',
+}: {
+  annotation: Annotation
+  className?: string
+}) {
   const source = getAnnotationSource(annotation)
 
   return (
-    <div className="mt-4">
+    <div className={className}>
       <blockquote
         aria-label="批注原文"
         className="relative max-h-28 overflow-y-auto whitespace-pre-wrap border border-walnut/5 bg-[#f9f7ef] px-4 py-3 text-sm leading-6 text-ink/60"
@@ -352,7 +361,7 @@ function getAnnotationSource(annotation: Annotation) {
 
   return {
     location: formatLinePosition(selector.linePosition),
-    quote: selector.plainQuote.exact || selector.sourceQuote.exact,
+    quote: selector.sourceQuote.exact || selector.plainQuote.exact,
   }
 }
 

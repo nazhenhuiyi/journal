@@ -580,6 +580,8 @@ describe('MarkdownPreviewPage', () => {
         longEntryMarkdown: '# 测试日记\n今天很累，但回来写了几行。',
       })
       expect(screen.getByRole('textbox', { name: '批注草稿' })).toHaveValue('这里把累和继续写都留住了。')
+      expect(screen.getByLabelText('批注原文')).toHaveTextContent('今天很累')
+      expect(screen.getByLabelText('批注原文')).toHaveTextContent('第 2 行')
     })
 
     fireEvent.click(screen.getByRole('button', { name: '接受' }))
