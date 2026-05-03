@@ -635,26 +635,15 @@ body {
     0 1px 0 rgba(255, 255, 255, 0.54) inset;
 }
 
-.calendar-open-book-icon {
-  display: inline-flex;
-  width: 2.65rem;
-  height: 2.65rem;
+.calendar-open-book-heading {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(20, 114, 79, 0.14);
-  border-radius: 8px;
-  color: #14724f;
-  background: rgba(236, 246, 232, 0.58);
+  gap: 0.68rem;
 }
 
-.calendar-open-book-icon svg {
+.calendar-open-book-icon {
+  flex: 0 0 auto;
   color: #14724f;
-}
-
-.calendar-open-book p {
-  margin: 1rem 0 0.35rem;
-  color: rgba(47, 38, 31, 0.5);
-  font-size: 0.88rem;
 }
 
 .calendar-open-book h2 {
@@ -665,30 +654,15 @@ body {
   letter-spacing: 0;
 }
 
-.calendar-open-book time {
-  display: inline-flex;
-  margin-top: 0.75rem;
-  color: rgba(47, 38, 31, 0.58);
-  font-size: 0.95rem;
-}
-
 .calendar-month-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.46rem;
-  margin: 1.45rem 0 0;
-}
-
-.calendar-month-stats div:first-child {
-  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.05rem;
+  margin: 2.25rem 0 0;
 }
 
 .calendar-month-stats div {
   min-width: 0;
-  border: 1px solid rgba(122, 79, 50, 0.09);
-  border-radius: 7px;
-  padding: 0.62rem 0.55rem;
-  background: rgba(255, 253, 244, 0.55);
 }
 
 .calendar-month-stats dt,
@@ -699,7 +673,7 @@ body {
 .calendar-month-stats dt {
   overflow: hidden;
   color: rgba(47, 38, 31, 0.46);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -707,21 +681,12 @@ body {
 
 .calendar-month-stats dd {
   overflow: hidden;
-  margin-top: 0.32rem;
+  margin-top: 0.36rem;
   color: rgba(47, 38, 31, 0.74);
-  font-size: 0.82rem;
+  font-size: 1rem;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.calendar-open-book-note {
-  margin-top: 1rem;
-  border-top: 1px solid rgba(122, 79, 50, 0.1);
-  padding-top: 0.95rem;
-  color: rgba(47, 38, 31, 0.54);
-  font-size: 0.82rem;
-  line-height: 1.55;
 }
 
 .calendar-grid-panel {
