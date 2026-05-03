@@ -2,6 +2,8 @@ import type { SketchState, Stroke } from './types'
 
 export const SKETCH_CANVAS_WIDTH = 660
 export const SKETCH_CANVAS_HEIGHT = 440
+export const SKETCH_CANVAS_DISPLAY_WIDTH = 930
+export const SKETCH_CANVAS_DISPLAY_HEIGHT = 620
 export const SKETCH_THUMBNAIL_WIDTH = 420
 export const SKETCH_THUMBNAIL_HEIGHT = 280
 
@@ -9,13 +11,15 @@ export function setupCanvasDpi(
   canvas: HTMLCanvasElement,
   width: number,
   height: number,
+  displayWidth = width,
+  displayHeight = height,
 ): CanvasRenderingContext2D | null {
   const ratio = Math.max(1, window.devicePixelRatio || 1)
 
-  canvas.width = Math.round(width * ratio)
-  canvas.height = Math.round(height * ratio)
-  canvas.style.width = `${width}px`
-  canvas.style.height = `${height}px`
+  canvas.width = Math.round(displayWidth * ratio)
+  canvas.height = Math.round(displayHeight * ratio)
+  canvas.style.width = `${displayWidth}px`
+  canvas.style.height = `${displayHeight}px`
 
   const context = canvas.getContext('2d')
 
@@ -23,7 +27,14 @@ export function setupCanvasDpi(
     return null
   }
 
-  context.setTransform(ratio, 0, 0, ratio, 0, 0)
+  context.setTransform(
+    ratio * (displayWidth / width),
+    0,
+    0,
+    ratio * (displayHeight / height),
+    0,
+    0,
+  )
 
   return context
 }

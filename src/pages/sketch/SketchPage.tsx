@@ -17,6 +17,8 @@ import {
   formatSketchDuration,
   renderSketch,
   setupCanvasDpi,
+  SKETCH_CANVAS_DISPLAY_HEIGHT,
+  SKETCH_CANVAS_DISPLAY_WIDTH,
   SKETCH_CANVAS_HEIGHT,
   SKETCH_CANVAS_WIDTH,
   useSketchSession,
@@ -64,7 +66,13 @@ function SketchPage() {
       return
     }
 
-    const context = setupCanvasDpi(canvas, SKETCH_CANVAS_WIDTH, SKETCH_CANVAS_HEIGHT)
+    const context = setupCanvasDpi(
+      canvas,
+      SKETCH_CANVAS_WIDTH,
+      SKETCH_CANVAS_HEIGHT,
+      SKETCH_CANVAS_DISPLAY_WIDTH,
+      SKETCH_CANVAS_DISPLAY_HEIGHT,
+    )
 
     if (!context) {
       return

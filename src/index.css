@@ -1108,8 +1108,8 @@ body {
 .sketch-paper-frame {
   position: relative;
   display: flex;
-  width: 41.25rem;
-  height: 27.5rem;
+  width: 58.125rem;
+  height: 38.75rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(122, 79, 50, 0.14);
@@ -1139,15 +1139,15 @@ body {
 
 .sketch-canvas {
   display: block;
-  width: 41.25rem;
-  height: 27.5rem;
+  width: 58.125rem;
+  height: 38.75rem;
   touch-action: none;
   cursor: crosshair;
 }
 
 .sketch-stage-footer {
   display: flex;
-  width: 41.25rem;
+  width: 58.125rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
