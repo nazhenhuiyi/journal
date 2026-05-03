@@ -39,6 +39,14 @@ interface Window {
       filePath: string
       updatedAt: string | null
     }>
+    listEntries?(): Promise<
+      {
+        date: string
+        fileName: string
+        filePath: string
+        updatedAt: string | null
+      }[]
+    >
     loadDate?(date: string): Promise<{
       content: string
       date: string

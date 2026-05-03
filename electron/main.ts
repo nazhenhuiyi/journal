@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
@@ -86,6 +86,7 @@ ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
 )
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
+ipcMain.handle('journal:listEntries', () => listJournalEntries())
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
 ipcMain.handle('journal:saveDate', (_event, date: unknown, content: unknown) => saveJournal(date, content))
 ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))
@@ -102,6 +103,8 @@ type JournalFile = {
   filePath: string
   updatedAt: string | null
 }
+
+type JournalEntry = Omit<JournalFile, 'content'>
 
 type WeatherLookupLocation = {
   latitude?: number
@@ -203,6 +206,51 @@ async function journalFilePayload(content: string, date = getTodayDateKey()): Pr
 
 async function loadTodayJournal() {
   return loadJournal(getTodayDateKey())
+}
+
+async function listJournalEntries(): Promise<JournalEntry[]> {
+  const directory = getJournalDirectory()
+  const fileNames = await readdir(directory).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  })
+  const journalFileNames = fileNames.filter((fileName) => /^\d{4}-\d{2}-\d{2}\.md$/.test(fileName))
+  const entries = await Promise.all(
+    journalFileNames.map(async (fileName) => {
+      const date = fileName.slice(0, -3)
+      const filePath = path.join(directory, fileName)
+      const content = await readFile(filePath, 'utf8').catch(() => null)
+
+      if (!content || !hasJournalContent(content)) {
+        return null
+      }
+
+      const fileStat = await stat(filePath).catch(() => null)
+
+      return {
+        date,
+        fileName,
+        filePath,
+        updatedAt: fileStat?.mtime.toISOString() ?? null,
+      }
+    }),
+  )
+
+  return entries
+    .filter((entry): entry is JournalEntry => entry !== null)
+    .sort((left, right) => left.date.localeCompare(right.date))
+}
+
+function hasJournalContent(content: string) {
+  const parsedEntry = parseJournalMarkdown(content)
+
+  return Boolean(
+    parsedEntry.longEntryMarkdown.trim() ||
+      parsedEntry.murmurs.some((murmur) => murmur.body.trim() || murmur.images.length > 0),
+  )
 }
 
 async function loadJournal(date: unknown) {

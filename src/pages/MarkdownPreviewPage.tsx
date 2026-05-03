@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import SegmentedControl from '../components/SegmentedControl'
@@ -44,6 +44,13 @@ import { brand } from '../brand'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
+type JournalDayViewProps = {
+  date?: string | null
+  showDaySwitchNudge?: boolean
+}
+export type JournalDayViewHandle = {
+  flushPendingSave: () => Promise<boolean>
+}
 
 const noAnnotations: Annotation[] = []
 const AUTOSAVE_DELAY_MS = 700
@@ -174,7 +181,10 @@ function formatTopbarWeatherLabel(weatherText: string | undefined) {
   return weatherText
 }
 
-function MarkdownPreviewPage() {
+export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewProps>(function JournalDayView(
+  { date = null, showDaySwitchNudge = true },
+  ref,
+) {
   const [journalMode, setJournalMode] = useState<JournalMode>(() => readStoredJournalMode())
   const [journalMarkdown, setJournalMarkdown] = useState(annotationTargetsEntry)
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
@@ -199,6 +209,7 @@ function MarkdownPreviewPage() {
   const lastSavedMarkdownRef = useRef(annotationTargetsEntry)
   const saveRequestIdRef = useRef(0)
   const chatLoadRequestIdRef = useRef(0)
+  const flushPendingSaveRef = useRef<((shouldUpdateState?: boolean) => Promise<boolean>) | null>(null)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
@@ -328,20 +339,7 @@ function MarkdownPreviewPage() {
     }
   }, [replaceJournalAnnotations])
 
-  const loadTodayJournal = useCallback(async (shouldApply: () => boolean = () => true) => {
-    const journalStore = getJournalStore()
-
-    if (!journalStore) {
-      hasLoadedJournalRef.current = true
-      return
-    }
-
-    const file = await journalStore.loadToday()
-
-    if (!shouldApply()) {
-      return
-    }
-
+  const applyLoadedJournalFile = useCallback((file: JournalFile) => {
     const parsedFile = parseJournalMarkdown(file.content)
     const editableMarkdown = serializeJournalMarkdownBody(parsedFile.longEntryMarkdown, parsedFile.murmurs)
     const frontMatter = parsedFile.frontMatter
@@ -359,6 +357,38 @@ function MarkdownPreviewPage() {
     void loadAnnotationsForDate(file.date)
     void refreshTodayWeather(file)
   }, [loadAnnotationsForDate, refreshTodayWeather])
+
+  const loadTodayJournal = useCallback(async (shouldApply: () => boolean = () => true) => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore) {
+      hasLoadedJournalRef.current = true
+      return
+    }
+
+    const file = await journalStore.loadToday()
+
+    if (shouldApply()) {
+      applyLoadedJournalFile(file)
+    }
+  }, [applyLoadedJournalFile])
+
+  const loadJournalForDate = useCallback(async (date: string | null, shouldApply: () => boolean = () => true) => {
+    const journalStore = getJournalStore()
+
+    if (!date || date === getLocalDateKey() || !journalStore?.loadDate) {
+      await loadTodayJournal(shouldApply)
+      return
+    }
+
+    const file = await journalStore.loadDate(date)
+
+    if (!shouldApply()) {
+      return
+    }
+
+    applyLoadedJournalFile(file)
+  }, [applyLoadedJournalFile, loadTodayJournal])
 
   const saveJournalFile = useCallback(async (
     date: string,
@@ -401,11 +431,52 @@ function MarkdownPreviewPage() {
     return annotationFile.annotations
   }, [replaceJournalAnnotations])
 
+  const flushPendingSave = useCallback(async (shouldUpdateState = true) => {
+    const currentDate = journalFileRef.current?.date ?? realTodayDate
+
+    if (!getJournalStore() || !hasLoadedJournalRef.current || journalMarkdown === lastSavedMarkdownRef.current) {
+      return true
+    }
+
+    saveRequestIdRef.current += 1
+
+    try {
+      const savedFile = await saveJournalFile(currentDate, journalMarkdown, journalFrontMatter)
+
+      if (!savedFile) {
+        return false
+      }
+
+      lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
+      journalFileRef.current = savedFile
+
+      if (shouldUpdateState) {
+        setJournalFile(savedFile)
+      }
+
+      return true
+    } catch {
+      return false
+    }
+  }, [journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
+
+  useEffect(() => {
+    flushPendingSaveRef.current = flushPendingSave
+  }, [flushPendingSave])
+
+  useImperativeHandle(ref, () => ({
+    flushPendingSave: () => flushPendingSave(),
+  }), [flushPendingSave])
+
+  useEffect(() => () => {
+    void flushPendingSaveRef.current?.(false)
+  }, [])
+
   useEffect(() => {
     let isCancelled = false
 
     void Promise.resolve()
-      .then(() => loadTodayJournal(() => !isCancelled))
+      .then(() => loadJournalForDate(date, () => !isCancelled))
       .catch(() => {
         if (isCancelled) {
           return
@@ -417,7 +488,7 @@ function MarkdownPreviewPage() {
     return () => {
       isCancelled = true
     }
-  }, [loadTodayJournal])
+  }, [date, loadJournalForDate])
 
   useEffect(() => {
     journalFileRef.current = journalFile
@@ -855,7 +926,7 @@ function MarkdownPreviewPage() {
         transition={{ ...panelTransition, delay: 0.05 }}
       >
         <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">{topbarTitle}</h1>
-        {isViewingAnotherDay ? (
+        {showDaySwitchNudge && isViewingAnotherDay ? (
           <div className="journal-day-nudge" role="status">
             <span>
               {daySwitchError ||
@@ -951,6 +1022,10 @@ function MarkdownPreviewPage() {
       />
     </>
   )
+})
+
+function MarkdownPreviewPage() {
+  return <JournalDayView />
 }
 
 function createAiPanelMessageId() {
