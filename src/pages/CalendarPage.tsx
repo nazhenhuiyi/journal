@@ -160,19 +160,35 @@ function CalendarPage() {
     () => buildMonthCells(year, displayMonth, todayDateKey, entryDateKeys),
     [displayMonth, entryDateKeys, todayDateKey, year],
   )
-  const activeMonthDates = entryDatesByMonth.get(displayMonth) ?? []
+  const activeMonthDates = useMemo(
+    () => entryDatesByMonth.get(displayMonth) ?? [],
+    [displayMonth, entryDatesByMonth],
+  )
+  const activeMonthDateKeys = useMemo(() => new Set(activeMonthDates), [activeMonthDates])
+  const activeMonthEntries = useMemo(
+    () =>
+      entries
+        .filter((entry) => activeMonthDateKeys.has(entry.date))
+        .sort((left, right) => right.date.localeCompare(left.date)),
+    [activeMonthDateKeys, entries],
+  )
+  const activeMonthWeekendEntries = useMemo(
+    () =>
+      activeMonthDates.filter((dateKey) => {
+        const [, month, day] = dateKey.split('-').map(Number)
+        const weekday = new Date(year, month - 1, day).getDay()
+
+        return weekday === 0 || weekday === 6
+      }).length,
+    [activeMonthDates, year],
+  )
+  const latestActiveMonthEntry = activeMonthEntries[0] ?? null
   const hasActiveMonthEntries = activeMonthDates.length > 0
   const openDate = selectedDate?.startsWith(`${year}-`) && entryDateKeys.has(selectedDate) ? selectedDate : null
   const entryDates = useMemo(() => entries.map((entry) => entry.date).sort(), [entries])
   const openDateIndex = openDate ? entryDates.indexOf(openDate) : -1
   const previousDate = openDateIndex > 0 ? entryDates[openDateIndex - 1] : null
   const nextDate = openDateIndex >= 0 && openDateIndex < entryDates.length - 1 ? entryDates[openDateIndex + 1] : null
-  const entryStatusLabel = loadStatus === 'loading'
-    ? '正在翻找'
-    : loadStatus === 'failed'
-      ? '索引失败'
-      : `${entries.length} 篇`
-
   const loadEntries = useCallback(async (shouldApply: () => boolean = () => true) => {
     const journalStore = getJournalStore()
 
@@ -232,18 +248,6 @@ function CalendarPage() {
 
     setActiveMonth(monthIndex)
     setSelectedDate(null)
-  }
-
-  function handleOpenToday() {
-    const todayMonth = today.getMonth()
-
-    if (!entryDateKeys.has(todayDateKey)) {
-      return
-    }
-
-    setYear(today.getFullYear())
-    setActiveMonth(todayMonth)
-    setSelectedDate(todayDateKey)
   }
 
   async function flushOpenDayBeforeLeaving() {
@@ -353,10 +357,6 @@ function CalendarPage() {
     >
       <header className="mx-auto grid w-[min(100%,66rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-6 px-10 pb-7 pt-9">
         <div className="min-w-0">
-          <p className="mb-3 inline-flex items-center gap-2 text-[0.82rem] text-ink/55">
-            <CalendarDays aria-hidden="true" size={17} strokeWidth={2.15} />
-            {year} · {monthNames[displayMonth]} · {entryStatusLabel}
-          </p>
           <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-ink">
             日历书架
           </h1>
@@ -414,12 +414,33 @@ function CalendarPage() {
         className="mx-auto grid w-[min(100%,66rem)] grid-cols-[16rem_minmax(0,1fr)] gap-6 px-10 pb-12 pt-8"
       >
         <aside className="calendar-open-book">
-          <BookOpen aria-hidden="true" size={34} strokeWidth={2.08} />
+          <div className="calendar-open-book-icon">
+            <BookOpen aria-hidden="true" size={32} strokeWidth={2.08} />
+          </div>
           <p>{year}</p>
           <h2 id="calendar-open-month">{monthNames[displayMonth]}</h2>
           <time dateTime={`${year}-${`${displayMonth + 1}`.padStart(2, '0')}`}>
             {hasActiveMonthEntries ? `${activeMonthDates.length} 篇日记` : '还没有日记'}
           </time>
+          <dl className="calendar-month-stats">
+            <div>
+              <dt>最近一篇</dt>
+              <dd>{latestActiveMonthEntry?.date.slice(5).replace('-', '.') ?? '等待第一篇'}</dd>
+            </div>
+            <div>
+              <dt>记录日</dt>
+              <dd>{activeMonthDates.length} 天</dd>
+            </div>
+            <div>
+              <dt>周末</dt>
+              <dd>{activeMonthWeekendEntries} 篇</dd>
+            </div>
+          </dl>
+          <div className="calendar-open-book-note">
+            {hasActiveMonthEntries
+              ? `这个月还有 ${new Date(year, displayMonth + 1, 0).getDate() - activeMonthDates.length} 天空白。`
+              : '书架上还空着，等一篇日记落进来。'}
+          </div>
         </aside>
 
         <div className="calendar-grid-panel">
@@ -446,20 +467,11 @@ function CalendarPage() {
                   type="button"
                 >
                   <span>{cell.day}</span>
-                  {cell.isToday ? <small>今日</small> : null}
+                  <small className={cell.isToday ? 'is-today-label' : undefined}>{cell.isToday ? '今日' : ''}</small>
                 </button>
               )
             })}
           </div>
-          <button
-            className="calendar-today-link"
-            disabled={!entryDateKeys.has(todayDateKey)}
-            onClick={handleOpenToday}
-            type="button"
-          >
-            <span>回到今日</span>
-            <ArrowRight aria-hidden="true" size={17} strokeWidth={2.25} />
-          </button>
         </div>
       </section>
     </motion.div>
