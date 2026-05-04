@@ -24,6 +24,7 @@ type FloatingAiPanelProps = {
   drafts: AiPanelDraft[]
   error: string
   isGenerationAvailable: boolean
+  isLauncherVisible: boolean
   isOpen: boolean
   mode: 'idle' | 'generating' | 'drafts' | 'chat'
   onAcceptDraft: (draftId: string) => void
@@ -44,6 +45,7 @@ function FloatingAiPanel({
   drafts,
   error,
   isGenerationAvailable,
+  isLauncherVisible,
   isOpen,
   mode,
   onAcceptDraft,
@@ -56,6 +58,10 @@ function FloatingAiPanel({
   onUpdateDraftContent,
 }: FloatingAiPanelProps) {
   if (!isGenerationAvailable && !isOpen) {
+    return null
+  }
+
+  if (!isOpen && !isLauncherVisible) {
     return null
   }
 

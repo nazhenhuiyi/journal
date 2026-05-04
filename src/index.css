@@ -363,30 +363,31 @@ body {
 
 .calendar-day-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto;
   align-items: center;
-  gap: 1rem;
-  min-height: 4.25rem;
-  border-bottom: 1.5px solid rgba(122, 79, 50, 0.14);
-  padding: 0.72rem 1.65rem;
-  background: rgba(255, 252, 243, 0.82);
+  justify-content: space-between;
+  gap: 0.9rem;
+  min-height: 3.45rem;
+  border-bottom: 1px solid rgba(122, 79, 50, 0.1);
+  padding: 0.48rem 1.7rem;
+  background: rgba(255, 252, 243, 0.58);
 }
 
 .calendar-day-back,
 .calendar-day-nav {
   display: inline-flex;
-  min-height: 2.4rem;
+  min-height: 2.05rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  border: 1.5px solid rgba(111, 126, 99, 0.25);
-  border-radius: 8px;
-  padding: 0.55rem 0.85rem;
-  color: var(--color-ink);
-  background: rgba(255, 253, 244, 0.76);
+  gap: 0.38rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 0.34rem 0.68rem;
+  color: rgba(47, 38, 31, 0.72);
+  background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 650;
   transition:
     background-color 180ms ease,
@@ -397,9 +398,9 @@ body {
 
 .calendar-day-back:hover,
 .calendar-day-nav:not(:disabled):hover {
-  border-color: rgba(20, 114, 79, 0.34);
-  background: rgba(111, 126, 99, 0.12);
-  transform: translateY(-1px);
+  border-color: rgba(111, 126, 99, 0.16);
+  color: var(--color-ink);
+  background: rgba(255, 253, 244, 0.62);
 }
 
 .calendar-day-back:focus-visible,
@@ -410,7 +411,7 @@ body {
 
 .calendar-day-back:disabled,
 .calendar-day-nav:disabled {
-  opacity: 0.42;
+  color: rgba(47, 38, 31, 0.3);
   cursor: default;
 }
 
@@ -418,22 +419,19 @@ body {
   transform: rotate(180deg);
 }
 
-.calendar-day-current {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(47, 38, 31, 0.66);
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-  font-weight: 650;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .calendar-day-jump {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.12rem;
+  border: 1px solid rgba(111, 126, 99, 0.15);
+  border-radius: 9px;
+  padding: 0.14rem;
+  background: rgba(255, 253, 244, 0.34);
+}
+
+.calendar-day-jump .calendar-day-nav {
+  min-width: 5.15rem;
+  border-radius: 7px;
 }
 
 .calendar-day-content {

@@ -960,6 +960,17 @@ describe('MarkdownPreviewPage', () => {
     expect(screen.getByRole('heading', { name: '页边' })).toBeInTheDocument()
   })
 
+  it('hides the annotation launcher while keeping the margin in review mode', () => {
+    render(<MarkdownPreviewPage />)
+
+    enterReviewMode()
+
+    expect(screen.getByRole('button', { name: '回看' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { name: '批注目标' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '页边' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '页边批注' })).not.toBeInTheDocument()
+  })
+
   it('mounts the writing surface as a CodeMirror editor', () => {
     const { container } = render(<MarkdownPreviewPage />)
 

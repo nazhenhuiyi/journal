@@ -1004,6 +1004,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         drafts={aiDrafts}
         error={aiPanelError}
         isGenerationAvailable={canGenerateAiAnnotations}
+        isLauncherVisible={!isReviewing}
         isOpen={isAiPanelVisible}
         mode={aiPanelMode}
         onAcceptDraft={(draftId) => void handleAcceptDraft(draftId)}

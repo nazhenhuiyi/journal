@@ -308,9 +308,6 @@ function CalendarPage() {
             <CalendarDays aria-hidden="true" size={17} strokeWidth={2.15} />
             <span>返回日历</span>
           </button>
-          <time className="calendar-day-current" dateTime={openDate}>
-            {openDate}
-          </time>
           <div className="calendar-day-jump">
             <button
               className="calendar-day-nav"
