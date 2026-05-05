@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -97,11 +97,21 @@ tags: [灯]
     expect(index[1].searchableText).toContain('长日记正文。')
     expect(index[1].searchableText).toContain('窗户')
     expect(index[0].tags).toEqual(['灯'])
+
+    const indexFile = JSON.parse(await readFile(path.join(directory, 'index', 'journal-index.json'), 'utf8'))
+
+    expect(indexFile.version).toBe(1)
+    expect(typeof indexFile.generatedAt).toBe('string')
+    expect(indexFile.entries.map((entry: { date: string }) => entry.date)).toEqual(['2026-04-25', '2026-04-24'])
   })
 
-  it('returns an empty index when the journal directory does not exist', async () => {
-    const directory = path.join(os.tmpdir(), 'journal-index-missing')
+  it('writes an empty index when the journal directory does not exist', async () => {
+    const parentDirectory = await createTemporaryJournalDirectory()
+    const directory = path.join(parentDirectory, 'missing')
 
     await expect(listJournalIndex(directory)).resolves.toEqual([])
+    await expect(readFile(path.join(directory, 'index', 'journal-index.json'), 'utf8')).resolves.toContain(
+      '"entries": []',
+    )
   })
 })

@@ -28,3 +28,9 @@ export type JournalIndexEntry = {
   }[]
   searchableText: string
 }
+
+export type JournalIndexFile = {
+  version: 1
+  generatedAt: string
+  entries: JournalIndexEntry[]
+}

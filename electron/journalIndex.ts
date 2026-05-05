@@ -1,8 +1,8 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { parseJournalMarkdown } from '../src/domain/markdown/parseJournalMarkdown'
 import type { DayFrontMatter } from '../src/domain/markdown/types'
-import type { JournalIndexEntry } from '../src/domain/journalIndex/types'
+import type { JournalIndexEntry, JournalIndexFile } from '../src/domain/journalIndex/types'
 
 export async function listJournalIndex(journalDirectory: string): Promise<JournalIndexEntry[]> {
   const fileNames = await readdir(journalDirectory).catch((error: unknown) => {
@@ -41,9 +41,34 @@ export async function listJournalIndex(journalDirectory: string): Promise<Journa
     }),
   )
 
-  return entries
+  const indexEntries = entries
     .filter((entry): entry is JournalIndexEntry => entry !== null)
     .sort((left, right) => right.date.localeCompare(left.date))
+
+  await writeJournalIndexFile(journalDirectory, indexEntries)
+
+  return indexEntries
+}
+
+function getJournalIndexPath(journalDirectory: string) {
+  const directory = path.join(journalDirectory, 'index')
+
+  return {
+    directory,
+    filePath: path.join(directory, 'journal-index.json'),
+  }
+}
+
+async function writeJournalIndexFile(journalDirectory: string, entries: JournalIndexEntry[]) {
+  const { directory, filePath } = getJournalIndexPath(journalDirectory)
+  const indexFile: JournalIndexFile = {
+    entries,
+    generatedAt: new Date().toISOString(),
+    version: 1,
+  }
+
+  await mkdir(directory, { recursive: true })
+  await writeFile(filePath, `${JSON.stringify(indexFile, null, 2)}\n`, 'utf8')
 }
 
 function createJournalIndexEntry({
