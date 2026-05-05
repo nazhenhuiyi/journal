@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react'
 import {
   ArrowRight,
   BookOpen,
@@ -13,12 +12,7 @@ import { motion } from 'motion/react'
 import { Link } from 'react-router'
 import {
   formatSketchDuration,
-  renderSketch,
-  setupCanvasDpi,
-  SKETCH_CANVAS_HEIGHT,
-  SKETCH_CANVAS_WIDTH,
-  SKETCH_THUMBNAIL_HEIGHT,
-  SKETCH_THUMBNAIL_WIDTH,
+  SketchPlaybackCanvas,
   useSketchSession,
 } from '../domain/sketch'
 import nightLampPhoto from '../assets/memory-photos/night-lamp.jpg'
@@ -87,27 +81,7 @@ const memoryRows = [
 ]
 
 function AllPagesHomePage() {
-  const { state, eventCount, originalDuration, replayDuration } = useSketchSession()
-  const sketchPreviewRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    const canvas = sketchPreviewRef.current
-
-    if (!canvas) {
-      return
-    }
-
-    const context = setupCanvasDpi(canvas, SKETCH_THUMBNAIL_WIDTH, SKETCH_THUMBNAIL_HEIGHT)
-
-    if (!context) {
-      return
-    }
-
-    context.save()
-    context.scale(SKETCH_THUMBNAIL_WIDTH / SKETCH_CANVAS_WIDTH, SKETCH_THUMBNAIL_HEIGHT / SKETCH_CANVAS_HEIGHT)
-    renderSketch(context, state, SKETCH_CANVAS_WIDTH, SKETCH_CANVAS_HEIGHT)
-    context.restore()
-  }, [state])
+  const { currentDocument, state, eventCount, originalDuration, replayDuration } = useSketchSession()
 
   return (
     <motion.div
@@ -165,13 +139,20 @@ function AllPagesHomePage() {
           </div>
         </div>
         <div className="all-pages-sketch-preview">
-          <canvas
-            aria-label="最近随画预览"
-            height={SKETCH_THUMBNAIL_HEIGHT}
-            ref={sketchPreviewRef}
-            width={SKETCH_THUMBNAIL_WIDTH}
-          />
-          {eventCount === 0 ? <span>空白画纸</span> : null}
+          {currentDocument ? (
+            <SketchPlaybackCanvas
+              canvas={currentDocument.canvas}
+              className="is-thumbnail"
+              controls={false}
+              emptyLabel="空白画纸"
+              events={state.events}
+              label="最近随画预览"
+              maxDisplayHeight={280}
+              maxDisplayWidth={420}
+            />
+          ) : (
+            <span>空白画纸</span>
+          )}
         </div>
       </section>
 

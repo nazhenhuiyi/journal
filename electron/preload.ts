@@ -85,3 +85,24 @@ contextBridge.exposeInMainWorld('journalStore', {
     return ipcRenderer.invoke('journal:importImages', date)
   },
 })
+
+contextBridge.exposeInMainWorld('sketchStore', {
+  list() {
+    return ipcRenderer.invoke('sketch:list')
+  },
+  create(payload?: { title?: string; canvasPreset?: import('../src/domain/sketch').SketchCanvasPreset }) {
+    return ipcRenderer.invoke('sketch:create', payload)
+  },
+  load(id: string) {
+    return ipcRenderer.invoke('sketch:load', id)
+  },
+  save(document: import('../src/domain/sketch').SketchDocument) {
+    return ipcRenderer.invoke('sketch:save', document)
+  },
+  import() {
+    return ipcRenderer.invoke('sketch:import')
+  },
+  delete(id: string) {
+    return ipcRenderer.invoke('sketch:delete', id)
+  },
+})

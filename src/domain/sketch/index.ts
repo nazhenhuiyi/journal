@@ -1,5 +1,7 @@
 export * from './drawing'
+export * from './document'
 export * from './reducer'
+export * from './SketchPlaybackCanvas'
 export * from './SketchSessionProvider'
 export * from './timeline'
 export * from './types'

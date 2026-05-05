@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { motion } from 'motion/react'
 import { useSearchParams } from 'react-router'
 import {
   BookOpen,
   Eraser,
-  Pause,
   PenLine,
   Play,
   Redo,
@@ -13,15 +12,14 @@ import {
 } from '../../components/HandDrawnIcons'
 import {
   createReplayTimeline,
-  deriveSketchState,
-  formatSketchDuration,
+  createSketchCanvas,
+  fitSketchCanvasDisplay,
   renderSketch,
   setupCanvasDpi,
-  SKETCH_CANVAS_DISPLAY_HEIGHT,
-  SKETCH_CANVAS_DISPLAY_WIDTH,
-  SKETCH_CANVAS_HEIGHT,
-  SKETCH_CANVAS_WIDTH,
+  SKETCH_CANVAS_PRESETS,
+  SketchPlaybackCanvas,
   useSketchSession,
+  type SketchCanvasPreset,
   type SketchEvent,
   type SketchPoint,
   type SketchTool,
@@ -32,67 +30,63 @@ const pencilColors = ['#2f261f', '#2459bc', '#14724f', '#df6246', '#e96b98', '#7
 const pointStep = 2.2
 
 function SketchPage() {
-  const { state, dispatchSketchEvent, canUndo, canRedo } = useSketchSession()
+  const {
+    currentDocument,
+    documents,
+    status,
+    error,
+    state,
+    dispatchSketchEvent,
+    resetSketch,
+    selectSketch,
+    createSketch,
+    importSketch,
+    deleteCurrentSketch,
+    renameCurrentSketch,
+    setCurrentCanvasPreset,
+    canUndo,
+    canRedo,
+  } = useSketchSession()
   const [searchParams, setSearchParams] = useSearchParams()
+  const canvas = currentDocument?.canvas ?? createSketchCanvas()
   const timeline = useMemo(() => createReplayTimeline(state.events), [state.events])
-  const shouldStartReplayFromQuery = searchParams.get('replay') === '1' && timeline.steps.length > 0
   const [activeTool, setActiveTool] = useState<SketchTool>('pencil')
   const [pencilSize, setPencilSize] = useState(4)
   const [eraserSize, setEraserSize] = useState(24)
   const [color, setColor] = useState(pencilColors[0])
-  const [isReplayMode, setIsReplayMode] = useState(() => shouldStartReplayFromQuery)
-  const [isReplayPlaybackRequested, setIsReplayPlaybackRequested] = useState(
-    () => shouldStartReplayFromQuery,
-  )
-  const [replayIndex, setReplayIndex] = useState(0)
+  const [isReplayMode, setIsReplayMode] = useState(false)
+  const [replayKey, setReplayKey] = useState(0)
+  const [newSketchPreset, setNewSketchPreset] = useState<SketchCanvasPreset>('landscape-3-2')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingStrokeIdRef = useRef<string | null>(null)
   const eventIdRef = useRef(0)
   const lastPointRef = useRef<SketchPoint | null>(null)
-  const isReplayPlaying =
-    isReplayPlaybackRequested && timeline.steps.length > 0 && replayIndex < timeline.steps.length
-  const replayEvents = useMemo(
-    () => timeline.steps.slice(0, replayIndex).map((step) => step.event),
-    [replayIndex, timeline.steps],
-  )
-  const replayState = useMemo(() => deriveSketchState(replayEvents), [replayEvents])
-  const visibleState = isReplayMode ? replayState : state
   const toolSize = activeTool === 'pencil' ? pencilSize : eraserSize
+  const displaySize = useMemo(() => fitSketchCanvasDisplay(canvas), [canvas])
+  const hasEvents = state.events.length > 0
+  const canChangeCanvasPreset = !hasEvents
 
   useEffect(() => {
-    const canvas = canvasRef.current
+    const sketchCanvas = canvasRef.current
 
-    if (!canvas) {
+    if (!sketchCanvas || isReplayMode) {
       return
     }
 
     const context = setupCanvasDpi(
-      canvas,
-      SKETCH_CANVAS_WIDTH,
-      SKETCH_CANVAS_HEIGHT,
-      SKETCH_CANVAS_DISPLAY_WIDTH,
-      SKETCH_CANVAS_DISPLAY_HEIGHT,
+      sketchCanvas,
+      canvas.width,
+      canvas.height,
+      displaySize.width,
+      displaySize.height,
     )
 
     if (!context) {
       return
     }
 
-    renderSketch(context, visibleState, SKETCH_CANVAS_WIDTH, SKETCH_CANVAS_HEIGHT)
-  }, [visibleState])
-
-  useEffect(() => {
-    if (!isReplayPlaying) {
-      return
-    }
-
-    const timeout = window.setTimeout(
-      () => setReplayIndex((currentIndex) => currentIndex + 1),
-      timeline.steps[replayIndex]?.delay ?? 0,
-    )
-
-    return () => window.clearTimeout(timeout)
-  }, [isReplayPlaying, replayIndex, timeline.steps])
+    renderSketch(context, state, canvas.width, canvas.height)
+  }, [canvas, displaySize, isReplayMode, state])
 
   useEffect(() => {
     if (searchParams.get('replay') !== '1' || timeline.steps.length === 0) {
@@ -101,8 +95,7 @@ function SketchPage() {
 
     const timeout = window.setTimeout(() => {
       setIsReplayMode(true)
-      setReplayIndex(0)
-      setIsReplayPlaybackRequested(true)
+      setReplayKey((currentKey) => currentKey + 1)
       setSearchParams({}, { replace: true })
     }, 0)
 
@@ -119,14 +112,14 @@ function SketchPage() {
   }
 
   function pointFromEvent(event: PointerEvent<HTMLCanvasElement>): SketchPoint {
-    const canvas = event.currentTarget
-    const rect = canvas.getBoundingClientRect()
-    const x = ((event.clientX - rect.left) / rect.width) * SKETCH_CANVAS_WIDTH
-    const y = ((event.clientY - rect.top) / rect.height) * SKETCH_CANVAS_HEIGHT
+    const eventCanvas = event.currentTarget
+    const rect = eventCanvas.getBoundingClientRect()
+    const x = ((event.clientX - rect.left) / rect.width) * canvas.width
+    const y = ((event.clientY - rect.top) / rect.height) * canvas.height
 
     return {
-      x: clamp(x, 0, SKETCH_CANVAS_WIDTH),
-      y: clamp(y, 0, SKETCH_CANVAS_HEIGHT),
+      x: clamp(x, 0, canvas.width),
+      y: clamp(y, 0, canvas.height),
       t: eventTime(),
       pressure: event.pressure > 0 ? event.pressure : 0.5,
     }
@@ -137,7 +130,7 @@ function SketchPage() {
   }
 
   function beginStroke(event: PointerEvent<HTMLCanvasElement>) {
-    if (event.button !== 0) {
+    if (event.button !== 0 || !currentDocument) {
       return
     }
 
@@ -147,7 +140,6 @@ function SketchPage() {
     lastPointRef.current = point
     event.currentTarget.setPointerCapture(event.pointerId)
     setIsReplayMode(false)
-    setIsReplayPlaybackRequested(false)
     emit({
       type: 'stroke:start',
       id: nextEventId('event'),
@@ -205,9 +197,8 @@ function SketchPage() {
     }
   }
 
-  function emitHistoryEvent(type: 'undo' | 'redo' | 'clear') {
+  function emitHistoryEvent(type: 'undo' | 'redo') {
     setIsReplayMode(false)
-    setIsReplayPlaybackRequested(false)
     emit({
       type,
       id: nextEventId('event'),
@@ -215,46 +206,111 @@ function SketchPage() {
     })
   }
 
-  function toggleReplay() {
+  function startReplay() {
     if (timeline.steps.length === 0) {
       return
     }
 
     setIsReplayMode(true)
-
-    if (replayIndex >= timeline.steps.length) {
-      setReplayIndex(0)
-    }
-
-    setIsReplayPlaybackRequested(!isReplayPlaying)
+    setReplayKey((currentKey) => currentKey + 1)
   }
 
-  function restartReplay() {
-    if (timeline.steps.length === 0) {
+  function handleTitleBlur(title: string) {
+    if (!currentDocument || title === currentDocument.title) {
       return
     }
 
-    setIsReplayMode(true)
-    setReplayIndex(0)
-    setIsReplayPlaybackRequested(true)
+    renameCurrentSketch(title)
   }
 
   return (
     <>
       <motion.header
         animate={{ opacity: 1, y: 0 }}
-        className="journal-topbar sketch-topbar"
+        className="journal-topbar sketch-topbar is-file-only"
         initial={{ opacity: 0, y: -8 }}
         transition={{ ...panelTransition, delay: 0.05 }}
       >
-        <div>
-          <p>随画</p>
-          <h1>把落笔的过程也留下</h1>
-        </div>
-        <div aria-label="画作状态" className="sketch-stats" role="status">
-          <span>{state.events.length} 个事件</span>
-          <span>原始 {formatSketchDuration(timeline.originalDuration)}</span>
-          <span>回放 {formatSketchDuration(timeline.replayDuration)}</span>
+        <div aria-label="画作文件" className="sketch-document-card">
+          <div className="sketch-document-summary">
+            <span>画作</span>
+            <strong>{currentDocument?.title ?? '未命名随画'}</strong>
+            <small>
+              {status === 'saving' ? '保存中' : status === 'loading' ? '加载中' : '已保存'}
+              {' · '}
+              {state.events.length} 个事件
+              {' · '}
+              {SKETCH_CANVAS_PRESETS.find((preset) => preset.preset === canvas.preset)?.label ?? '3:2 横版'}
+            </small>
+          </div>
+          <div className="sketch-document-controls">
+            <label>
+              <span>当前</span>
+              <select
+                aria-label="选择随画"
+                disabled={documents.length === 0}
+                onChange={(event) => void selectSketch(event.target.value)}
+                value={currentDocument?.id ?? ''}
+              >
+                {documents.map((document) => (
+                  <option key={document.id} value={document.id}>
+                    {document.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="is-title">
+              <span>标题</span>
+              <input
+                aria-label="随画标题"
+                defaultValue={currentDocument?.title ?? ''}
+                disabled={!currentDocument}
+                key={currentDocument?.id ?? 'empty-title'}
+                onBlur={(event) => handleTitleBlur(event.target.value)}
+                placeholder="重命名"
+              />
+            </label>
+            <label>
+              <span>比例</span>
+              <select
+                aria-label="选择画布比例"
+                disabled={!currentDocument || !canChangeCanvasPreset}
+                onChange={(event) => setCurrentCanvasPreset(event.target.value as SketchCanvasPreset)}
+                value={canvas.preset}
+              >
+                {SKETCH_CANVAS_PRESETS.map((preset) => (
+                  <option key={preset.preset} value={preset.preset}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="sketch-create-control">
+              <select
+                aria-label="选择新画作比例"
+                onChange={(event) => setNewSketchPreset(event.target.value as SketchCanvasPreset)}
+                value={newSketchPreset}
+              >
+                {SKETCH_CANVAS_PRESETS.map((preset) => (
+                  <option key={preset.preset} value={preset.preset}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => void createSketch({ canvasPreset: newSketchPreset })} type="button">
+                <PenLine aria-hidden="true" size={18} />
+                <span>新建</span>
+              </button>
+            </div>
+            <button onClick={() => void importSketch()} type="button">
+              <BookOpen aria-hidden="true" size={18} />
+              <span>载入</span>
+            </button>
+            <button className="is-danger" disabled={!currentDocument} onClick={() => void deleteCurrentSketch()} type="button">
+              <Trash aria-hidden="true" size={18} />
+              <span>删除</span>
+            </button>
+          </div>
         </div>
       </motion.header>
 
@@ -290,6 +346,8 @@ function SketchPage() {
               </button>
             </div>
           </div>
+
+          {error ? <span className="sketch-error">{error}</span> : null}
 
           <div className="sketch-tool-group">
             <p>颜色</p>
@@ -344,9 +402,12 @@ function SketchPage() {
                 <Redo aria-hidden="true" size={20} />
               </button>
               <button
-                aria-label="清空画布"
-                disabled={state.strokes.length === 0}
-                onClick={() => emitHistoryEvent('clear')}
+                aria-label="重置画布"
+                disabled={!hasEvents}
+                onClick={() => {
+                  setIsReplayMode(false)
+                  resetSketch()
+                }}
                 type="button"
               >
                 <Trash aria-hidden="true" size={20} />
@@ -357,11 +418,11 @@ function SketchPage() {
           <div className="sketch-tool-group">
             <p>过程</p>
             <div className="sketch-playback-actions">
-              <button disabled={timeline.steps.length === 0} onClick={toggleReplay} type="button">
-                {isReplayPlaying ? <Pause aria-hidden="true" size={20} /> : <Play aria-hidden="true" size={20} />}
-                <span>{isReplayPlaying ? '暂停' : '播放'}</span>
+              <button disabled={timeline.steps.length === 0} onClick={startReplay} type="button">
+                <Play aria-hidden="true" size={20} />
+                <span>播放</span>
               </button>
-              <button disabled={timeline.steps.length === 0} onClick={restartReplay} type="button">
+              <button disabled={timeline.steps.length === 0} onClick={startReplay} type="button">
                 <BookOpen aria-hidden="true" size={20} />
                 <span>重播</span>
               </button>
@@ -370,28 +431,47 @@ function SketchPage() {
         </aside>
 
         <section aria-label={isReplayMode ? '过程回放画布' : '绘画画布'} className="sketch-stage">
-          <div className="sketch-paper-frame">
-            <canvas
-              aria-label="涂鸦画布"
-              className="sketch-canvas"
-              height={SKETCH_CANVAS_HEIGHT}
-              onPointerCancel={endStroke}
-              onPointerDown={beginStroke}
-              onPointerLeave={endStroke}
-              onPointerMove={continueStroke}
-              onPointerUp={endStroke}
-              ref={canvasRef}
-              width={SKETCH_CANVAS_WIDTH}
-            />
-          </div>
-          <div className="sketch-stage-footer">
-            <span>{isReplayMode ? `回放进度 ${Math.min(replayIndex, timeline.steps.length)} / ${timeline.steps.length}` : '每一笔会悄悄记录成回放'}</span>
-            {isReplayMode ? (
-              <button onClick={() => setIsReplayMode(false)} type="button">
+          {isReplayMode ? (
+            <>
+              <SketchPlaybackCanvas
+                autoPlay
+                canvas={canvas}
+                events={state.events}
+                key={`${currentDocument?.id ?? 'empty'}-${replayKey}`}
+              />
+              <button className="sketch-return-button" onClick={() => setIsReplayMode(false)} type="button">
                 回到画布
               </button>
-            ) : null}
-          </div>
+            </>
+          ) : (
+            <div
+              className="sketch-playback-canvas"
+              style={
+                {
+                  '--sketch-display-width': `${displaySize.width}px`,
+                  '--sketch-display-height': `${displaySize.height}px`,
+                } as CSSProperties
+              }
+            >
+              <div className="sketch-paper-frame">
+                <canvas
+                  aria-label="涂鸦画布"
+                  className="sketch-canvas"
+                  height={canvas.height}
+                  onPointerCancel={endStroke}
+                  onPointerDown={beginStroke}
+                  onPointerLeave={endStroke}
+                  onPointerMove={continueStroke}
+                  onPointerUp={endStroke}
+                  ref={canvasRef}
+                  width={canvas.width}
+                />
+              </div>
+              <div className="sketch-stage-footer">
+                <span>{canChangeCanvasPreset ? '空白画布可以切换比例' : '每一笔会悄悄记录成回放'}</span>
+              </div>
+            </div>
+          )}
         </section>
       </motion.section>
     </>

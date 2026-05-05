@@ -1,5 +1,7 @@
 import type { SketchEvent, SketchState, Stroke } from './types'
 
+export type SketchReducerAction = SketchEvent | { type: 'reset' }
+
 export function createInitialSketchState(): SketchState {
   return {
     events: [],
@@ -9,7 +11,11 @@ export function createInitialSketchState(): SketchState {
   }
 }
 
-export function sketchReducer(state: SketchState, event: SketchEvent): SketchState {
+export function sketchReducer(state: SketchState, event: SketchReducerAction): SketchState {
+  if (event.type === 'reset') {
+    return createInitialSketchState()
+  }
+
   return applySketchEvent(
     {
       events: [...state.events, event],
@@ -22,7 +28,7 @@ export function sketchReducer(state: SketchState, event: SketchEvent): SketchSta
 }
 
 export function deriveSketchState(events: SketchEvent[]): SketchState {
-  return events.reduce((state, event) => applySketchEvent(state, event), createInitialSketchState())
+  return events.reduce(sketchReducer, createInitialSketchState())
 }
 
 function applySketchEvent(state: SketchState, event: SketchEvent): SketchState {
@@ -118,4 +124,3 @@ function appendPoint(points: Stroke['points'], point: Stroke['points'][number]) 
 
   return [...points, point]
 }
-

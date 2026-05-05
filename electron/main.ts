@@ -7,6 +7,14 @@ import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationT
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import { importJournalImagesForDate } from './journalMedia'
+import {
+  createSketchDocument,
+  deleteSketchDocument,
+  importSketchDocumentFromPath,
+  listSketchDocuments,
+  loadSketchDocument,
+  saveSketchDocument,
+} from './sketchStore'
 import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
   createJournalMarkdownWithFrontMatter,
@@ -95,6 +103,14 @@ ipcMain.handle('journal:saveAnnotations', (_event, date: unknown, annotations: u
 )
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 ipcMain.handle('journal:importImages', (_event, date: unknown) => importJournalImages(date))
+ipcMain.handle('sketch:list', () => listSketchDocuments(getJournalDirectory()))
+ipcMain.handle('sketch:create', (_event, payload: unknown) =>
+  createSketchDocument(getJournalDirectory(), payload),
+)
+ipcMain.handle('sketch:load', (_event, id: unknown) => loadSketchDocument(getJournalDirectory(), id))
+ipcMain.handle('sketch:save', (_event, payload: unknown) => saveSketchDocument(getJournalDirectory(), payload))
+ipcMain.handle('sketch:delete', (_event, id: unknown) => deleteSketchDocument(getJournalDirectory(), id))
+ipcMain.handle('sketch:import', () => importSketchDocument())
 
 type JournalFile = {
   content: string
@@ -397,6 +413,24 @@ async function importJournalImages(date: unknown) {
   }
 
   return importJournalImagesForDate(date, getJournalDirectory(), result.filePaths)
+}
+
+async function importSketchDocument() {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      {
+        name: '随画文件',
+        extensions: ['json'],
+      },
+    ],
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  return importSketchDocumentFromPath(getJournalDirectory(), result.filePaths[0])
 }
 
 function registerJournalMediaProtocol() {

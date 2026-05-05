@@ -176,4 +176,17 @@ interface Window {
       settingsPath: string
     }>
   }
+  sketchStore?: {
+    list(): Promise<import('../src/domain/sketch').SketchDocumentSummary[]>
+    create(payload?: {
+      title?: string
+      canvasPreset?: import('../src/domain/sketch').SketchCanvasPreset
+    }): Promise<import('../src/domain/sketch').StoredSketchDocument>
+    load(id: string): Promise<import('../src/domain/sketch').StoredSketchDocument>
+    save(
+      document: import('../src/domain/sketch').SketchDocument,
+    ): Promise<import('../src/domain/sketch').StoredSketchDocument>
+    import(): Promise<import('../src/domain/sketch').StoredSketchDocument | null>
+    delete(id: string): Promise<{ id: string }>
+  }
 }

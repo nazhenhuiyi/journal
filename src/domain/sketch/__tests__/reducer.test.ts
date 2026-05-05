@@ -68,5 +68,28 @@ describe('sketchReducer', () => {
       'clear',
     ])
   })
-})
 
+  it('resets strokes and recorded events for a fresh canvas', () => {
+    const withStroke = strokeEvents.reduce(sketchReducer, createInitialSketchState())
+    const reset = sketchReducer(withStroke, { type: 'reset' })
+
+    expect(reset.events).toHaveLength(0)
+    expect(reset.strokes).toHaveLength(0)
+    expect(reset.undoneStrokes).toHaveLength(0)
+    expect(reset.activeStroke).toBeNull()
+  })
+
+  it('still derives legacy clear events without dropping prior event history', () => {
+    const state = strokeEvents
+      .concat({ type: 'clear', id: 'event-4', at: 48 })
+      .reduce(sketchReducer, createInitialSketchState())
+
+    expect(state.strokes).toHaveLength(0)
+    expect(state.events.map((event) => event.type)).toEqual([
+      'stroke:start',
+      'stroke:point',
+      'stroke:end',
+      'clear',
+    ])
+  })
+})

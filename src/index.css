@@ -1161,13 +1161,26 @@ body {
     0 8px 18px rgba(86, 58, 35, 0.05);
 }
 
-.all-pages-sketch-preview canvas {
-  display: block;
+.all-pages-sketch-preview .sketch-playback-canvas,
+.all-pages-sketch-preview .sketch-paper-frame,
+.all-pages-sketch-preview .sketch-canvas {
   width: 100%;
   height: 100%;
 }
 
-.all-pages-sketch-preview span {
+.all-pages-sketch-preview .sketch-paper-frame {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.all-pages-sketch-preview .sketch-paper-frame::before {
+  display: none;
+}
+
+.all-pages-sketch-preview .sketch-empty-label,
+.all-pages-sketch-preview > span {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1387,11 +1400,19 @@ body {
 
 .sketch-topbar {
   display: flex;
-  min-height: 4.6rem;
+  min-height: 5.7rem;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.82rem 1.75rem;
+  gap: 1.35rem;
+  padding: 0.78rem 1.45rem;
+}
+
+.sketch-topbar.is-file-only {
+  display: block;
+  min-height: 3.95rem;
+  padding: 0.62rem 1.45rem;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 243, 0.86), rgba(248, 241, 226, 0.68));
 }
 
 .sketch-topbar h1 {
@@ -1418,6 +1439,156 @@ body {
   padding: 0.42rem 0.68rem;
   background: rgba(255, 253, 244, 0.56);
   white-space: nowrap;
+}
+
+.sketch-document-card {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.sketch-document-summary {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  padding-left: 0.15rem;
+}
+
+.sketch-document-summary span {
+  color: rgba(47, 38, 31, 0.42);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.sketch-document-summary strong {
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 0.92rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sketch-document-summary small {
+  overflow: hidden;
+  color: rgba(47, 38, 31, 0.48);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sketch-document-controls {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(10rem, 14rem) minmax(7.8rem, 8.8rem) minmax(12rem, auto) auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  justify-content: end;
+}
+
+.sketch-document-controls label,
+.sketch-create-control {
+  display: grid;
+  min-width: 0;
+}
+
+.sketch-document-controls label {
+  position: relative;
+}
+
+.sketch-document-controls label > span {
+  position: absolute;
+  top: 50%;
+  left: 0.58rem;
+  z-index: 1;
+  color: rgba(47, 38, 31, 0.42);
+  font-size: 0.72rem;
+  font-weight: 650;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.sketch-document-controls input,
+.sketch-document-controls select,
+.sketch-create-control select {
+  min-width: 0;
+  height: 2.25rem;
+  border: 1px solid rgba(122, 79, 50, 0.12);
+  border-radius: 8px;
+  color: var(--color-ink);
+  background: rgba(255, 253, 244, 0.74);
+  font: inherit;
+  font-size: 0.81rem;
+}
+
+.sketch-document-controls input,
+.sketch-document-controls label select {
+  padding: 0.42rem 0.62rem 0.42rem 2.65rem;
+}
+
+.sketch-document-controls label.is-title input {
+  padding-left: 2.85rem;
+}
+
+.sketch-create-control {
+  grid-template-columns: minmax(7.6rem, 1fr) auto;
+  gap: 0.35rem;
+}
+
+.sketch-create-control select {
+  padding: 0.42rem 0.56rem;
+}
+
+.sketch-document-controls button {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  border: 1px solid rgba(122, 79, 50, 0.13);
+  border-radius: 8px;
+  padding: 0.42rem 0.62rem;
+  color: rgba(47, 38, 31, 0.7);
+  background: rgba(255, 253, 244, 0.68);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.81rem;
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.sketch-document-controls button:hover {
+  border-color: rgba(20, 114, 79, 0.28);
+  color: var(--color-ink);
+  background: rgba(111, 126, 99, 0.12);
+  transform: translateY(-1px);
+}
+
+.sketch-document-controls button.is-danger {
+  color: rgba(122, 79, 50, 0.58);
+}
+
+.sketch-document-controls button.is-danger:hover {
+  border-color: rgba(159, 63, 46, 0.22);
+  color: #7a3a2f;
+  background: rgba(223, 98, 70, 0.08);
+}
+
+.sketch-document-controls button:disabled,
+.sketch-document-controls input:disabled,
+.sketch-document-controls select:disabled,
+.sketch-create-control select:disabled {
+  color: rgba(47, 38, 31, 0.32);
+  background: rgba(255, 253, 244, 0.38);
+  cursor: default;
+  transform: none;
 }
 
 .sketch-page {
@@ -1456,9 +1627,11 @@ body {
 }
 
 .sketch-tool-buttons button,
+.sketch-action-row button,
 .sketch-playback-actions button,
 .sketch-icon-row button,
-.sketch-stage-footer button {
+.sketch-stage-footer button,
+.sketch-return-button {
   display: inline-flex;
   min-height: 2.55rem;
   align-items: center;
@@ -1480,9 +1653,11 @@ body {
 }
 
 .sketch-tool-buttons button:hover,
+.sketch-action-row button:hover,
 .sketch-playback-actions button:hover,
 .sketch-icon-row button:hover,
-.sketch-stage-footer button:hover {
+.sketch-stage-footer button:hover,
+.sketch-return-button:hover {
   border-color: rgba(20, 114, 79, 0.28);
   color: var(--color-ink);
   background: rgba(111, 126, 99, 0.12);
@@ -1497,13 +1672,57 @@ body {
 }
 
 .sketch-tool-buttons button:disabled,
+.sketch-action-row button:disabled,
 .sketch-playback-actions button:disabled,
 .sketch-icon-row button:disabled,
-.sketch-stage-footer button:disabled {
+.sketch-stage-footer button:disabled,
+.sketch-return-button:disabled {
   color: rgba(47, 38, 31, 0.32);
   background: rgba(255, 253, 244, 0.34);
   cursor: default;
   transform: none;
+}
+
+.sketch-field {
+  display: grid;
+  gap: 0.38rem;
+  color: rgba(47, 38, 31, 0.56);
+  font-size: 0.78rem;
+}
+
+.sketch-field span {
+  font-weight: 650;
+}
+
+.sketch-field input,
+.sketch-field select {
+  min-width: 0;
+  min-height: 2.35rem;
+  border: 1px solid rgba(122, 79, 50, 0.14);
+  border-radius: 8px;
+  padding: 0.48rem 0.62rem;
+  color: var(--color-ink);
+  background: rgba(255, 253, 244, 0.68);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.sketch-field input:disabled,
+.sketch-field select:disabled {
+  color: rgba(47, 38, 31, 0.38);
+  background: rgba(255, 253, 244, 0.36);
+}
+
+.sketch-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.sketch-error {
+  color: #9f3f2e;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .sketch-color-grid {
@@ -1562,6 +1781,7 @@ body {
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
+  align-items: center;
   overflow: hidden;
   border: 1px solid rgba(122, 79, 50, 0.11);
   border-radius: 8px;
@@ -1571,11 +1791,20 @@ body {
     linear-gradient(180deg, rgba(255, 253, 244, 0.56), rgba(244, 236, 219, 0.54));
 }
 
+.sketch-playback-canvas {
+  --sketch-display-width: 58.125rem;
+  --sketch-display-height: 38.75rem;
+  display: grid;
+  width: var(--sketch-display-width);
+  gap: 0;
+  justify-items: center;
+}
+
 .sketch-paper-frame {
   position: relative;
   display: flex;
-  width: 58.125rem;
-  height: 38.75rem;
+  width: var(--sketch-display-width);
+  height: var(--sketch-display-height);
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(122, 79, 50, 0.14);
@@ -1605,15 +1834,15 @@ body {
 
 .sketch-canvas {
   display: block;
-  width: 58.125rem;
-  height: 38.75rem;
+  width: var(--sketch-display-width);
+  height: var(--sketch-display-height);
   touch-action: none;
   cursor: crosshair;
 }
 
 .sketch-stage-footer {
   display: flex;
-  width: 58.125rem;
+  width: var(--sketch-display-width);
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -1622,9 +1851,31 @@ body {
   font-size: 0.84rem;
 }
 
-.sketch-stage-footer button {
+.sketch-stage-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sketch-stage-footer button,
+.sketch-return-button {
   min-height: 2.2rem;
   padding: 0.42rem 0.75rem;
+}
+
+.sketch-empty-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: rgba(47, 38, 31, 0.34);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-2deg);
+}
+
+.sketch-return-button {
+  justify-self: end;
+  margin-top: 0.72rem;
 }
 
 .all-pages-card-lab {
