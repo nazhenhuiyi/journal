@@ -85,6 +85,11 @@ describe('renderJournalMarkdown', () => {
 
     expect(murmur).toBeInTheDocument()
     expect(murmur).toHaveAttribute('data-journal-directive', 'murmur')
+    expect(within(murmur as HTMLElement).getByText('21:38').tagName).toBe('TIME')
+    expect(within(murmur as HTMLElement).getByText('21:38')).toHaveAttribute(
+      'dateTime',
+      '2026-04-24T21:38:00+08:00',
+    )
     expect(within(murmur as HTMLElement).getByText('窗外下雨了，声音很轻。')).toBeInTheDocument()
 
     const imageRender = render(<>{renderJournalMarkdown({ markdown: '::image[雨打在窗户上]' })}</>)

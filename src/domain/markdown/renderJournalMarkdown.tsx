@@ -10,6 +10,7 @@ import * as runtime from 'react/jsx-runtime'
 import { unified } from 'unified'
 import { parseJournalMarkdown, stripJournalFrontMatter } from './parseJournalMarkdown'
 import { rehypeAnnotationAttributes } from './plugins/rehypeAnnotationAttributes'
+import { rehypeMurmurTimestamps } from './plugins/rehypeMurmurTimestamps'
 import { remarkJournalDirectives } from './plugins/remarkJournalDirectives'
 import type { ImageBlock, MurmurBlock } from './types'
 import type { RenderJournalMarkdownOptions } from './types'
@@ -35,16 +36,22 @@ const sanitizeSchema = {
       'dataFootnoteBackref',
       'dataFootnotes',
       'dataAnnotationIds',
+      'dataMurmurLabel',
+      'dataMurmurTime',
     ],
     figure: [
       ...(defaultSchema.attributes?.figure ?? []),
       ['className', 'journal-murmur', 'journal-image'],
       'dataJournalDirective',
+      'dataMurmurLabel',
+      'dataMurmurTime',
     ],
     section: [
       ...(defaultSchema.attributes?.section ?? []),
       ['className', 'journal-murmur', 'journal-image'],
       'dataJournalDirective',
+      'dataMurmurLabel',
+      'dataMurmurTime',
     ],
   },
   protocols: {
@@ -70,6 +77,7 @@ export function renderJournalMarkdown({
       footnoteLabel: '脚注',
     })
     .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypeMurmurTimestamps)
     .use(rehypeAnnotationAttributes, { annotations, markdown: parsedEntry.longEntryMarkdown })
     .use(rehypeReact, {
       Fragment,
@@ -111,11 +119,28 @@ function serializeRenderableMurmur(murmur: MurmurBlock) {
   const body = murmur.body.trim()
 
   return [
-    ':::murmur',
+    `:::murmur{murmurTime="${escapeDirectiveAttribute(murmur.time)}" murmurLabel="${escapeDirectiveAttribute(formatMurmurTimestamp(murmur.time))}"}`,
     body,
     imageMarkdown,
     ':::',
   ].filter((line) => line.trim()).join('\n\n')
+}
+
+function formatMurmurTimestamp(time: string) {
+  const date = new Date(time)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+
+  return `${hours}:${minutes}`
+}
+
+function escapeDirectiveAttribute(value: string) {
+  return value.replace(/[\\"]/g, (match) => `\\${match}`)
 }
 
 function serializeRenderableImage(image: ImageBlock) {

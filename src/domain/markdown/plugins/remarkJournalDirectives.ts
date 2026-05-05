@@ -1,6 +1,7 @@
 type MarkdownNode = {
   type: string
   name?: string
+  attributes?: Record<string, string | null | undefined>
   data?: {
     hName?: string
     hProperties?: Record<string, unknown>
@@ -34,9 +35,21 @@ function setDirectiveElement(node: MarkdownNode, hName: string, className: strin
     hName,
     hProperties: {
       ...node.data?.hProperties,
+      ...getDirectiveProperties(node),
       className: [className],
       dataJournalDirective: node.name,
     },
+  }
+}
+
+function getDirectiveProperties(node: MarkdownNode) {
+  if (node.name !== 'murmur') {
+    return {}
+  }
+
+  return {
+    dataMurmurLabel: node.attributes?.murmurLabel,
+    dataMurmurTime: node.attributes?.murmurTime,
   }
 }
 

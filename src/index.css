@@ -4942,6 +4942,19 @@ body {
   color: rgba(47, 38, 31, 0.76);
 }
 
+.markdown-preview .journal-murmur {
+  padding: 0.78rem 0.95rem 0.82rem;
+}
+
+.markdown-preview .journal-murmur-time {
+  display: block;
+  margin-bottom: 0.32rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 0.95;
+  color: rgba(111, 126, 99, 0.72);
+}
+
 .markdown-preview .journal-murmur > :first-child,
 .markdown-preview .journal-image > :first-child {
   margin-top: 0;
