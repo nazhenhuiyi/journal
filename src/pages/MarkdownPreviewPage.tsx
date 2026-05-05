@@ -11,6 +11,7 @@ import type { Annotation } from '../domain/annotations'
 import {
   parseJournalMarkdown,
   renderJournalMarkdown,
+  serializeJournalFrontMatter,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
   type MurmurBlock,
@@ -25,6 +26,8 @@ import AnnotationSidebar from './markdown-preview/AnnotationSidebar'
 import { panelTransition } from './markdown-preview/constants'
 import FloatingAiPanel from './markdown-preview/FloatingAiPanel'
 import type { AiPanelDraft, AiPanelMessage } from './markdown-preview/FloatingAiPanel'
+import JournalFrontMatterDialog from './markdown-preview/JournalFrontMatterDialog'
+import type { EditableJournalFrontMatter } from './markdown-preview/JournalFrontMatterDialog'
 import {
   annotationTargetsEntry,
   demoAnnotations,
@@ -196,6 +199,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false)
+  const [isFrontMatterDialogOpen, setIsFrontMatterDialogOpen] = useState(false)
   const [aiPanelMode, setAiPanelMode] = useState<'idle' | 'generating' | 'drafts' | 'chat'>('idle')
   const [aiPanelError, setAiPanelError] = useState('')
   const [aiDrafts, setAiDrafts] = useState<AiPanelDraft[]>([])
@@ -207,6 +211,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const hasLoadedJournalRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef(annotationTargetsEntry)
+  const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
   const saveRequestIdRef = useRef(0)
   const chatLoadRequestIdRef = useRef(0)
   const flushPendingSaveRef = useRef<((shouldUpdateState?: boolean) => Promise<boolean>) | null>(null)
@@ -306,6 +311,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       }
 
       journalFileRef.current = refreshedFile
+      lastSavedFrontMatterRef.current = refreshedFrontMatter
       setJournalFrontMatter(refreshedFrontMatter)
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
@@ -349,6 +355,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     setRealTodayDate(getLocalDateKey())
     journalFileRef.current = file
     lastSavedMarkdownRef.current = editableMarkdown
+    lastSavedFrontMatterRef.current = frontMatter
     hasLoadedJournalRef.current = true
     setJournalFrontMatter(frontMatter)
     setJournalFile(file)
@@ -434,7 +441,12 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const flushPendingSave = useCallback(async (shouldUpdateState = true) => {
     const currentDate = journalFileRef.current?.date ?? realTodayDate
 
-    if (!getJournalStore() || !hasLoadedJournalRef.current || journalMarkdown === lastSavedMarkdownRef.current) {
+    if (
+      !getJournalStore() ||
+      !hasLoadedJournalRef.current ||
+      (journalMarkdown === lastSavedMarkdownRef.current &&
+        !hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
+    ) {
       return true
     }
 
@@ -447,7 +459,10 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         return false
       }
 
+      const savedEntry = parseJournalMarkdown(savedFile.content)
+
       lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
+      lastSavedFrontMatterRef.current = savedEntry.frontMatter
       journalFileRef.current = savedFile
 
       if (shouldUpdateState) {
@@ -528,7 +543,12 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   useEffect(() => {
     const journalStore = getJournalStore()
 
-    if (!journalStore || !hasLoadedJournalRef.current || journalMarkdown === lastSavedMarkdownRef.current) {
+    if (
+      !journalStore ||
+      !hasLoadedJournalRef.current ||
+      (journalMarkdown === lastSavedMarkdownRef.current &&
+        !hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
+    ) {
       return
     }
 
@@ -544,7 +564,10 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             return
           }
 
+          const savedEntry = parseJournalMarkdown(file.content)
+
           lastSavedMarkdownRef.current = stripManagedFrontMatter(file.content)
+          lastSavedFrontMatterRef.current = savedEntry.frontMatter
           journalFileRef.current = file
           setJournalFile(file)
         })
@@ -653,7 +676,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
     saveRequestIdRef.current += 1
 
-    if (currentDate && journalMarkdown !== lastSavedMarkdownRef.current) {
+    if (
+      currentDate &&
+      (journalMarkdown !== lastSavedMarkdownRef.current ||
+        hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
+    ) {
       const savedFile = await saveJournalFile(currentDate, journalMarkdown, journalFrontMatter).catch(() => null)
 
       if (!savedFile) {
@@ -664,6 +691,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       setDaySwitchError('')
       journalFileRef.current = savedFile
       lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
+      lastSavedFrontMatterRef.current = parseJournalMarkdown(savedFile.content).frontMatter
       setJournalFile(savedFile)
     }
 
@@ -686,6 +714,46 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
       return serializeJournalMarkdownBody(currentEntry.longEntryMarkdown, nextMurmurs)
     })
+  }
+
+  function handleSaveFrontMatter(nextFrontMatter: EditableJournalFrontMatter) {
+    setDaySwitchError('')
+    setJournalFrontMatter((currentFrontMatter) => ({
+      ...currentFrontMatter,
+      collections: nextFrontMatter.collections && nextFrontMatter.collections.length > 0
+        ? nextFrontMatter.collections
+        : undefined,
+      excerpt: nextFrontMatter.excerpt,
+      favorite: nextFrontMatter.favorite,
+      tags: nextFrontMatter.tags && nextFrontMatter.tags.length > 0 ? nextFrontMatter.tags : undefined,
+      title: nextFrontMatter.title,
+    }))
+  }
+
+  async function handleGenerateFrontMatterDraft(): Promise<EditableJournalFrontMatter> {
+    const codex = getCodexStore()
+    const date = journalFile?.date ?? realTodayDate
+
+    if (!codex?.generateFrontMatterDraft) {
+      throw new Error(`当前环境还没有接入${brand.assistantLabel}。`)
+    }
+
+    if (!journalMarkdown.trim()) {
+      throw new Error('今天还没有可整理的内容。')
+    }
+
+    const result = await codex.generateFrontMatterDraft({
+      currentFrontMatter: {
+        collections: journalFrontMatter.collections,
+        excerpt: journalFrontMatter.excerpt,
+        tags: journalFrontMatter.tags,
+        title: journalFrontMatter.title,
+      },
+      date,
+      journalMarkdown,
+    })
+
+    return result.draft
   }
 
   async function handleImportMurmurImages() {
@@ -719,6 +787,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       if (savedFile) {
         journalFileRef.current = savedFile
         lastSavedMarkdownRef.current = markdownForAi
+        lastSavedFrontMatterRef.current = parseJournalMarkdown(savedFile.content).frontMatter
         setJournalFile(savedFile)
       }
 
@@ -979,7 +1048,16 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             <div className="journal-paper">
               <div className="journal-paper-meta">
                 <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
-                <span title={journalFile?.filePath}>{journalStorageLabel}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded border border-walnut/10 bg-white/55 px-2.5 py-1 text-xs font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
+                    onClick={() => setIsFrontMatterDialogOpen(true)}
+                    type="button"
+                  >
+                    策展信息
+                  </button>
+                  <span title={journalFile?.filePath}>{journalStorageLabel}</span>
+                </div>
               </div>
               <JournalMarkdownEditor
                 onChange={handleJournalMarkdownChange}
@@ -1021,6 +1099,15 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         onUpdateChatInput={setChatInput}
         onUpdateDraftContent={handleUpdateDraftContent}
       />
+
+      {isFrontMatterDialogOpen ? (
+        <JournalFrontMatterDialog
+          frontMatter={journalFrontMatter}
+          onClose={() => setIsFrontMatterDialogOpen(false)}
+          onGenerateDraft={handleGenerateFrontMatterDraft}
+          onSave={handleSaveFrontMatter}
+        />
+      ) : null}
     </>
   )
 })
@@ -1086,6 +1173,10 @@ async function loadConfiguredWeatherLocation() {
 
 function isBlankJournalMarkdown(markdown: string) {
   return markdown.trim() === ''
+}
+
+function hasFrontMatterChanged(currentFrontMatter: DayFrontMatter, savedFrontMatter: DayFrontMatter) {
+  return serializeJournalFrontMatter(currentFrontMatter) !== serializeJournalFrontMatter(savedFrontMatter)
 }
 
 function isAiAnnotationCreatedOnDate(annotation: Annotation, date: string) {

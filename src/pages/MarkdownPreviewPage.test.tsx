@@ -607,6 +607,73 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('lets AI draft curation front matter and saves the accepted fields', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\nweather:\n  text: 小雨\n---\n\n# 测试日记\n今天回家时看见台灯亮着。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T06:30:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn((date: string, content: string) =>
+      Promise.resolve({
+        ...storedJournal,
+        content,
+        date,
+      }),
+    )
+    const generateFrontMatterDraft = vi.fn().mockResolvedValue({
+      draft: {
+        collections: ['房间里的光'],
+        excerpt: '回家时看见台灯亮着。',
+        tags: ['台灯', '回家', '夜晚'],
+        title: '台灯亮着',
+      },
+      threadId: 'frontmatter-thread',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate })
+    vi.stubGlobal('codex', { generateFrontMatterDraft })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('测试日记')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '策展信息' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AI 自动填充' }))
+
+    await waitFor(() => {
+      expect(generateFrontMatterDraft).toHaveBeenCalledWith(expect.objectContaining({
+        date: '2026-04-28',
+        journalMarkdown: '# 测试日记\n今天回家时看见台灯亮着。',
+      }))
+      expect(screen.getByDisplayValue('台灯亮着')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('台灯, 回家, 夜晚')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '收藏这一页' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    vi.advanceTimersByTime(800)
+
+    await waitFor(() => {
+      const savedContent = saveDate.mock.calls.at(-1)?.[1] ?? ''
+
+      expect(savedContent).toContain('title: 台灯亮着')
+      expect(savedContent).toContain('excerpt: 回家时看见台灯亮着。')
+      expect(savedContent).toContain('tags: [台灯, 回家, 夜晚]')
+      expect(savedContent).toContain('favorite: true')
+      expect(savedContent).toContain('collections: [房间里的光]')
+      expect(savedContent).toContain('weather:\n  text: 小雨')
+    })
+  })
+
   it('hides the AI annotation launcher after today already has generated annotations', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))

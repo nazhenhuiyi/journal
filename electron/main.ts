@@ -3,7 +3,13 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
-import { askCodex, chatWithAnnotation, generateAnnotationDrafts, readAnnotationThread } from './codex'
+import {
+  askCodex,
+  chatWithAnnotation,
+  generateAnnotationDrafts,
+  generateFrontMatterDraft,
+  readAnnotationThread,
+} from './codex'
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import { listJournalIndex } from './journalIndex'
@@ -78,6 +84,11 @@ ipcMain.handle('codex:generateAnnotationDrafts', async (_event, payload: unknown
   const runtime = await getCodexRuntime()
 
   return generateAnnotationDrafts(payload, runtime.workingDirectory, runtime.settings)
+})
+ipcMain.handle('codex:generateFrontMatterDraft', async (_event, payload: unknown) => {
+  const runtime = await getCodexRuntime()
+
+  return generateFrontMatterDraft(payload, runtime.workingDirectory, runtime.settings)
 })
 ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) => {
   const runtime = await getCodexRuntime()

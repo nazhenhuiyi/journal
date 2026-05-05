@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('codex', {
   generateAnnotationDrafts(payload: unknown) {
     return ipcRenderer.invoke('codex:generateAnnotationDrafts', payload)
   },
+  generateFrontMatterDraft(payload: unknown) {
+    return ipcRenderer.invoke('codex:generateFrontMatterDraft', payload)
+  },
   chatWithAnnotation(payload: unknown) {
     return ipcRenderer.invoke('codex:chatWithAnnotation', payload)
   },

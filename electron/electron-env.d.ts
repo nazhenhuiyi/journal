@@ -112,6 +112,29 @@ interface Window {
         output_tokens: number
       } | null
     }>
+    generateFrontMatterDraft(payload: {
+      date: string
+      journalMarkdown: string
+      currentFrontMatter?: {
+        title?: string
+        excerpt?: string
+        tags?: string[]
+        collections?: string[]
+      }
+    }): Promise<{
+      draft: {
+        title?: string
+        excerpt?: string
+        tags: string[]
+        collections: string[]
+      }
+      threadId: string | null
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      } | null
+    }>
     chatWithAnnotation(payload: {
       date: string
       journalMarkdown: string

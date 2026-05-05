@@ -43,6 +43,30 @@ export type CodexAnnotationDraftsResult = {
   usage: CodexAskResult['usage']
 }
 
+export type CodexFrontMatterDraft = {
+  title?: string
+  excerpt?: string
+  tags: string[]
+  collections: string[]
+}
+
+export type CodexFrontMatterDraftPayload = {
+  date: string
+  journalMarkdown: string
+  currentFrontMatter?: {
+    title?: string
+    excerpt?: string
+    tags?: string[]
+    collections?: string[]
+  }
+}
+
+export type CodexFrontMatterDraftResult = {
+  draft: CodexFrontMatterDraft
+  threadId: string | null
+  usage: CodexAskResult['usage']
+}
+
 export type CodexAnnotationChatMessage = {
   id: string
   role: 'user' | 'assistant'
@@ -87,6 +111,26 @@ const annotationDraftsSchema = {
     },
   },
   required: ['drafts'],
+  additionalProperties: false,
+} as const
+
+const frontMatterDraftSchema = {
+  type: 'object',
+  properties: {
+    title: { type: ['string', 'null'] },
+    excerpt: { type: ['string', 'null'] },
+    tags: {
+      type: 'array',
+      maxItems: 8,
+      items: { type: 'string' },
+    },
+    collections: {
+      type: 'array',
+      maxItems: 4,
+      items: { type: 'string' },
+    },
+  },
+  required: ['title', 'excerpt', 'tags', 'collections'],
   additionalProperties: false,
 } as const
 
@@ -176,6 +220,25 @@ export async function generateAnnotationDrafts(
 
   return {
     drafts: parsedDrafts,
+    threadId: thread.id,
+    usage: turn.usage,
+  }
+}
+
+export async function generateFrontMatterDraft(
+  payload: unknown,
+  workingDirectory: string,
+  settings: JournalCodexSettingsFile,
+): Promise<CodexFrontMatterDraftResult> {
+  const normalizedPayload = normalizeFrontMatterDraftPayload(payload)
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
+  const turn = await thread.run(buildFrontMatterDraftPrompt(normalizedPayload), {
+    outputSchema: frontMatterDraftSchema,
+  })
+  const draft = parseFrontMatterDraftResponse(turn.finalResponse)
+
+  return {
+    draft,
     threadId: thread.id,
     usage: turn.usage,
   }
@@ -277,6 +340,32 @@ function normalizeAnnotationChatPayload(payload: unknown): CodexAnnotationChatPa
   }
 }
 
+function normalizeFrontMatterDraftPayload(payload: unknown): CodexFrontMatterDraftPayload {
+  if (!isRecord(payload)) {
+    throw new Error('策展信息请求格式不正确。')
+  }
+
+  const date = stringFromRecord(payload, 'date')
+  const journalMarkdown = stringFromRecord(payload, 'journalMarkdown')
+
+  if (!date || !journalMarkdown) {
+    throw new Error('策展信息需要日期和日记内容。')
+  }
+
+  const currentFrontMatter = asRecord(payload.currentFrontMatter)
+
+  return {
+    currentFrontMatter: {
+      collections: stringArrayFromRecord(currentFrontMatter, 'collections'),
+      excerpt: stringFromRecord(currentFrontMatter, 'excerpt'),
+      tags: stringArrayFromRecord(currentFrontMatter, 'tags'),
+      title: stringFromRecord(currentFrontMatter, 'title'),
+    },
+    date,
+    journalMarkdown,
+  }
+}
+
 function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
   return `你是「且留」里的页边批注者。请只基于下面这一天的长日记生成 3-5 条页边批注草稿。
 
@@ -294,6 +383,28 @@ ${payload.date}
 
 LONG_ENTRY_MARKDOWN:
 ${payload.longEntryMarkdown}`
+}
+
+function buildFrontMatterDraftPrompt(payload: CodexFrontMatterDraftPayload) {
+  return `你是「且留」里的日记策展助手。请只基于下面这一天的日记内容，生成可供用户确认的 Front Matter 策展信息草稿。
+
+要求：
+- 只返回结构化字段，不要写解释。
+- title 使用中文，短一些，像日记卡片标题，不要夸张。
+- excerpt 使用中文，一句话概括这一天留下的画面或线索，不做心理诊断。
+- tags 返回 3-8 个中文短标签，适合检索和策展，可以包含主题、场景、物件、天气。
+- collections 返回 0-4 个中文合集建议，像「雨天」「房间里的光」这种可复用专题。
+- 不要判断 favorite，不要输出用户没有确认过的重要性判断。
+- 如果已有字段仍然合适，可以沿用或轻微整理。
+
+DATE:
+${payload.date}
+
+CURRENT_FRONT_MATTER:
+${JSON.stringify(payload.currentFrontMatter ?? {}, null, 2)}
+
+JOURNAL_MARKDOWN:
+${payload.journalMarkdown}`
 }
 
 function buildAnnotationChatPrompt(payload: CodexAnnotationChatPayload) {
@@ -454,10 +565,33 @@ function normalizeAnnotationDraft(payload: unknown): CodexAnnotationDraft[] {
   ]
 }
 
+function parseFrontMatterDraftResponse(response: string): CodexFrontMatterDraft {
+  const parsed = JSON.parse(response) as unknown
+
+  if (!isRecord(parsed)) {
+    throw new Error('Codex 没有返回可用的策展信息。')
+  }
+
+  return {
+    collections: stringArrayFromRecord(parsed, 'collections').slice(0, 4),
+    excerpt: stringFromRecord(parsed, 'excerpt'),
+    tags: stringArrayFromRecord(parsed, 'tags').slice(0, 8),
+    title: stringFromRecord(parsed, 'title'),
+  }
+}
+
 function stringFromRecord(record: Record<string, unknown>, key: string) {
   const value = record[key]
 
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function stringArrayFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+    : []
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
