@@ -3,6 +3,7 @@ import annotationTargetsEntry from '../__fixtures__/annotation-targets.md?raw'
 import basicEntry from '../__fixtures__/basic-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
 import { parseJournalMarkdown } from '../parseJournalMarkdown'
+import { serializeJournalFrontMatter } from '../frontMatter'
 import { serializeJournalMarkdownBody } from '../serializeJournalMarkdown'
 
 describe('parseJournalMarkdown', () => {
@@ -16,6 +17,44 @@ describe('parseJournalMarkdown', () => {
     expect(parsed.longEntryMarkdown).not.toContain('createdAt:')
     expect(parsed.murmurs).toHaveLength(0)
     expect(parsed.diagnostics).toEqual([])
+  })
+
+  it('parses and serializes curation front matter fields', () => {
+    const parsed = parseJournalMarkdown(`---
+date: 2026-04-24
+title: 雨夜和台灯
+excerpt: 窗外下雨，桌面很安静。
+tags: [雨, 夜晚, 台灯]
+favorite: true
+collections: [雨天, 房间里的光]
+weather:
+  text: 小雨
+  temperature: 18
+unknown: 留着
+---
+
+# 今天`)
+
+    expect(parsed.frontMatter).toMatchObject({
+      collections: ['雨天', '房间里的光'],
+      excerpt: '窗外下雨，桌面很安静。',
+      favorite: true,
+      tags: ['雨', '夜晚', '台灯'],
+      title: '雨夜和台灯',
+      unknown: '留着',
+      weather: { text: '小雨', temperature: 18 },
+    })
+
+    expect(serializeJournalFrontMatter(parsed.frontMatter)).toBe(`date: 2026-04-24
+title: 雨夜和台灯
+excerpt: 窗外下雨，桌面很安静。
+tags: [雨, 夜晚, 台灯]
+favorite: true
+collections: [雨天, 房间里的光]
+weather:
+  text: 小雨
+  temperature: 18
+unknown: 留着`)
   })
 
   it('splits long entry content before the first murmur block', () => {

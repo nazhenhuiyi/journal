@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SketchSessionProvider } from '../domain/sketch'
 import AllPagesHomePage from './AllPagesHomePage'
+import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
 function renderHomePage() {
   return render(
@@ -14,12 +15,57 @@ function renderHomePage() {
   )
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+const indexedMemories: JournalIndexEntry[] = [
+  {
+    collections: ['雨天'],
+    date: '2026-04-25',
+    excerpt: '便利店门口的灯很亮，伞面一直滴水。',
+    favorite: true,
+    fileName: '2026-04-25.md',
+    filePath: '/Users/zilin/.journal/2026-04-25.md',
+    images: [
+      {
+        caption: '雨夜便利店',
+        id: 'img_20260425_210000',
+        murmurId: 'm_20260425_210000',
+        src: '2026-04-25.media/rain.jpg',
+        tags: ['雨'],
+      },
+    ],
+    murmurs: [],
+    searchableText: '便利店门口的灯很亮，伞面一直滴水。',
+    stats: { imageCount: 1, murmurCount: 0, wordCount: 18 },
+    tags: ['小雨'],
+    title: '雨夜便利店',
+    updatedAt: null,
+  },
+  {
+    collections: [],
+    date: '2026-03-30',
+    favorite: false,
+    fileName: '2026-03-30.md',
+    filePath: '/Users/zilin/.journal/2026-03-30.md',
+    images: [],
+    murmurs: [],
+    searchableText: '窗边那盆植物又长出一点新叶。',
+    stats: { imageCount: 0, murmurCount: 0, wordCount: 14 },
+    tags: [],
+    updatedAt: null,
+  },
+]
+
 describe('AllPagesHomePage', () => {
-  it('shows the quiet homepage prompt and compact primary actions', () => {
+  it('shows the quiet homepage prompt and compact primary actions', async () => {
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
+
     renderHomePage()
 
     expect(screen.getByRole('heading', { name: '万物有迹，心事且留' })).toBeInTheDocument()
-    expect(screen.getByText('且留 · 4月25日 · 星期六 · 已安放 18 页')).toBeInTheDocument()
+    expect(await screen.findByText('且留 · 4月25日 · 星期六 · 已安放 2 页')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /写一页/ })).toHaveAttribute('href', '/preview')
     expect(screen.getByRole('link', { name: /留一句/ })).toHaveAttribute('href', '/preview')
     expect(screen.getByRole('link', { name: /收照片/ })).toHaveAttribute('href', '/preview')
@@ -28,15 +74,29 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('link', { name: '看回放' })).toHaveAttribute('href', '/sketch?replay=1')
   })
 
-  it('surfaces actual memories instead of review categories', () => {
-    renderHomePage()
+  it('surfaces indexed memories instead of review categories', async () => {
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
+
+    const { container } = renderHomePage()
 
     expect(screen.getByRole('heading', { name: '翻到几声回声' })).toBeInTheDocument()
-    expect(screen.getByText('便利店门口的灯很亮，伞面一直滴水。')).toBeInTheDocument()
+    expect(await screen.findByText('雨夜便利店')).toBeInTheDocument()
+    expect(screen.getByText('窗边那盆植物又长出一点新叶。')).toBeInTheDocument()
+    expect(container.querySelectorAll('.all-pages-memory-board img')).toHaveLength(1)
+    expect(container.querySelectorAll('.all-pages-memory-card.is-text-only')).toHaveLength(1)
     expect(screen.queryByText('往年今日')).not.toBeInTheDocument()
     expect(screen.queryByText('同样天气')).not.toBeInTheDocument()
     expect(screen.queryByText('整理未完成')).not.toBeInTheDocument()
     expect(screen.queryByText('批注回看')).not.toBeInTheDocument()
+  })
+
+  it('shows an empty memory state when index loading fails', async () => {
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockRejectedValue(new Error('broken')) })
+
+    const { container } = renderHomePage()
+
+    expect(await screen.findByText('索引没有读出来，但今天仍然可以继续写。')).toBeInTheDocument()
+    expect(container.querySelector('.all-pages-memory-board img')).not.toBeInTheDocument()
   })
 
   it('shows sticky note, postcard, polaroid, movie ticket, library card, and receipt studies', () => {

@@ -47,6 +47,7 @@ interface Window {
         updatedAt: string | null
       }[]
     >
+    listIndex?(): Promise<import('../src/domain/journalIndex/types').JournalIndexEntry[]>
     loadDate?(date: string): Promise<{
       content: string
       date: string

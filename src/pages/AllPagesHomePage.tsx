@@ -8,6 +8,7 @@ import {
   PenLine,
   type HandDrawnIcon,
 } from '../components/HandDrawnIcons'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
 import {
@@ -15,13 +16,10 @@ import {
   SketchPlaybackCanvas,
   useSketchSession,
 } from '../domain/sketch'
-import nightLampPhoto from '../assets/memory-photos/night-lamp.jpg'
-import openBookPhoto from '../assets/memory-photos/open-book.jpg'
-import rainyNightPhoto from '../assets/memory-photos/rainy-night.jpg'
-import windowPlantPhoto from '../assets/memory-photos/window-plant.jpg'
 import CardStyleShowcase from './all-pages/CardStyleShowcase'
 import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
+import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
 const quickActions: Array<{
   title: string
@@ -49,39 +47,49 @@ const quickActions: Array<{
   },
 ]
 
-const memoryRows = [
-  {
-    date: '2025.04.25 · 小雨',
-    text: '便利店门口的灯很亮，伞面一直滴水。',
-    tone: 'rain',
-    variant: 'feature',
-    image: rainyNightPhoto,
-  },
-  {
-    date: '三月末',
-    text: '窗边那盆植物又长出一点新叶。',
-    tone: 'plant',
-    variant: 'small',
-    image: windowPlantPhoto,
-  },
-  {
-    date: '上周六 · 夜',
-    text: '桌上只剩杯子和台灯，房间安静下来。',
-    tone: 'night',
-    variant: 'small',
-    image: nightLampPhoto,
-  },
-  {
-    date: '去年春天',
-    text: '那张照片里，风把纸页吹起来。',
-    tone: 'spring',
-    variant: 'small',
-    image: openBookPhoto,
-  },
-]
+const memoryTones = ['rain', 'plant', 'night', 'spring']
+
+type IndexLoadStatus = 'loading' | 'ready' | 'failed'
+
+function getJournalStore() {
+  return typeof window === 'undefined' ? undefined : window.journalStore
+}
 
 function AllPagesHomePage() {
   const { currentDocument, state, eventCount, originalDuration, replayDuration } = useSketchSession()
+  const [journalIndex, setJournalIndex] = useState<JournalIndexEntry[]>([])
+  const [indexLoadStatus, setIndexLoadStatus] = useState<IndexLoadStatus>(() =>
+    getJournalStore()?.listIndex ? 'loading' : 'ready',
+  )
+  const recentMemories = useMemo(() => journalIndex.slice(0, 4).map(toMemoryRow), [journalIndex])
+
+  useEffect(() => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.listIndex) {
+      return
+    }
+
+    let isCancelled = false
+
+    journalStore.listIndex()
+      .then((entries) => {
+        if (!isCancelled) {
+          setJournalIndex(entries)
+          setIndexLoadStatus('ready')
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setJournalIndex([])
+          setIndexLoadStatus('failed')
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
 
   return (
     <motion.div
@@ -94,7 +102,7 @@ function AllPagesHomePage() {
         <section aria-labelledby="all-pages-quote" className="all-pages-quote-card">
           <p className="all-pages-date">
             <CalendarDays aria-hidden="true" size={16} strokeWidth={2.15} />
-            {brand.name} · 4月25日 · 星期六 · 已安放 18 页
+            {brand.name} · 4月25日 · 星期六 · 已安放 {journalIndex.length} 页
           </p>
           <h1 id="all-pages-quote">{brand.tagline}</h1>
           <p className="all-pages-subtitle">{brand.promise}</p>
@@ -163,11 +171,16 @@ function AllPagesHomePage() {
         </div>
 
         <div className="all-pages-memory-board">
-          {memoryRows.map((memory) => (
-            <article className={`all-pages-memory-card is-${memory.variant}`} key={`${memory.date}-${memory.text}`}>
-              <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`}>
-                <img alt="" draggable="false" src={memory.image} />
-              </div>
+          {recentMemories.length > 0 ? recentMemories.map((memory) => (
+            <article
+              className={`all-pages-memory-card is-${memory.variant} ${memory.image ? '' : 'is-text-only'}`}
+              key={`${memory.date}-${memory.text}`}
+            >
+              {memory.image ? (
+                <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`}>
+                  <img alt="" draggable="false" src={memory.image} />
+                </div>
+              ) : null}
               <div className="all-pages-memory-copy">
                 <time>{memory.date}</time>
                 <p>{memory.text}</p>
@@ -176,13 +189,65 @@ function AllPagesHomePage() {
                 <MoreHorizontal aria-hidden="true" size={20} strokeWidth={2.1} />
               </button>
             </article>
-          ))}
+          )) : (
+            <article className="all-pages-memory-card is-feature is-text-only">
+              <div className="all-pages-memory-copy">
+                <time>{indexLoadStatus === 'failed' ? '暂时没翻到' : '还没有旧页'}</time>
+                <p>{indexLoadStatus === 'failed' ? '索引没有读出来，但今天仍然可以继续写。' : '写下第一页以后，这里会开始出现回声。'}</p>
+              </div>
+              <button aria-label="去写一页" type="button">
+                <ArrowRight aria-hidden="true" size={20} strokeWidth={2.1} />
+              </button>
+            </article>
+          )}
         </div>
       </section>
 
       <CardStyleShowcase />
     </motion.div>
   )
+}
+
+function toMemoryRow(entry: JournalIndexEntry, index: number) {
+  const image = entry.images[0]
+  const text = entry.title ?? entry.excerpt ?? createIndexExcerpt(entry.searchableText) ?? '这一天留下了一点痕迹。'
+
+  return {
+    date: formatIndexDate(entry.date, entry.tags),
+    image: image ? resolveJournalMemoryImageSrc(image.src) : undefined,
+    text,
+    tone: memoryTones[index % memoryTones.length],
+    variant: index === 0 ? 'feature' : 'small',
+  }
+}
+
+function formatIndexDate(dateKey: string, tags: string[]) {
+  const dateLabel = dateKey.replace(/-/g, '.')
+  const tagLabel = tags[0]
+
+  return tagLabel ? `${dateLabel} · ${tagLabel}` : dateLabel
+}
+
+function createIndexExcerpt(text: string) {
+  const excerpt = text.replace(/\s+/g, ' ').trim()
+
+  if (!excerpt) {
+    return ''
+  }
+
+  return excerpt.length > 34 ? `${excerpt.slice(0, 34).trimEnd()}...` : excerpt
+}
+
+function resolveJournalMemoryImageSrc(src: string) {
+  if (isAbsoluteUrl(src) || src.startsWith('/')) {
+    return src
+  }
+
+  return `journal-media://local/${src.split('/').map(encodeURIComponent).join('/')}`
+}
+
+function isAbsoluteUrl(src: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(src)
 }
 
 export default AllPagesHomePage

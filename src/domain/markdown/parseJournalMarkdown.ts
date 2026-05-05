@@ -118,7 +118,7 @@ function parseFrontMatterValue(
   rawValue: string,
   diagnostics: MarkdownDiagnostic[],
   line: number,
-): string | number | boolean {
+): string | number | boolean | string[] {
   const value = stripWrappingQuotes(rawValue.trim())
 
   if (value.startsWith('[') && !value.endsWith(']')) {
@@ -128,6 +128,10 @@ function parseFrontMatterValue(
       line,
       column: 1,
     })
+  }
+
+  if (value.startsWith('[') && value.endsWith(']')) {
+    return parseTags(value)
   }
 
   if (value === 'true') {

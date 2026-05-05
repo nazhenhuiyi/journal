@@ -2,6 +2,11 @@ export type DayFrontMatter = {
   date?: string
   createdAt?: string
   updatedAt?: string
+  title?: string
+  excerpt?: string
+  tags?: string[]
+  favorite?: boolean
+  collections?: string[]
   weather?: {
     text?: string
     temperature?: number

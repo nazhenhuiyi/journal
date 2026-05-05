@@ -3,7 +3,7 @@ import type { DayFrontMatter } from './types'
 const frontMatterFence = '---'
 
 type FrontMatterScalar = string | number | boolean
-type FrontMatterValue = FrontMatterScalar | Record<string, unknown> | undefined
+type FrontMatterValue = FrontMatterScalar | string[] | Record<string, unknown> | undefined
 
 export function stripManagedFrontMatter(markdown: string) {
   const split = splitFrontMatter(markdown)
@@ -23,6 +23,16 @@ export function serializeJournalFrontMatter(frontMatter: DayFrontMatter) {
 
   for (const [key, value] of orderedEntries) {
     if (value === undefined || value === null) {
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      const serializableValues = value.filter((item): item is string => typeof item === 'string')
+
+      if (serializableValues.length > 0) {
+        lines.push(`${key}: [${serializableValues.map(serializeFrontMatterScalar).join(', ')}]`)
+      }
+
       continue
     }
 
@@ -79,7 +89,18 @@ function splitFrontMatter(markdown: string): { frontMatterLines: string[] | null
 }
 
 function orderFrontMatterEntries(frontMatter: DayFrontMatter): [string, FrontMatterValue][] {
-  const preferredKeys = ['date', 'createdAt', 'updatedAt', 'weather', 'location']
+  const preferredKeys = [
+    'date',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'excerpt',
+    'tags',
+    'favorite',
+    'collections',
+    'weather',
+    'location',
+  ]
   const entries = new Map(Object.entries(frontMatter) as [string, FrontMatterValue][])
   const orderedEntries: [string, FrontMatterValue][] = []
 

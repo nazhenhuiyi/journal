@@ -66,6 +66,9 @@ contextBridge.exposeInMainWorld('journalStore', {
   listEntries() {
     return ipcRenderer.invoke('journal:listEntries')
   },
+  listIndex() {
+    return ipcRenderer.invoke('journal:listIndex')
+  },
   loadDate(date: string) {
     return ipcRenderer.invoke('journal:loadDate', date)
   },
