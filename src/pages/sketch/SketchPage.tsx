@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { motion } from 'motion/react'
 import { useSearchParams } from 'react-router'
 import {
@@ -65,6 +65,11 @@ function SketchPage() {
   const drawingStrokeIdRef = useRef<string | null>(null)
   const eventIdRef = useRef(0)
   const lastPointRef = useRef<SketchPoint | null>(null)
+  const shortcutStateRef = useRef({
+    canRedo: false,
+    canUndo: false,
+    hasCurrentDocument: false,
+  })
   const toolSize = activeTool === 'pencil' ? pencilSize : eraserSize
   const displaySize = useMemo(() => fitSketchCanvasDisplay(canvas), [canvas])
   const hasEvents = state.events.length > 0
@@ -91,6 +96,14 @@ function SketchPage() {
 
     renderSketch(context, state, canvas.width, canvas.height)
   }, [canvas, displaySize, isReplayMode, state])
+
+  useLayoutEffect(() => {
+    shortcutStateRef.current = {
+      canRedo,
+      canUndo,
+      hasCurrentDocument: Boolean(currentDocument),
+    }
+  }, [canRedo, canUndo, currentDocument])
 
   useEffect(() => {
     if (searchParams.get('replay') !== '1' || timeline.steps.length === 0) {
@@ -127,6 +140,47 @@ function SketchPage() {
 
     return () => window.removeEventListener('pointerdown', closeTopbarMenus)
   }, [isCreateMenuOpen, isLoadMenuOpen])
+
+  useEffect(() => {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
+      if (!shortcutStateRef.current.hasCurrentDocument || isEditableShortcutTarget(event.target)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const isModifierPressed = event.metaKey || event.ctrlKey
+      const shouldUndo = isModifierPressed && key === 'z' && !event.shiftKey
+      const shouldRedo =
+        isModifierPressed && ((key === 'z' && event.shiftKey) || (!event.metaKey && key === 'y'))
+
+      if (shouldUndo && shortcutStateRef.current.canUndo) {
+        event.preventDefault()
+        setIsReplayMode(false)
+        eventIdRef.current += 1
+        dispatchSketchEvent({
+          type: 'undo',
+          id: `event-${eventIdRef.current}`,
+          at: Math.round(performance.now()),
+        })
+        return
+      }
+
+      if (shouldRedo && shortcutStateRef.current.canRedo) {
+        event.preventDefault()
+        setIsReplayMode(false)
+        eventIdRef.current += 1
+        dispatchSketchEvent({
+          type: 'redo',
+          id: `event-${eventIdRef.current}`,
+          at: Math.round(performance.now()),
+        })
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyboardShortcut)
+
+    return () => document.removeEventListener('keydown', handleKeyboardShortcut)
+  }, [dispatchSketchEvent])
 
   function nextEventId(prefix: string) {
     eventIdRef.current += 1
@@ -556,6 +610,19 @@ function SketchPage() {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  )
 }
 
 export default SketchPage

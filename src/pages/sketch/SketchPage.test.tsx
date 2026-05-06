@@ -79,6 +79,51 @@ describe('SketchPage', () => {
     await waitFor(() => expect(savedDocuments.at(-1)?.events).toEqual([]))
   })
 
+  it('supports keyboard shortcuts for undo and redo without intercepting editable fields', async () => {
+    const document = createStoredSketchDocument()
+    const savedDocuments: StoredSketchDocument[] = []
+    window.sketchStore = {
+      list: vi.fn(async () => [createSketchDocumentSummary(document)]),
+      create: vi.fn(async () => document),
+      load: vi.fn(async () => document),
+      save: vi.fn(async (nextDocument) => {
+        const storedDocument = {
+          ...nextDocument,
+          fileName: document.fileName,
+          filePath: document.filePath,
+        }
+        savedDocuments.push(storedDocument)
+
+        return storedDocument
+      }),
+      import: vi.fn(async () => document),
+      delete: vi.fn(async () => ({ id: document.id })),
+    }
+
+    renderSketchPage()
+
+    const titleInput = await screen.findByLabelText('随画标题')
+    expect(screen.getByRole('button', { name: '撤销' })).toBeEnabled()
+
+    fireEvent.keyDown(titleInput, { key: 'z', metaKey: true })
+    expect(screen.getByRole('button', { name: '撤销' })).toBeEnabled()
+
+    fireEvent.keyDown(globalThis.document.documentElement, { key: 'z', metaKey: true })
+    await waitFor(() => expect(screen.getByRole('button', { name: '撤销' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: '重做' })).toBeEnabled()
+
+    fireEvent.keyDown(globalThis.document.documentElement, { key: 'z', metaKey: true, shiftKey: true })
+    await waitFor(() => expect(screen.getByRole('button', { name: '重做' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: '撤销' })).toBeEnabled()
+    await waitFor(() => expect(savedDocuments.at(-1)?.events.map((event) => event.type)).toEqual([
+      'stroke:start',
+      'stroke:point',
+      'stroke:end',
+      'undo',
+      'redo',
+    ]))
+  })
+
   it('lets users load an existing sketch from a dropdown without opening the file import flow', async () => {
     const firstDocument = createStoredSketchDocument()
     const secondDocument = createStoredSketchDocument({
