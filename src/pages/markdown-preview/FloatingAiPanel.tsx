@@ -71,8 +71,8 @@ function FloatingAiPanel({
         animate={{ opacity: 1, y: 0 }}
         className="fixed bottom-6 right-6 z-40 h-12 rounded-full border border-sage/30 bg-ink px-5 text-sm font-semibold text-white shadow-lg shadow-ink/15 transition hover:bg-walnut focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
         initial={{ opacity: 0, y: 12 }}
-        onClick={onOpen}
-        title={`打开${brand.assistantLabel}`}
+        onClick={onGenerate}
+        title={`让${brand.assistantName}读一遍`}
         transition={panelTransition}
         type="button"
       >
@@ -91,7 +91,7 @@ function FloatingAiPanel({
       transition={panelTransition}
     >
       <div
-        className={`items-center border-b border-walnut/10 px-4 py-3 ${
+        className={`items-center border-b border-walnut/10 px-4 py-2.5 ${
           mode === 'chat' ? 'grid grid-cols-[2rem_1fr_2rem] gap-3' : 'flex justify-between gap-3'
         }`}
       >
@@ -99,7 +99,7 @@ function FloatingAiPanel({
           <>
             <button
               aria-label={`返回${brand.assistantLabel}`}
-              className="flex h-8 w-8 items-center justify-center text-walnut/70 transition hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
+              className="flex h-8 w-8 items-center justify-center text-ink/45 transition hover:text-ink/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
               onClick={onCloseChat}
               title={`返回${brand.assistantLabel}`}
               type="button"
@@ -113,28 +113,16 @@ function FloatingAiPanel({
           </>
         ) : (
           <>
-            <h2 className="font-display text-lg font-semibold text-ink">{brand.assistantLabel}</h2>
-            <div className="flex items-center gap-2">
-              {isGenerationAvailable ? (
-                <button
-                  className="rounded-[4px] border border-sage/25 bg-sage/10 px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-sage hover:bg-sage/15 disabled:cursor-wait disabled:opacity-60"
-                  disabled={mode === 'generating'}
-                  onClick={onGenerate}
-                  type="button"
-                >
-                  {mode === 'generating' ? '在读...' : '读一遍'}
-                </button>
-              ) : null}
-              <button
-                aria-label={`收起${brand.assistantName}`}
-                className="flex h-8 w-8 items-center justify-center rounded-[4px] border border-walnut/10 text-ink/60 transition hover:border-walnut/30 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
-                onClick={onOpen}
-                title={`收起${brand.assistantName}`}
-                type="button"
-              >
-                <Undo aria-hidden="true" size={16} strokeWidth={2.1} />
-              </button>
-            </div>
+            <h2 className="font-display text-base font-semibold text-ink/88">{brand.assistantLabel}</h2>
+            <button
+              aria-label={`收起${brand.assistantName}`}
+              className="flex h-8 w-8 items-center justify-center text-ink/40 transition hover:text-ink/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
+              onClick={onOpen}
+              title={`收起${brand.assistantName}`}
+              type="button"
+            >
+              <Undo aria-hidden="true" size={15} strokeWidth={2.1} />
+            </button>
           </>
         )}
       </div>
@@ -156,7 +144,7 @@ function FloatingAiPanel({
         ) : (
           <DraftPanel
             drafts={drafts}
-            isGenerationAvailable={isGenerationAvailable}
+            isGenerating={mode === 'generating'}
             onAcceptDraft={onAcceptDraft}
             onIgnoreDraft={onIgnoreDraft}
             onUpdateDraftContent={onUpdateDraftContent}
@@ -169,7 +157,7 @@ function FloatingAiPanel({
 
 type DraftPanelProps = {
   drafts: AiPanelDraft[]
-  isGenerationAvailable: boolean
+  isGenerating: boolean
   onAcceptDraft: (draftId: string) => void
   onIgnoreDraft: (draftId: string) => void
   onUpdateDraftContent: (draftId: string, content: string) => void
@@ -177,7 +165,7 @@ type DraftPanelProps = {
 
 function DraftPanel({
   drafts,
-  isGenerationAvailable,
+  isGenerating,
   onAcceptDraft,
   onIgnoreDraft,
   onUpdateDraftContent,
@@ -232,11 +220,26 @@ function DraftPanel({
             ))}
           </AnimatePresence>
         </motion.div>
-      ) : isGenerationAvailable ? (
-        <p className="mt-4 text-sm leading-6 text-ink/55">
-          {brand.assistantDescription}只读取今天的长日记。
-        </p>
+      ) : isGenerating ? (
+        <AiPanelLoadingState />
       ) : null}
+    </div>
+  )
+}
+
+function AiPanelLoadingState() {
+  return (
+    <div
+      aria-live="polite"
+      className="flex items-center gap-2 px-1 py-2 text-sm leading-6 text-ink/48"
+      role="status"
+    >
+      <motion.span
+        animate={{ opacity: [0.28, 0.9, 0.28] }}
+        className="h-1.5 w-1.5 rounded-full bg-sage/65"
+        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <span>页边在读，稍等一下。</span>
     </div>
   )
 }
