@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SketchSessionProvider } from '../domain/sketch'
+import {
+  createSketchCanvas,
+  SKETCH_DOCUMENT_SCHEMA_VERSION,
+  SketchSessionProvider,
+  type SketchDocumentSummary,
+  type StoredSketchDocument,
+} from '../domain/sketch'
 import AllPagesHomePage from './AllPagesHomePage'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
@@ -17,6 +23,7 @@ function renderHomePage() {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.sketchStore = undefined
 })
 
 const indexedMemories: JournalIndexEntry[] = [
@@ -59,19 +66,109 @@ const indexedMemories: JournalIndexEntry[] = [
 ]
 
 describe('AllPagesHomePage', () => {
-  it('shows the quiet homepage prompt and compact primary actions', async () => {
+  it('shows the quiet homepage prompt without action shortcuts', async () => {
     vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
 
     renderHomePage()
 
     expect(screen.getByRole('heading', { name: '万物有迹，心事且留' })).toBeInTheDocument()
-    expect(await screen.findByText('且留 · 4月25日 · 星期六 · 已安放 2 页')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /写一页/ })).toHaveAttribute('href', '/preview')
-    expect(screen.getByRole('link', { name: /留一句/ })).toHaveAttribute('href', '/preview')
-    expect(screen.getByRole('link', { name: /收照片/ })).toHaveAttribute('href', '/preview')
-    expect(screen.getByRole('heading', { name: '最近随画' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '留一笔' })).toHaveAttribute('href', '/sketch')
-    expect(screen.getByRole('link', { name: '看回放' })).toHaveAttribute('href', '/sketch?replay=1')
+    expect(await screen.findByText(/且留 · \d+月\d+日 · 星期. · 已安放 2 页/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('快捷入口')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /写一页/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /留一句/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /收照片/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '这一幅' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '留一笔' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '看回放' })).not.toBeInTheDocument()
+  })
+
+  it('previews the newest sketch with drawing events instead of the newest blank sketch', async () => {
+    const blankDocument = createStoredSketchDocument({
+      id: 'sketch_20260506090000_blank',
+      updatedAt: '2026-05-06T09:00:00.000Z',
+    })
+    const drawnDocument = createStoredSketchDocument({
+      id: 'sketch_20260505190000_drawn',
+      updatedAt: '2026-05-05T19:00:00.000Z',
+      events: [
+        {
+          type: 'stroke:start',
+          id: 'event_1',
+          at: 0,
+          strokeId: 'stroke_1',
+          tool: 'pencil',
+          color: '#2f261f',
+          size: 8,
+          point: { x: 80, y: 90, t: 0 },
+        },
+        {
+          type: 'stroke:point',
+          id: 'event_2',
+          at: 120,
+          strokeId: 'stroke_1',
+          point: { x: 140, y: 130, t: 120 },
+        },
+        {
+          type: 'stroke:end',
+          id: 'event_3',
+          at: 160,
+          strokeId: 'stroke_1',
+        },
+      ],
+    })
+    const olderDrawnDocument = createStoredSketchDocument({
+      id: 'sketch_20260504190000_older',
+      updatedAt: '2026-05-04T19:00:00.000Z',
+      events: [
+        {
+          type: 'stroke:start',
+          id: 'event_old_1',
+          at: 0,
+          strokeId: 'stroke_old_1',
+          tool: 'pencil',
+          color: '#2f261f',
+          size: 8,
+          point: { x: 60, y: 70, t: 0 },
+        },
+        {
+          type: 'stroke:end',
+          id: 'event_old_2',
+          at: 80,
+          strokeId: 'stroke_old_1',
+        },
+      ],
+    })
+    const sketchDocuments = [blankDocument, drawnDocument, olderDrawnDocument]
+    window.sketchStore = {
+      list: vi.fn(async () => [
+        createSketchDocumentSummary(blankDocument),
+        createSketchDocumentSummary(drawnDocument),
+        createSketchDocumentSummary(olderDrawnDocument),
+      ]),
+      create: vi.fn(),
+      load: vi.fn(async (id: string) =>
+        sketchDocuments.find((document) => document.id === id) ?? blankDocument,
+      ),
+      save: vi.fn(),
+      import: vi.fn(),
+      delete: vi.fn(),
+    }
+
+    renderHomePage()
+
+    expect(await screen.findByText('一张旧画，正在这里慢慢浮出来。')).toBeInTheDocument()
+    expect(screen.getByText(/5月\d+日 \d{2}:00 留下/)).toBeInTheDocument()
+    expect(screen.queryByText(/个事件/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/原始/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/回放 \d/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一幅' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下一幅' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '播放' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '播放' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一幅' }))
+    expect(screen.getByRole('button', { name: '上一幅' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '下一幅' })).toBeDisabled()
+    expect(screen.queryByText('空白画纸')).not.toBeInTheDocument()
   })
 
   it('surfaces indexed memories instead of review categories', async () => {
@@ -186,3 +283,36 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByRole('heading', { name: 'SOFT RECEIPT' })).toBeInTheDocument()
   })
 })
+
+function createStoredSketchDocument(
+  overrides: Partial<StoredSketchDocument> = {},
+): StoredSketchDocument {
+  const createdAt = overrides.createdAt ?? '2026-05-05T10:00:00.000Z'
+  const id = overrides.id ?? 'sketch_20260505100000_test'
+
+  return {
+    schemaVersion: SKETCH_DOCUMENT_SCHEMA_VERSION,
+    id,
+    title: '未命名随画',
+    createdAt,
+    updatedAt: createdAt,
+    canvas: createSketchCanvas(),
+    events: [],
+    fileName: `${id}.json`,
+    filePath: `/Users/zilin/.journal/sketches/${id}.json`,
+    ...overrides,
+  }
+}
+
+function createSketchDocumentSummary(document: StoredSketchDocument): SketchDocumentSummary {
+  return {
+    id: document.id,
+    title: document.title,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt,
+    canvas: document.canvas,
+    eventCount: document.events.length,
+    fileName: document.fileName,
+    filePath: document.filePath,
+  }
+}

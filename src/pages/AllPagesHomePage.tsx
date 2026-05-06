@@ -2,18 +2,15 @@ import {
   ArrowRight,
   BookOpen,
   CalendarDays,
-  Camera,
-  MessageSquareText,
   MoreHorizontal,
-  PenLine,
-  type HandDrawnIcon,
+  Play,
 } from '../components/HandDrawnIcons'
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { Link } from 'react-router'
 import {
-  formatSketchDuration,
   SketchPlaybackCanvas,
+  type SketchEvent,
+  type StoredSketchDocument,
   useSketchSession,
 } from '../domain/sketch'
 import CardStyleShowcase from './all-pages/CardStyleShowcase'
@@ -21,33 +18,8 @@ import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
-const quickActions: Array<{
-  title: string
-  description: string
-  icon: HandDrawnIcon
-  className: string
-}> = [
-  {
-    title: '写一页',
-    description: '把今天慢慢放下',
-    icon: PenLine,
-    className: 'all-pages-action all-pages-action-primary',
-  },
-  {
-    title: '留一句',
-    description: '不用解释完整',
-    icon: MessageSquareText,
-    className: 'all-pages-action all-pages-action-note',
-  },
-  {
-    title: '收照片',
-    description: '让画面替你说',
-    icon: Camera,
-    className: 'all-pages-action all-pages-action-photo',
-  },
-]
-
 const memoryTones = ['rain', 'plant', 'night', 'spring']
+const emptySketchEvents: SketchEvent[] = []
 
 type IndexLoadStatus = 'loading' | 'ready' | 'failed'
 
@@ -56,12 +28,36 @@ function getJournalStore() {
 }
 
 function AllPagesHomePage() {
-  const { currentDocument, state, eventCount, originalDuration, replayDuration } = useSketchSession()
+  const { currentDocument, documents, state } = useSketchSession()
   const [journalIndex, setJournalIndex] = useState<JournalIndexEntry[]>([])
   const [indexLoadStatus, setIndexLoadStatus] = useState<IndexLoadStatus>(() =>
     getJournalStore()?.listIndex ? 'loading' : 'ready',
   )
+  const [sketchGallery, setSketchGallery] = useState<StoredSketchDocument[]>([])
+  const [selectedSketchId, setSelectedSketchId] = useState<string | null>(null)
+  const [sketchReplayRequest, setSketchReplayRequest] = useState<{ id: string; count: number } | null>(null)
   const recentMemories = useMemo(() => journalIndex.slice(0, 4).map(toMemoryRow), [journalIndex])
+  const homeDateLabel = useMemo(() => formatHomeDate(new Date()), [])
+  const selectedSketchIndex = Math.max(
+    sketchGallery.findIndex((document) => document.id === selectedSketchId),
+    0,
+  )
+  const selectedGallerySketch = sketchGallery[selectedSketchIndex] ?? null
+  const previewDocument = selectedGallerySketch ?? (state.events.length > 0 ? currentDocument : null)
+  const previewEvents = useMemo(
+    () =>
+      previewDocument?.id === currentDocument?.id
+        ? state.events
+        : previewDocument?.events ?? emptySketchEvents,
+    [currentDocument?.id, previewDocument, state.events],
+  )
+  const isPreviewReplayRequested = Boolean(
+    previewDocument && sketchReplayRequest?.id === previewDocument.id,
+  )
+  const previewCanvasKey = `${previewDocument?.id ?? 'empty'}-${isPreviewReplayRequested ? sketchReplayRequest.count : 0}`
+  const hasPreviousSketch = selectedSketchIndex > 0
+  const hasNextSketch = selectedSketchIndex < sketchGallery.length - 1
+  const sketchTimeLabel = formatSketchTime(previewDocument?.updatedAt)
 
   useEffect(() => {
     const journalStore = getJournalStore()
@@ -91,6 +87,85 @@ function AllPagesHomePage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!window.sketchStore?.list || !window.sketchStore.load) {
+      return
+    }
+
+    let isCancelled = false
+
+    async function loadDrawableSketches() {
+      const summaries = await window.sketchStore!.list()
+      const sortedSummaries = [...summaries].sort(
+        (left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+      )
+      const drawableDocuments: StoredSketchDocument[] = []
+
+      for (const summary of sortedSummaries) {
+        const document = await window.sketchStore!.load(summary.id)
+
+        if (document.events.length > 0) {
+          drawableDocuments.push(document)
+        }
+      }
+
+      return drawableDocuments
+    }
+
+    loadDrawableSketches()
+      .then((sketches) => {
+        if (!isCancelled) {
+          setSketchGallery(sketches)
+          setSelectedSketchId((currentId) =>
+            sketches.some((sketch) => sketch.id === currentId) ? currentId : sketches[0]?.id ?? null,
+          )
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setSketchGallery([])
+          setSelectedSketchId(null)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentDocument?.id, documents])
+
+  function playPreviewSketch() {
+    if (!previewDocument || previewEvents.length === 0) {
+      return
+    }
+
+    setSketchReplayRequest((request) => ({
+      id: previewDocument.id,
+      count: request?.id === previewDocument.id ? request.count + 1 : 1,
+    }))
+  }
+
+  function selectPreviousSketch() {
+    if (!hasPreviousSketch) {
+      return
+    }
+
+    const sketch = sketchGallery[selectedSketchIndex - 1]
+
+    setSelectedSketchId(sketch.id)
+    setSketchReplayRequest(null)
+  }
+
+  function selectNextSketch() {
+    if (!hasNextSketch) {
+      return
+    }
+
+    const sketch = sketchGallery[selectedSketchIndex + 1]
+
+    setSelectedSketchId(sketch.id)
+    setSketchReplayRequest(null)
+  }
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -102,58 +177,49 @@ function AllPagesHomePage() {
         <section aria-labelledby="all-pages-quote" className="all-pages-quote-card">
           <p className="all-pages-date">
             <CalendarDays aria-hidden="true" size={16} strokeWidth={2.15} />
-            {brand.name} · 4月25日 · 星期六 · 已安放 {journalIndex.length} 页
+            {brand.name} · {homeDateLabel} · 已安放 {journalIndex.length} 页
           </p>
           <h1 id="all-pages-quote">{brand.tagline}</h1>
           <p className="all-pages-subtitle">{brand.promise}</p>
-        </section>
-
-        <section aria-label="快捷入口" className="all-pages-action-cluster">
-          {quickActions.map((action) => {
-            const Icon = action.icon
-
-            return (
-              <Link className={action.className} key={action.title} to="/preview">
-                <span className="all-pages-action-icon">
-                  <Icon aria-hidden="true" size={30} strokeWidth={2.35} />
-                </span>
-                <span className="all-pages-action-copy">
-                  <strong>{action.title}</strong>
-                  <small>{action.description}</small>
-                </span>
-                <span aria-hidden="true" className="all-pages-action-arrow">
-                  <ArrowRight size={18} strokeWidth={2.3} />
-                </span>
-              </Link>
-            )
-          })}
         </section>
       </div>
 
       <section aria-labelledby="recent-sketch-title" className="all-pages-sketch-shelf">
         <div className="all-pages-sketch-copy">
-          <p>落笔回放</p>
-          <h2 id="recent-sketch-title">最近随画</h2>
+          <h2 id="recent-sketch-title">这一幅</h2>
           <span>
-            {eventCount > 0
-              ? `${eventCount} 个事件 · 原始 ${formatSketchDuration(originalDuration)} · 回放 ${formatSketchDuration(replayDuration)}`
+            {previewEvents.length > 0
+              ? '一张旧画，正在这里慢慢浮出来。'
               : '还没有落笔，先留一小页。'}
           </span>
+          {previewEvents.length > 0 && sketchTimeLabel ? (
+            <time className="all-pages-sketch-time">{sketchTimeLabel}</time>
+          ) : null}
           <div className="all-pages-sketch-actions">
-            <Link to="/sketch">留一笔</Link>
-            <Link aria-disabled={eventCount === 0} className={eventCount === 0 ? 'is-disabled' : ''} to="/sketch?replay=1">
-              看回放
-            </Link>
+            <button disabled={!hasPreviousSketch} onClick={selectPreviousSketch} type="button">
+              <ArrowRight aria-hidden="true" className="is-previous" size={18} strokeWidth={2.3} />
+              <span>上一幅</span>
+            </button>
+            <button disabled={previewEvents.length === 0} onClick={playPreviewSketch} type="button">
+              <Play aria-hidden="true" size={18} strokeWidth={2.3} />
+              <span>播放</span>
+            </button>
+            <button disabled={!hasNextSketch} onClick={selectNextSketch} type="button">
+              <span>下一幅</span>
+              <ArrowRight aria-hidden="true" size={18} strokeWidth={2.3} />
+            </button>
           </div>
         </div>
         <div className="all-pages-sketch-preview">
-          {currentDocument ? (
+          {previewDocument ? (
             <SketchPlaybackCanvas
-              canvas={currentDocument.canvas}
+              autoPlay={isPreviewReplayRequested}
+              canvas={previewDocument.canvas}
               className="is-thumbnail"
               controls={false}
               emptyLabel="空白画纸"
-              events={state.events}
+              events={previewEvents}
+              key={previewCanvasKey}
               label="最近随画预览"
               maxDisplayHeight={280}
               maxDisplayWidth={420}
@@ -195,9 +261,6 @@ function AllPagesHomePage() {
                 <time>{indexLoadStatus === 'failed' ? '暂时没翻到' : '还没有旧页'}</time>
                 <p>{indexLoadStatus === 'failed' ? '索引没有读出来，但今天仍然可以继续写。' : '写下第一页以后，这里会开始出现回声。'}</p>
               </div>
-              <button aria-label="去写一页" type="button">
-                <ArrowRight aria-hidden="true" size={20} strokeWidth={2.1} />
-              </button>
             </article>
           )}
         </div>
@@ -206,6 +269,31 @@ function AllPagesHomePage() {
       <CardStyleShowcase />
     </motion.div>
   )
+}
+
+function formatHomeDate(date: Date) {
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'long' }).format(date)
+
+  return `${month}月${day}日 · ${weekday}`
+}
+
+function formatSketchTime(value: string | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hour = `${date.getHours()}`.padStart(2, '0')
+  const minute = `${date.getMinutes()}`.padStart(2, '0')
+
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${hour}:${minute} 留下`
 }
 
 function toMemoryRow(entry: JournalIndexEntry, index: number) {
