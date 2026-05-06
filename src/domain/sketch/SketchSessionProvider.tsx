@@ -240,30 +240,43 @@ export function SketchSessionProvider({ children }: { children: ReactNode }) {
     [applyDocument, upsertDocumentSummary],
   )
 
-  const importSketch = useCallback(async () => {
+  const refreshSketchList = useCallback(async () => {
     if (!window.sketchStore) {
-      setStatus('error')
-      setError('当前环境不能载入随画文件')
+      const document = currentDocument ?? createFallbackStoredSketchDocument()
+
+      setDocuments([createSketchDocumentSummary(document)])
+      if (!currentDocument) {
+        applyDocument(document)
+      }
+      setStatus((currentStatus) => (currentStatus === 'loading' ? 'ready' : currentStatus))
+      setError(null)
       return
     }
 
-    setStatus('loading')
-
     try {
-      const document = await window.sketchStore.import()
+      const sketchDocuments = await window.sketchStore.list()
 
-      if (document) {
+      if (sketchDocuments.length > 0) {
+        setDocuments(sketchDocuments)
+      } else if (currentDocument) {
+        setDocuments([createSketchDocumentSummary(currentDocument)])
+      } else {
+        const document = await window.sketchStore.create({
+          title: DEFAULT_SKETCH_TITLE,
+          canvasPreset: DEFAULT_SKETCH_CANVAS_PRESET,
+        })
+
+        setDocuments([createSketchDocumentSummary(document)])
         applyDocument(document)
-        upsertDocumentSummary(document)
       }
 
-      setStatus('ready')
+      setStatus((currentStatus) => (currentStatus === 'loading' ? 'ready' : currentStatus))
       setError(null)
-    } catch (importError) {
+    } catch (loadError) {
       setStatus('error')
-      setError(importError instanceof Error ? importError.message : '载入随画失败')
+      setError(loadError instanceof Error ? loadError.message : '刷新随画列表失败')
     }
-  }, [applyDocument, upsertDocumentSummary])
+  }, [applyDocument, currentDocument])
 
   const deleteCurrentSketch = useCallback(async () => {
     if (!currentDocument) {
@@ -352,7 +365,7 @@ export function SketchSessionProvider({ children }: { children: ReactNode }) {
       resetSketch,
       selectSketch,
       createSketch,
-      importSketch,
+      refreshSketchList,
       deleteCurrentSketch,
       renameCurrentSketch,
       setCurrentCanvasPreset,
@@ -369,7 +382,7 @@ export function SketchSessionProvider({ children }: { children: ReactNode }) {
       dispatchSketchEvent,
       documents,
       error,
-      importSketch,
+      refreshSketchList,
       renameCurrentSketch,
       resetSketch,
       selectSketch,

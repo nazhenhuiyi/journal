@@ -40,7 +40,7 @@ function SketchPage() {
     resetSketch,
     selectSketch,
     createSketch,
-    importSketch,
+    refreshSketchList,
     deleteCurrentSketch,
     renameCurrentSketch,
     setCurrentCanvasPreset,
@@ -55,9 +55,13 @@ function SketchPage() {
   const [eraserSize, setEraserSize] = useState(24)
   const [color, setColor] = useState(pencilColors[0])
   const [isReplayMode, setIsReplayMode] = useState(false)
+  const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false)
+  const [isLoadMenuRefreshing, setIsLoadMenuRefreshing] = useState(false)
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [replayKey, setReplayKey] = useState(0)
-  const [newSketchPreset, setNewSketchPreset] = useState<SketchCanvasPreset>('landscape-3-2')
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const loadMenuRef = useRef<HTMLDivElement>(null)
+  const createMenuRef = useRef<HTMLDivElement>(null)
   const drawingStrokeIdRef = useRef<string | null>(null)
   const eventIdRef = useRef(0)
   const lastPointRef = useRef<SketchPoint | null>(null)
@@ -101,6 +105,28 @@ function SketchPage() {
 
     return () => window.clearTimeout(timeout)
   }, [searchParams, setSearchParams, timeline.steps.length])
+
+  useEffect(() => {
+    if (!isLoadMenuOpen && !isCreateMenuOpen) {
+      return
+    }
+
+    function closeTopbarMenus(event: Event) {
+      if (
+        loadMenuRef.current?.contains(event.target as Node) ||
+        createMenuRef.current?.contains(event.target as Node)
+      ) {
+        return
+      }
+
+      setIsLoadMenuOpen(false)
+      setIsCreateMenuOpen(false)
+    }
+
+    window.addEventListener('pointerdown', closeTopbarMenus)
+
+    return () => window.removeEventListener('pointerdown', closeTopbarMenus)
+  }, [isCreateMenuOpen, isLoadMenuOpen])
 
   function nextEventId(prefix: string) {
     eventIdRef.current += 1
@@ -223,6 +249,33 @@ function SketchPage() {
     renameCurrentSketch(title)
   }
 
+  async function openLoadMenu() {
+    setIsCreateMenuOpen(false)
+    setIsLoadMenuOpen((isOpen) => !isOpen)
+
+    if (isLoadMenuOpen) {
+      return
+    }
+
+    setIsLoadMenuRefreshing(true)
+    await refreshSketchList().finally(() => setIsLoadMenuRefreshing(false))
+  }
+
+  async function chooseSketch(id: string) {
+    setIsLoadMenuOpen(false)
+    await selectSketch(id)
+  }
+
+  function openCreateMenu() {
+    setIsLoadMenuOpen(false)
+    setIsCreateMenuOpen((isOpen) => !isOpen)
+  }
+
+  async function chooseNewSketchPreset(preset: SketchCanvasPreset) {
+    setIsCreateMenuOpen(false)
+    await createSketch({ canvasPreset: preset })
+  }
+
   return (
     <>
       <motion.header
@@ -233,43 +286,61 @@ function SketchPage() {
       >
         <div aria-label="画作文件" className="sketch-document-card">
           <div className="sketch-document-summary">
-            <span>画作</span>
-            <strong>{currentDocument?.title ?? '未命名随画'}</strong>
-            <small>
-              {status === 'saving' ? '保存中' : status === 'loading' ? '加载中' : '已保存'}
-              {' · '}
-              {state.events.length} 个事件
-              {' · '}
-              {SKETCH_CANVAS_PRESETS.find((preset) => preset.preset === canvas.preset)?.label ?? '3:2 横版'}
-            </small>
-          </div>
-          <div className="sketch-document-controls">
             <label>
-              <span>当前</span>
-              <select
-                aria-label="选择随画"
-                disabled={documents.length === 0}
-                onChange={(event) => void selectSketch(event.target.value)}
-                value={currentDocument?.id ?? ''}
-              >
-                {documents.map((document) => (
-                  <option key={document.id} value={document.id}>
-                    {document.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="is-title">
-              <span>标题</span>
+              <span>画作</span>
               <input
                 aria-label="随画标题"
+                className="sketch-title-input"
                 defaultValue={currentDocument?.title ?? ''}
                 disabled={!currentDocument}
                 key={currentDocument?.id ?? 'empty-title'}
                 onBlur={(event) => handleTitleBlur(event.target.value)}
-                placeholder="重命名"
+                placeholder="未命名随画"
               />
             </label>
+            <small>
+              {status === 'saving' ? '保存中' : status === 'loading' ? '加载中' : '已保存'}
+              {' · '}
+              {state.events.length} 个事件
+            </small>
+          </div>
+          <div className="sketch-document-controls">
+            <div className="sketch-load-menu" ref={loadMenuRef}>
+              <button
+                aria-expanded={isLoadMenuOpen}
+                aria-haspopup="listbox"
+                onClick={() => void openLoadMenu()}
+                type="button"
+              >
+                <BookOpen aria-hidden="true" size={18} />
+                <span>加载</span>
+              </button>
+              {isLoadMenuOpen ? (
+                <div aria-label="已有随画" className="sketch-load-menu-list" role="listbox">
+                  {isLoadMenuRefreshing ? (
+                    <span className="sketch-load-menu-empty">读取中</span>
+                  ) : documents.length > 0 ? (
+                    documents.map((document) => (
+                      <button
+                        aria-selected={document.id === currentDocument?.id}
+                        key={document.id}
+                        onClick={() => void chooseSketch(document.id)}
+                        role="option"
+                        type="button"
+                      >
+                        <strong>{document.title}</strong>
+                        <small>
+                          {document.eventCount} 个事件 ·{' '}
+                          {SKETCH_CANVAS_PRESETS.find((preset) => preset.preset === document.canvas.preset)?.label ?? '3:2 横版'}
+                        </small>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="sketch-load-menu-empty">还没有画作</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <label>
               <span>比例</span>
               <select
@@ -285,27 +356,32 @@ function SketchPage() {
                 ))}
               </select>
             </label>
-            <div className="sketch-create-control">
-              <select
-                aria-label="选择新画作比例"
-                onChange={(event) => setNewSketchPreset(event.target.value as SketchCanvasPreset)}
-                value={newSketchPreset}
+            <div className="sketch-create-control" ref={createMenuRef}>
+              <button
+                aria-expanded={isCreateMenuOpen}
+                aria-haspopup="listbox"
+                onClick={openCreateMenu}
+                type="button"
               >
-                {SKETCH_CANVAS_PRESETS.map((preset) => (
-                  <option key={preset.preset} value={preset.preset}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-              <button onClick={() => void createSketch({ canvasPreset: newSketchPreset })} type="button">
                 <PenLine aria-hidden="true" size={18} />
                 <span>新建</span>
               </button>
+              {isCreateMenuOpen ? (
+                <div aria-label="新建画作比例" className="sketch-create-menu-list" role="listbox">
+                  {SKETCH_CANVAS_PRESETS.map((preset) => (
+                    <button
+                      key={preset.preset}
+                      onClick={() => void chooseNewSketchPreset(preset.preset)}
+                      role="option"
+                      type="button"
+                    >
+                      <strong>{preset.label}</strong>
+                      <small>{preset.description}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <button onClick={() => void importSketch()} type="button">
-              <BookOpen aria-hidden="true" size={18} />
-              <span>载入</span>
-            </button>
             <button className="is-danger" disabled={!currentDocument} onClick={() => void deleteCurrentSketch()} type="button">
               <Trash aria-hidden="true" size={18} />
               <span>删除</span>

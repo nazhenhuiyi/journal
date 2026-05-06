@@ -54,7 +54,7 @@ function AllPagesHomePage() {
   const isPreviewReplayRequested = Boolean(
     previewDocument && sketchReplayRequest?.id === previewDocument.id,
   )
-  const previewCanvasKey = `${previewDocument?.id ?? 'empty'}-${isPreviewReplayRequested ? sketchReplayRequest.count : 0}`
+  const previewCanvasKey = `${previewDocument?.id ?? 'empty'}-${isPreviewReplayRequested ? (sketchReplayRequest?.count ?? 0) : 0}`
   const hasPreviousSketch = selectedSketchIndex > 0
   const hasNextSketch = selectedSketchIndex < sketchGallery.length - 1
   const sketchTimeLabel = formatSketchTime(previewDocument?.updatedAt)

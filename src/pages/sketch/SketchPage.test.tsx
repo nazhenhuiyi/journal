@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -41,10 +41,9 @@ describe('SketchPage', () => {
     renderSketchPage()
 
     await screen.findByLabelText('随画标题')
-    fireEvent.change(screen.getByLabelText('选择新画作比例'), {
-      target: { value: 'square-1-1' },
-    })
     fireEvent.click(screen.getByRole('button', { name: /新建/ }))
+    const createMenu = await screen.findByRole('listbox', { name: '新建画作比例' })
+    fireEvent.click(within(createMenu).getByRole('option', { name: /1:1 方形/ }))
 
     await waitFor(() => expect(screen.getByLabelText('选择画布比例')).toHaveValue('square-1-1'))
   })
@@ -79,15 +78,56 @@ describe('SketchPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /播放/ })).toBeDisabled())
     await waitFor(() => expect(savedDocuments.at(-1)?.events).toEqual([]))
   })
+
+  it('lets users load an existing sketch from a dropdown without opening the file import flow', async () => {
+    const firstDocument = createStoredSketchDocument()
+    const secondDocument = createStoredSketchDocument({
+      id: 'sketch_second',
+      title: '第二幅随画',
+      updatedAt: '2026-05-06T09:00:00.000Z',
+    })
+    const sketchStore = {
+      list: vi.fn(async () => [
+        createSketchDocumentSummary(firstDocument),
+        createSketchDocumentSummary(secondDocument),
+      ]),
+      create: vi.fn(async () => firstDocument),
+      load: vi.fn(async (id: string) => (id === secondDocument.id ? secondDocument : firstDocument)),
+      save: vi.fn(async (nextDocument) => ({
+        ...nextDocument,
+        fileName: firstDocument.fileName,
+        filePath: firstDocument.filePath,
+      })),
+      import: vi.fn(async () => ({
+        ...firstDocument,
+        id: 'sketch_imported',
+        title: '文件导入随画',
+      })),
+      delete: vi.fn(async () => ({ id: firstDocument.id })),
+    }
+    window.sketchStore = sketchStore
+
+    renderSketchPage()
+
+    await waitFor(() => expect(screen.getByLabelText('随画标题')).toHaveValue('测试随画'))
+    fireEvent.click(screen.getByRole('button', { name: /加载/ }))
+    fireEvent.click(await screen.findByRole('option', { name: /第二幅随画/ }))
+
+    await waitFor(() => expect(screen.getByLabelText('随画标题')).toHaveValue('第二幅随画'))
+    expect(sketchStore.load).toHaveBeenCalledWith(secondDocument.id)
+    expect(sketchStore.import).not.toHaveBeenCalled()
+  })
 })
 
-function createStoredSketchDocument(): StoredSketchDocument {
+function createStoredSketchDocument(overrides: Partial<StoredSketchDocument> = {}): StoredSketchDocument {
+  const id = overrides.id ?? 'sketch_test'
+
   return {
     schemaVersion: 1,
-    id: 'sketch_test',
-    title: '测试随画',
+    id,
+    title: overrides.title ?? '测试随画',
     createdAt: '2026-05-05T08:00:00.000Z',
-    updatedAt: '2026-05-05T08:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-05-05T08:00:00.000Z',
     canvas: {
       preset: 'landscape-3-2',
       width: 660,
@@ -118,8 +158,9 @@ function createStoredSketchDocument(): StoredSketchDocument {
         strokeId: 'stroke-1',
       },
     ],
-    fileName: 'sketch_test.json',
-    filePath: '/Users/zilin/.journal/sketches/sketch_test.json',
+    fileName: `${id}.json`,
+    filePath: `/Users/zilin/.journal/sketches/${id}.json`,
+    ...overrides,
   }
 }
 
