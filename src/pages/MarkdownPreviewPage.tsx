@@ -8,6 +8,7 @@ import {
   resolveAnnotationRanges,
 } from '../domain/annotations'
 import type { Annotation } from '../domain/annotations'
+import type { JournalIndexEntry } from '../domain/journalIndex/types'
 import {
   parseJournalMarkdown,
   renderJournalMarkdown,
@@ -44,9 +45,14 @@ import {
 import MarkdownPreviewArticle from './markdown-preview/MarkdownPreviewArticle'
 import type { AnnotationOverlayRect } from './markdown-preview/types'
 import { brand } from '../brand'
+import { Sparkles } from '../components/HandDrawnIcons'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
+type CurationLibrary = {
+  collections: string[]
+  tags: string[]
+}
 type JournalDayViewProps = {
   date?: string | null
   showDaySwitchNudge?: boolean
@@ -184,6 +190,89 @@ function formatTopbarWeatherLabel(weatherText: string | undefined) {
   return weatherText
 }
 
+function createCurationLibrary(entries: JournalIndexEntry[], currentDate: string): CurationLibrary {
+  let order = 0
+  const tagScores = new Map<string, { count: number; firstIndex: number; latestDate: string }>()
+  const collectionScores = new Map<string, { count: number; firstIndex: number; latestDate: string }>()
+
+  entries.forEach((entry) => {
+    if (entry.date === currentDate) {
+      return
+    }
+
+    entry.tags.forEach((tag) => {
+      collectCurationValue(tagScores, tag, entry.date, order)
+      order += 1
+    })
+    entry.collections.forEach((collection) => {
+      collectCurationValue(collectionScores, collection, entry.date, order)
+      order += 1
+    })
+  })
+
+  return {
+    collections: sortCurationValues(collectionScores).slice(0, 32),
+    tags: sortCurationValues(tagScores).slice(0, 64),
+  }
+}
+
+function collectCurationValue(
+  scores: Map<string, { count: number; firstIndex: number; latestDate: string }>,
+  value: string,
+  date: string,
+  index: number,
+) {
+  const normalized = value.trim()
+
+  if (!normalized) {
+    return
+  }
+
+  const current = scores.get(normalized)
+
+  scores.set(normalized, {
+    count: (current?.count ?? 0) + 1,
+    firstIndex: current?.firstIndex ?? index,
+    latestDate: current && current.latestDate > date ? current.latestDate : date,
+  })
+}
+
+function sortCurationValues(scores: Map<string, { count: number; firstIndex: number; latestDate: string }>) {
+  return Array.from(scores.entries())
+    .sort(([leftValue, leftScore], [rightValue, rightScore]) => {
+      if (leftScore.count !== rightScore.count) {
+        return rightScore.count - leftScore.count
+      }
+
+      if (leftScore.latestDate !== rightScore.latestDate) {
+        return rightScore.latestDate.localeCompare(leftScore.latestDate)
+      }
+
+      return leftScore.firstIndex - rightScore.firstIndex || leftValue.localeCompare(rightValue, 'zh-Hans-CN')
+    })
+    .map(([value]) => value)
+}
+
+function getCurationSummary(frontMatter: DayFrontMatter) {
+  const hasCuration = Boolean(
+    frontMatter.title ||
+      frontMatter.excerpt ||
+      (frontMatter.tags && frontMatter.tags.length > 0) ||
+      (frontMatter.collections && frontMatter.collections.length > 0),
+  )
+  const title = frontMatter.title ?? frontMatter.excerpt ?? '待整理'
+  const detailItems = [
+    ...(frontMatter.tags ?? []).slice(0, 3),
+    ...(frontMatter.collections ?? []).slice(0, 2).map((collection) => `合集 ${collection}`),
+  ]
+
+  return {
+    detail: detailItems.length > 0 ? detailItems.join(' / ') : '标题、标签、合集',
+    hasCuration,
+    title,
+  }
+}
+
 export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewProps>(function JournalDayView(
   { date = null, showDaySwitchNudge = true },
   ref,
@@ -196,6 +285,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [daySwitchError, setDaySwitchError] = useState('')
   const [journalAnnotations, setJournalAnnotations] = useState<Annotation[]>(demoAnnotations)
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
+  const [journalIndexEntries, setJournalIndexEntries] = useState<JournalIndexEntry[]>([])
   const [activeAnnotationId, setActiveAnnotationId] = useState(demoAnnotations[0]?.id ?? '')
   const [activeOverlayRects, setActiveOverlayRects] = useState<AnnotationOverlayRect[]>([])
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false)
@@ -241,6 +331,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const canGenerateAiAnnotations = !hasGeneratedAiAnnotationsToday
   const shouldShowAiPanel = canGenerateAiAnnotations || aiPanelMode === 'chat' || aiDrafts.length > 0
   const isAiPanelVisible = isAiPanelOpen && shouldShowAiPanel
+  const curationLibrary = useMemo(
+    () => createCurationLibrary(journalIndexEntries, currentJournalDate),
+    [currentJournalDate, journalIndexEntries],
+  )
+  const curationSummary = useMemo(() => getCurationSummary(journalFrontMatter), [journalFrontMatter])
   const annotationRanges = useMemo(
     () => resolveAnnotationRanges(parsedJournalEntry.longEntryMarkdown, visibleAnnotations),
     [parsedJournalEntry.longEntryMarkdown, visibleAnnotations],
@@ -344,6 +439,21 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       }
     }
   }, [replaceJournalAnnotations])
+
+  const loadCurationLibraryEntries = useCallback(async () => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.listIndex) {
+      setJournalIndexEntries([])
+      return []
+    }
+
+    const entries = await journalStore.listIndex()
+
+    setJournalIndexEntries(entries)
+
+    return entries
+  }, [])
 
   const applyLoadedJournalFile = useCallback((file: JournalFile) => {
     const parsedFile = parseJournalMarkdown(file.content)
@@ -612,6 +722,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     }
   }, [activeAnnotationId, annotationRanges, isReviewing])
 
+  useEffect(() => {
+    if (!isFrontMatterDialogOpen) {
+      return
+    }
+
+    void loadCurationLibraryEntries().catch(() => setJournalIndexEntries([]))
+  }, [isFrontMatterDialogOpen, loadCurationLibraryEntries])
+
   function selectAnnotation(annotationId: string, shouldScroll: boolean) {
     setActiveAnnotationId(annotationId)
 
@@ -742,7 +860,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       throw new Error('今天还没有可整理的内容。')
     }
 
+    const libraryEntries = await loadCurationLibraryEntries().catch(() => journalIndexEntries)
+    const library = createCurationLibrary(libraryEntries, date)
+
     const result = await codex.generateFrontMatterDraft({
+      collectionLibrary: library.collections,
       currentFrontMatter: {
         collections: journalFrontMatter.collections,
         excerpt: journalFrontMatter.excerpt,
@@ -751,6 +873,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       },
       date,
       journalMarkdown,
+      tagLibrary: library.tags,
     })
 
     return result.draft
@@ -1006,7 +1129,20 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             </button>
           </div>
         ) : null}
-        <div className="flex shrink-0 items-center gap-2 text-sm text-ink/60">
+        <div className="journal-topbar-actions">
+          <button
+            aria-label="策展信息"
+            className={`journal-curation-button ${curationSummary.hasCuration ? 'is-filled' : ''}`}
+            onClick={() => setIsFrontMatterDialogOpen(true)}
+            type="button"
+          >
+            <Sparkles aria-hidden="true" size={15} strokeWidth={2.25} />
+            <span className="journal-curation-copy">
+              <span className="journal-curation-kicker">策展</span>
+              <span className="journal-curation-title">{curationSummary.title}</span>
+            </span>
+            <span className="journal-curation-detail">{curationSummary.detail}</span>
+          </button>
           <SegmentedControl
             ariaLabel="纸面状态"
             onChange={handleModeChange}
@@ -1048,16 +1184,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             <div className="journal-paper">
               <div className="journal-paper-meta">
                 <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
-                <div className="flex items-center gap-2">
-                  <button
-                    className="rounded border border-walnut/10 bg-white/55 px-2.5 py-1 text-xs font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
-                    onClick={() => setIsFrontMatterDialogOpen(true)}
-                    type="button"
-                  >
-                    策展信息
-                  </button>
-                  <span title={journalFile?.filePath}>{journalStorageLabel}</span>
-                </div>
+                <span className="journal-storage-label" title={journalFile?.filePath}>
+                  {journalStorageLabel}
+                </span>
               </div>
               <JournalMarkdownEditor
                 onChange={handleJournalMarkdownChange}
@@ -1102,10 +1231,12 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
       {isFrontMatterDialogOpen ? (
         <JournalFrontMatterDialog
+          collectionLibrary={curationLibrary.collections}
           frontMatter={journalFrontMatter}
           onClose={() => setIsFrontMatterDialogOpen(false)}
           onGenerateDraft={handleGenerateFrontMatterDraft}
           onSave={handleSaveFrontMatter}
+          tagLibrary={curationLibrary.tags}
         />
       ) : null}
     </>

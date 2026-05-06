@@ -113,8 +113,10 @@ interface Window {
       } | null
     }>
     generateFrontMatterDraft(payload: {
+      collectionLibrary?: string[]
       date: string
       journalMarkdown: string
+      tagLibrary?: string[]
       currentFrontMatter?: {
         title?: string
         excerpt?: string

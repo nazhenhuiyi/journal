@@ -51,8 +51,10 @@ export type CodexFrontMatterDraft = {
 }
 
 export type CodexFrontMatterDraftPayload = {
+  collectionLibrary: string[]
   date: string
   journalMarkdown: string
+  tagLibrary: string[]
   currentFrontMatter?: {
     title?: string
     excerpt?: string
@@ -355,6 +357,7 @@ function normalizeFrontMatterDraftPayload(payload: unknown): CodexFrontMatterDra
   const currentFrontMatter = asRecord(payload.currentFrontMatter)
 
   return {
+    collectionLibrary: stringArrayFromRecord(payload, 'collectionLibrary'),
     currentFrontMatter: {
       collections: stringArrayFromRecord(currentFrontMatter, 'collections'),
       excerpt: stringFromRecord(currentFrontMatter, 'excerpt'),
@@ -363,6 +366,7 @@ function normalizeFrontMatterDraftPayload(payload: unknown): CodexFrontMatterDra
     },
     date,
     journalMarkdown,
+    tagLibrary: stringArrayFromRecord(payload, 'tagLibrary'),
   }
 }
 
@@ -394,11 +398,19 @@ function buildFrontMatterDraftPrompt(payload: CodexFrontMatterDraftPayload) {
 - excerpt 使用中文，一句话概括这一天留下的画面或线索，不做心理诊断。
 - tags 返回 3-8 个中文短标签，适合检索和策展，可以包含主题、场景、物件、天气。
 - collections 返回 0-4 个中文合集建议，像「雨天」「房间里的光」这种可复用专题。
+- TAG_LIBRARY 和 COLLECTION_LIBRARY 是用户过去维护出的可复用词库。tags 和 collections 必须先从这些库里挑合适的沿用。
+- 只有当日记里有清晰、重要、且现有库无法覆盖的线索时，才新增中文短标签或合集；新增项要和库里的粒度、语气保持一致。
 - 不要判断 favorite，不要输出用户没有确认过的重要性判断。
 - 如果已有字段仍然合适，可以沿用或轻微整理。
 
 DATE:
 ${payload.date}
+
+TAG_LIBRARY:
+${JSON.stringify(payload.tagLibrary, null, 2)}
+
+COLLECTION_LIBRARY:
+${JSON.stringify(payload.collectionLibrary, null, 2)}
 
 CURRENT_FRONT_MATTER:
 ${JSON.stringify(payload.currentFrontMatter ?? {}, null, 2)}

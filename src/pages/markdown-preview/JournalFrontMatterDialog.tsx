@@ -8,19 +8,23 @@ export type EditableJournalFrontMatter = Pick<
 >
 
 type JournalFrontMatterDialogProps = {
+  collectionLibrary: string[]
   frontMatter: DayFrontMatter
   onClose: () => void
   onGenerateDraft: () => Promise<EditableJournalFrontMatter>
   onSave: (frontMatter: EditableJournalFrontMatter) => void
+  tagLibrary: string[]
 }
 
 type DraftStatus = 'idle' | 'loading'
 
 function JournalFrontMatterDialog({
+  collectionLibrary,
   frontMatter,
   onClose,
   onGenerateDraft,
   onSave,
+  tagLibrary,
 }: JournalFrontMatterDialogProps) {
   const [title, setTitle] = useState(() => frontMatter.title ?? '')
   const [excerpt, setExcerpt] = useState(() => frontMatter.excerpt ?? '')
@@ -29,6 +33,12 @@ function JournalFrontMatterDialog({
   const [favorite, setFavorite] = useState(() => frontMatter.favorite === true)
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle')
   const [error, setError] = useState('')
+  const visibleTagLibrary = tagLibrary
+    .filter((tag) => !hasDelimitedValue(tags, tag))
+    .slice(0, 14)
+  const visibleCollectionLibrary = collectionLibrary
+    .filter((collection) => !hasDelimitedValue(collections, collection))
+    .slice(0, 10)
 
   async function handleGenerateDraft() {
     setDraftStatus('loading')
@@ -117,6 +127,20 @@ function JournalFrontMatterDialog({
                 placeholder="雨, 夜晚, 台灯"
                 value={tags}
               />
+              {visibleTagLibrary.length > 0 ? (
+                <div aria-label="标签库" className="mt-2 flex flex-wrap gap-1.5">
+                  {visibleTagLibrary.map((tag) => (
+                    <button
+                      className="rounded-full border border-walnut/10 bg-white/70 px-2 py-0.5 text-xs font-semibold text-ink/55 transition hover:border-sage/40 hover:bg-sage/10 hover:text-ink"
+                      key={tag}
+                      onClick={() => setTags((currentTags) => appendDelimitedValue(currentTags, tag))}
+                      type="button"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </label>
 
             <label className="block">
@@ -127,6 +151,22 @@ function JournalFrontMatterDialog({
                 placeholder="雨天, 房间里的光"
                 value={collections}
               />
+              {visibleCollectionLibrary.length > 0 ? (
+                <div aria-label="合集库" className="mt-2 flex flex-wrap gap-1.5">
+                  {visibleCollectionLibrary.map((collection) => (
+                    <button
+                      className="rounded-full border border-walnut/10 bg-white/70 px-2 py-0.5 text-xs font-semibold text-ink/55 transition hover:border-sage/40 hover:bg-sage/10 hover:text-ink"
+                      key={collection}
+                      onClick={() => setCollections((currentCollections) =>
+                        appendDelimitedValue(currentCollections, collection)
+                      )}
+                      type="button"
+                    >
+                      {collection}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </label>
           </div>
 
@@ -185,6 +225,22 @@ function normalizeDelimitedInput(value: string) {
     .split(/[,，]/)
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function hasDelimitedValue(value: string, candidate: string) {
+  const normalizedCandidate = candidate.trim().toLocaleLowerCase()
+
+  return normalizeDelimitedInput(value).some((item) => item.toLocaleLowerCase() === normalizedCandidate)
+}
+
+function appendDelimitedValue(value: string, nextValue: string) {
+  const items = normalizeDelimitedInput(value)
+
+  if (items.some((item) => item.toLocaleLowerCase() === nextValue.trim().toLocaleLowerCase())) {
+    return items.join(', ')
+  }
+
+  return [...items, nextValue.trim()].filter(Boolean).join(', ')
 }
 
 export default JournalFrontMatterDialog

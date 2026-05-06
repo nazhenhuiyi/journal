@@ -626,6 +626,23 @@ describe('MarkdownPreviewPage', () => {
         date,
       }),
     )
+    const listIndex = vi.fn().mockResolvedValue([
+      {
+        collections: ['房间里的光', '雨天'],
+        date: '2026-04-27',
+        excerpt: '雨夜里留着一盏灯。',
+        favorite: false,
+        fileName: '2026-04-27.md',
+        filePath: '/Users/zilin/.journal/2026-04-27.md',
+        images: [],
+        murmurs: [],
+        searchableText: '雨夜里留着一盏灯。',
+        stats: { imageCount: 0, murmurCount: 0, wordCount: 18 },
+        tags: ['台灯', '雨', '夜晚'],
+        title: '雨夜台灯',
+        updatedAt: '2026-04-27T06:30:00.000Z',
+      },
+    ])
     const generateFrontMatterDraft = vi.fn().mockResolvedValue({
       draft: {
         collections: ['房间里的光'],
@@ -637,7 +654,7 @@ describe('MarkdownPreviewPage', () => {
       usage: null,
     })
 
-    vi.stubGlobal('journalStore', { loadToday, saveDate })
+    vi.stubGlobal('journalStore', { listIndex, loadToday, saveDate })
     vi.stubGlobal('codex', { generateFrontMatterDraft })
 
     render(<MarkdownPreviewPage />)
@@ -651,8 +668,10 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(generateFrontMatterDraft).toHaveBeenCalledWith(expect.objectContaining({
+        collectionLibrary: ['房间里的光', '雨天'],
         date: '2026-04-28',
         journalMarkdown: '# 测试日记\n今天回家时看见台灯亮着。',
+        tagLibrary: ['台灯', '雨', '夜晚'],
       }))
       expect(screen.getByDisplayValue('台灯亮着')).toBeInTheDocument()
       expect(screen.getByDisplayValue('台灯, 回家, 夜晚')).toBeInTheDocument()
