@@ -743,7 +743,7 @@ describe('MarkdownPreviewPage', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '页边批注' }))
-    fireEvent.click(screen.getByRole('button', { name: '请页边读一遍今天' }))
+    fireEvent.click(screen.getByRole('button', { name: '读一遍' }))
 
     await waitFor(() => {
       expect(generateAnnotationDrafts).toHaveBeenCalledWith({

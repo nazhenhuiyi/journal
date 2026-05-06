@@ -375,12 +375,27 @@ function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
 
 要求：
 - 不做心理诊断，不使用病理化措辞。
-- 优先生成情绪观察、复盘追问、轻量的模式提醒。
+- 像一个贴着原文读日记的人，不像老师、咨询师或文学评论者。
+- 优先批注这些位置：情绪转折、反复出现的念头、强烈比喻、具体生活瞬间、用户写到但还没有展开的句子。
+- 优先生成情绪观察、具体生活瞬间的回看、温和追问、轻量的模式提醒。
 - kind 只能是 observation 或 question。
 - content 使用中文，短一些，像写在页边的批注，不要替用户解释人生。
-- 如果批注能绑定到具体原文，anchorQuote 必须是 LONG_ENTRY_MARKDOWN 中连续出现的精确 Markdown 子串。
+- content 要贴近原文，可以偶尔使用“这里似乎”“我读到”“这一句里有”，但不要固定套用这些开头。
+- 避免聪明但疏远的分析腔，少用正当性、投射、防御、主体性、创伤、内在小孩、课题分离、原生家庭等概念词，也少用力量、允许、反问这类容易把日记读成评论的词。
+- 少写段落总结，不要只是概括全文观点；尽量贴住一个短句里的语气、画面或停顿。
+- observation 更像“我在这句话旁边画线的原因”，不要像文章点评。
+- question 必须是具体、可继续写下去的问题，指向一个时刻、画面、选择或感受；只问一个点，不要问“这意味着什么”这类过大的问题，也不要列出一串选项或补充“比如 A、B、C”。
+- 如果批注能绑定到具体原文，anchorQuote 必须是 LONG_ENTRY_MARKDOWN 中连续出现的精确 Markdown 子串，优先选择 8-30 个字的关键短句。
+- 避免多条批注锚定同一个过长片段；如果一段里有多个可读之处，分别锚定不同短句。
 - anchorPrefix 和 anchorSuffix 是 anchorQuote 前后的短上下文，用于重复文本定位。
 - 如果是整天层面的观察，anchorQuote、anchorPrefix、anchorSuffix 都返回 null。
+
+风格参考：
+- 好的 observation：这几个词很热，像是还没被理性收拾过。
+- 好的 observation：这句没有否定理性，只是给混乱也留了一点位置。
+- 不好的 observation：这里体现了主体对秩序和失序的辩证调和。
+- 好的 question：写到“短暂”时，你想到的是哪一个具体瞬间？
+- 不好的 question：这背后意味着什么？比如作息、效率、评价，还是别的什么？
 
 DATE:
 ${payload.date}

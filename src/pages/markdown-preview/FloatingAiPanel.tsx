@@ -84,15 +84,15 @@ function FloatingAiPanel({
   return (
     <motion.aside
       animate={{ opacity: 1, y: 0 }}
-      className={`fixed bottom-6 right-6 z-40 flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden border border-walnut/15 bg-[#fffdf7] shadow-2xl shadow-ink/15 ${
-        mode === 'chat' ? 'w-[560px]' : 'w-[390px]'
+      className={`fixed bottom-6 right-6 z-40 flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden border border-walnut/15 bg-[#fcfaf4] shadow-2xl shadow-ink/15 ${
+        mode === 'chat' ? 'w-[560px]' : 'w-[430px]'
       }`}
       initial={{ opacity: 0, y: 18 }}
       transition={panelTransition}
     >
       <div
         className={`items-center border-b border-walnut/10 px-4 py-3 ${
-          mode === 'chat' ? 'grid grid-cols-[2rem_1fr_2rem] gap-3' : 'flex justify-between'
+          mode === 'chat' ? 'grid grid-cols-[2rem_1fr_2rem] gap-3' : 'flex justify-between gap-3'
         }`}
       >
         {mode === 'chat' ? (
@@ -114,19 +114,32 @@ function FloatingAiPanel({
         ) : (
           <>
             <h2 className="font-display text-lg font-semibold text-ink">{brand.assistantLabel}</h2>
-            <button
-              className="h-8 w-8 justify-self-end border border-walnut/10 text-sm font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
-              onClick={onOpen}
-              title={`收起${brand.assistantName}`}
-              type="button"
-            >
-              -
-            </button>
+            <div className="flex items-center gap-2">
+              {isGenerationAvailable ? (
+                <button
+                  className="rounded-[4px] border border-sage/25 bg-sage/10 px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-sage hover:bg-sage/15 disabled:cursor-wait disabled:opacity-60"
+                  disabled={mode === 'generating'}
+                  onClick={onGenerate}
+                  type="button"
+                >
+                  {mode === 'generating' ? '在读...' : '读一遍'}
+                </button>
+              ) : null}
+              <button
+                aria-label={`收起${brand.assistantName}`}
+                className="flex h-8 w-8 items-center justify-center rounded-[4px] border border-walnut/10 text-ink/60 transition hover:border-walnut/30 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage"
+                onClick={onOpen}
+                title={`收起${brand.assistantName}`}
+                type="button"
+              >
+                <Undo aria-hidden="true" size={16} strokeWidth={2.1} />
+              </button>
+            </div>
           </>
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         {error ? (
           <p className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">{error}</p>
         ) : null}
@@ -144,9 +157,7 @@ function FloatingAiPanel({
           <DraftPanel
             drafts={drafts}
             isGenerationAvailable={isGenerationAvailable}
-            mode={mode}
             onAcceptDraft={onAcceptDraft}
-            onGenerate={onGenerate}
             onIgnoreDraft={onIgnoreDraft}
             onUpdateDraftContent={onUpdateDraftContent}
           />
@@ -159,9 +170,7 @@ function FloatingAiPanel({
 type DraftPanelProps = {
   drafts: AiPanelDraft[]
   isGenerationAvailable: boolean
-  mode: FloatingAiPanelProps['mode']
   onAcceptDraft: (draftId: string) => void
-  onGenerate: () => void
   onIgnoreDraft: (draftId: string) => void
   onUpdateDraftContent: (draftId: string, content: string) => void
 }
@@ -169,69 +178,55 @@ type DraftPanelProps = {
 function DraftPanel({
   drafts,
   isGenerationAvailable,
-  mode,
   onAcceptDraft,
-  onGenerate,
   onIgnoreDraft,
   onUpdateDraftContent,
 }: DraftPanelProps) {
   return (
     <div>
-      {isGenerationAvailable ? (
-        <button
-          className="w-full border border-sage/30 bg-sage/10 px-4 py-3 text-sm font-semibold text-ink transition hover:border-sage hover:bg-sage/15 disabled:cursor-wait disabled:opacity-60"
-          disabled={mode === 'generating'}
-          onClick={onGenerate}
-          type="button"
-        >
-          {mode === 'generating' ? `${brand.assistantName}正在读...` : `请${brand.assistantName}读一遍今天`}
-        </button>
-      ) : null}
-
       {drafts.length > 0 ? (
-        <motion.div animate="visible" className="mt-4 space-y-3" initial="hidden">
+        <motion.div animate="visible" className="space-y-4" initial="hidden">
           <AnimatePresence initial={false}>
             {drafts.map((draft) => (
               <motion.article
                 key={draft.id}
                 animate={{ opacity: 1, y: 0 }}
-                className="border border-walnut/10 bg-white px-3 py-3"
+                className="group relative rounded-[6px] border border-walnut/10 bg-white px-4 py-3.5 shadow-sm shadow-walnut/5 transition hover:border-walnut/20"
                 exit={{ opacity: 0, y: 6 }}
                 initial={{ opacity: 0, y: 8 }}
                 transition={listTransition}
               >
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="text-xs font-semibold text-sage">
+                <div className="mb-2 flex min-h-8 items-center justify-between gap-3">
+                  <span className="text-[0.72rem] font-semibold tracking-wide text-sage">
                     {annotationKinds[draft.annotation.kind]}
                   </span>
-                  <span className="text-xs text-ink/45">
-                    {draft.matchStatus === 'anchored' ? '已定位原文' : '整天批注'}
-                  </span>
+                  <div className="pointer-events-none flex gap-1.5 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                    <button
+                      className="rounded-[4px] border border-walnut/10 bg-white/90 px-2.5 py-1.5 text-xs font-semibold text-ink/55 shadow-sm shadow-walnut/5 transition hover:border-walnut/30 hover:bg-walnut/5 hover:text-ink"
+                      onClick={() => onIgnoreDraft(draft.id)}
+                      type="button"
+                    >
+                      忽略
+                    </button>
+                    <button
+                      className="rounded-[4px] border border-sage/30 bg-[#f4f7ef] px-2.5 py-1.5 text-xs font-semibold text-ink shadow-sm shadow-sage/5 transition hover:border-sage hover:bg-sage/15"
+                      onClick={() => onAcceptDraft(draft.id)}
+                      type="button"
+                    >
+                      接受
+                    </button>
+                  </div>
                 </div>
-                {draft.matchStatus === 'anchored' ? (
-                  <AnnotationSource annotation={draft.annotation} className="mb-3 mt-0" />
-                ) : null}
-                <textarea
-                  aria-label="批注草稿"
-                  className="min-h-24 w-full resize-none border border-walnut/10 bg-[#fffdf7] px-3 py-2 text-sm leading-6 text-ink outline-none transition focus:border-sage"
-                  onChange={(event) => onUpdateDraftContent(draft.id, event.target.value)}
-                  value={draft.annotation.body.content}
-                />
-                <div className="mt-3 flex justify-end gap-2">
-                  <button
-                    className="border border-walnut/10 px-3 py-1.5 text-xs font-semibold text-ink/60 transition hover:border-walnut/30 hover:text-ink"
-                    onClick={() => onIgnoreDraft(draft.id)}
-                    type="button"
-                  >
-                    忽略
-                  </button>
-                  <button
-                    className="border border-sage/30 bg-sage/10 px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-sage hover:bg-sage/15"
-                    onClick={() => onAcceptDraft(draft.id)}
-                    type="button"
-                  >
-                    接受
-                  </button>
+                <div className="space-y-2">
+                  {draft.matchStatus === 'anchored' ? (
+                    <AnnotationSource annotation={draft.annotation} className="mt-0" variant="compact" />
+                  ) : null}
+                  <textarea
+                    aria-label="批注草稿"
+                    className="min-h-20 w-full resize-none rounded-[4px] border border-transparent bg-[#fffdf8] px-3 py-2.5 text-[0.9rem] leading-7 text-ink outline-none transition focus:border-sage/50 focus:bg-white"
+                    onChange={(event) => onUpdateDraftContent(draft.id, event.target.value)}
+                    value={draft.annotation.body.content}
+                  />
                 </div>
               </motion.article>
             ))}
@@ -330,23 +325,33 @@ function ChatPanel({
 function AnnotationSource({
   annotation,
   className = 'mt-4',
+  variant = 'default',
 }: {
   annotation: Annotation
   className?: string
+  variant?: 'default' | 'compact'
 }) {
   const source = getAnnotationSource(annotation)
+  const quoteClassName =
+    variant === 'compact'
+      ? 'relative max-h-20 overflow-y-auto whitespace-pre-wrap rounded-[4px] bg-[#f8f5ec] px-3 py-2 text-[0.78rem] leading-5 text-ink/58'
+      : 'relative max-h-28 overflow-y-auto whitespace-pre-wrap border border-walnut/5 bg-[#f9f7ef] px-4 py-3 text-sm leading-6 text-ink/60'
+  const quoteMarkClassName =
+    variant === 'compact'
+      ? 'pointer-events-none absolute left-2.5 top-2 font-display text-2xl leading-none text-walnut/10'
+      : 'pointer-events-none absolute left-3 top-2 font-display text-3xl leading-none text-walnut/10'
 
   return (
     <div className={className}>
       <blockquote
         aria-label="批注原文"
-        className="relative max-h-28 overflow-y-auto whitespace-pre-wrap border border-walnut/5 bg-[#f9f7ef] px-4 py-3 text-sm leading-6 text-ink/60"
+        className={quoteClassName}
       >
-        <span className="pointer-events-none absolute left-3 top-2 font-display text-3xl leading-none text-walnut/10">
+        <span className={quoteMarkClassName}>
           “
         </span>
-        <span className="mb-2 flex items-center justify-between gap-3 pl-5 text-[0.68rem] leading-none">
-          <span className="font-semibold text-walnut/60">摘自原文</span>
+        <span className="mb-1 flex items-center justify-between gap-3 pl-5 text-[0.66rem] leading-none">
+          <span className="font-semibold text-walnut/45">{variant === 'compact' ? '原文' : '摘自原文'}</span>
           <span className="shrink-0 text-ink/40">{source.location}</span>
         </span>
         <span className="block pl-5">{source.quote}</span>
