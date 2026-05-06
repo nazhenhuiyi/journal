@@ -53,6 +53,17 @@ type CurationLibrary = {
   collections: string[]
   tags: string[]
 }
+type FrontMatterDraftRequest = {
+  currentFrontMatter: DayFrontMatter
+  date: string
+  journalMarkdown: string
+}
+type CurationValueScore = {
+  dayCount: number
+  firstIndex: number
+  latestDate: string
+  value: string
+}
 type JournalDayViewProps = {
   date?: string | null
   showDaySwitchNudge?: boolean
@@ -192,19 +203,19 @@ function formatTopbarWeatherLabel(weatherText: string | undefined) {
 
 function createCurationLibrary(entries: JournalIndexEntry[], currentDate: string): CurationLibrary {
   let order = 0
-  const tagScores = new Map<string, { count: number; firstIndex: number; latestDate: string }>()
-  const collectionScores = new Map<string, { count: number; firstIndex: number; latestDate: string }>()
+  const tagScores = new Map<string, CurationValueScore>()
+  const collectionScores = new Map<string, CurationValueScore>()
 
   entries.forEach((entry) => {
     if (entry.date === currentDate) {
       return
     }
 
-    entry.tags.forEach((tag) => {
+    collectUniqueCurationValues(entry.tags).forEach((tag) => {
       collectCurationValue(tagScores, tag, entry.date, order)
       order += 1
     })
-    entry.collections.forEach((collection) => {
+    collectUniqueCurationValues(entry.collections).forEach((collection) => {
       collectCurationValue(collectionScores, collection, entry.date, order)
       order += 1
     })
@@ -217,40 +228,71 @@ function createCurationLibrary(entries: JournalIndexEntry[], currentDate: string
 }
 
 function collectCurationValue(
-  scores: Map<string, { count: number; firstIndex: number; latestDate: string }>,
+  scores: Map<string, CurationValueScore>,
   value: string,
   date: string,
   index: number,
 ) {
-  const normalized = value.trim()
+  const normalized = normalizeCurationValue(value)
 
   if (!normalized) {
     return
   }
 
-  const current = scores.get(normalized)
+  const key = createCurationKey(normalized)
+  const current = scores.get(key)
 
-  scores.set(normalized, {
-    count: (current?.count ?? 0) + 1,
+  scores.set(key, {
+    dayCount: (current?.dayCount ?? 0) + 1,
     firstIndex: current?.firstIndex ?? index,
     latestDate: current && current.latestDate > date ? current.latestDate : date,
+    value: current?.value ?? normalized,
   })
 }
 
-function sortCurationValues(scores: Map<string, { count: number; firstIndex: number; latestDate: string }>) {
-  return Array.from(scores.entries())
-    .sort(([leftValue, leftScore], [rightValue, rightScore]) => {
-      if (leftScore.count !== rightScore.count) {
-        return rightScore.count - leftScore.count
+function collectUniqueCurationValues(values: string[]) {
+  const uniqueValues = new Map<string, string>()
+
+  values.forEach((value) => {
+    const normalized = normalizeCurationValue(value)
+
+    if (!normalized) {
+      return
+    }
+
+    const key = createCurationKey(normalized)
+
+    if (!uniqueValues.has(key)) {
+      uniqueValues.set(key, normalized)
+    }
+  })
+
+  return Array.from(uniqueValues.values())
+}
+
+function sortCurationValues(scores: Map<string, CurationValueScore>) {
+  return Array.from(scores.values())
+    .sort((leftScore, rightScore) => {
+      if (leftScore.dayCount !== rightScore.dayCount) {
+        return rightScore.dayCount - leftScore.dayCount
       }
 
       if (leftScore.latestDate !== rightScore.latestDate) {
         return rightScore.latestDate.localeCompare(leftScore.latestDate)
       }
 
-      return leftScore.firstIndex - rightScore.firstIndex || leftValue.localeCompare(rightValue, 'zh-Hans-CN')
+      return leftScore.firstIndex - rightScore.firstIndex ||
+        leftScore.value.localeCompare(rightScore.value, 'zh-Hans-CN')
     })
-    .map(([value]) => value)
+    .map((score) => score.value)
+}
+
+function normalizeCurationValue(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function createCurationKey(value: string) {
+  return value.normalize('NFKC').toLocaleLowerCase('zh-Hans-CN')
 }
 
 function getCurationSummary(frontMatter: DayFrontMatter) {
@@ -271,6 +313,52 @@ function getCurationSummary(frontMatter: DayFrontMatter) {
     hasCuration,
     title,
   }
+}
+
+function shouldAutoCurateJournal(frontMatter: DayFrontMatter, journalMarkdown: string) {
+  if (!journalMarkdown.trim()) {
+    return false
+  }
+
+  return Boolean(
+    !frontMatter.title ||
+      !frontMatter.excerpt ||
+      !frontMatter.tags ||
+      frontMatter.tags.length === 0,
+  )
+}
+
+function shouldAutoCurateIndexEntry(entry: JournalIndexEntry) {
+  return Boolean(!entry.title || !entry.excerpt || entry.tags.length === 0)
+}
+
+function mergeMissingFrontMatterFields(
+  currentFrontMatter: DayFrontMatter,
+  draft: EditableJournalFrontMatter,
+) {
+  const nextFrontMatter: DayFrontMatter = { ...currentFrontMatter }
+
+  if (!nextFrontMatter.title && draft.title) {
+    nextFrontMatter.title = draft.title
+  }
+
+  if (!nextFrontMatter.excerpt && draft.excerpt) {
+    nextFrontMatter.excerpt = draft.excerpt
+  }
+
+  if ((!nextFrontMatter.tags || nextFrontMatter.tags.length === 0) && draft.tags && draft.tags.length > 0) {
+    nextFrontMatter.tags = draft.tags
+  }
+
+  if (
+    (!nextFrontMatter.collections || nextFrontMatter.collections.length === 0) &&
+    draft.collections &&
+    draft.collections.length > 0
+  ) {
+    nextFrontMatter.collections = draft.collections
+  }
+
+  return nextFrontMatter
 }
 
 export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewProps>(function JournalDayView(
@@ -304,7 +392,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
   const saveRequestIdRef = useRef(0)
   const chatLoadRequestIdRef = useRef(0)
-  const flushPendingSaveRef = useRef<((shouldUpdateState?: boolean) => Promise<boolean>) | null>(null)
+  const finalizeJournalRef = useRef<((shouldUpdateState?: boolean) => Promise<boolean>) | null>(null)
+  const autoCurationAttemptsRef = useRef(new Set<string>())
+  const hasCheckedPastCurationRef = useRef(false)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
@@ -455,6 +545,18 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return entries
   }, [])
 
+  const refreshJournalIndex = useCallback(async () => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.listIndex) {
+      return
+    }
+
+    const entries = await journalStore.listIndex()
+
+    setJournalIndexEntries(entries)
+  }, [])
+
   const applyLoadedJournalFile = useCallback((file: JournalFile) => {
     const parsedFile = parseJournalMarkdown(file.content)
     const editableMarkdown = serializeJournalMarkdownBody(parsedFile.longEntryMarkdown, parsedFile.murmurs)
@@ -531,6 +633,118 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return null
   }, [])
 
+  const requestFrontMatterDraft = useCallback(async ({
+    currentFrontMatter,
+    date,
+    journalMarkdown,
+  }: FrontMatterDraftRequest): Promise<EditableJournalFrontMatter> => {
+    const codex = getCodexStore()
+
+    if (!codex?.generateFrontMatterDraft) {
+      throw new Error(`当前环境还没有接入${brand.assistantLabel}。`)
+    }
+
+    if (!journalMarkdown.trim()) {
+      throw new Error('今天还没有可整理的内容。')
+    }
+
+    const libraryEntries = await loadCurationLibraryEntries().catch(() => journalIndexEntries)
+    const library = createCurationLibrary(libraryEntries, date)
+    const result = await codex.generateFrontMatterDraft({
+      collectionLibrary: library.collections,
+      currentFrontMatter: {
+        collections: currentFrontMatter.collections,
+        excerpt: currentFrontMatter.excerpt,
+        tags: currentFrontMatter.tags,
+        title: currentFrontMatter.title,
+      },
+      date,
+      journalMarkdown,
+      tagLibrary: library.tags,
+    })
+
+    return result.draft
+  }, [journalIndexEntries, loadCurationLibraryEntries])
+
+  const autoCurateJournalFile = useCallback(async (file: JournalFile, shouldUpdateState = true) => {
+    const parsedFile = parseJournalMarkdown(file.content)
+    const markdown = serializeJournalMarkdownBody(parsedFile.longEntryMarkdown, parsedFile.murmurs)
+    const frontMatter = parsedFile.frontMatter
+    const attemptKey = `${file.date}:${file.updatedAt ?? file.content.length}`
+
+    if (
+      autoCurationAttemptsRef.current.has(attemptKey) ||
+      !shouldAutoCurateJournal(frontMatter, markdown)
+    ) {
+      return true
+    }
+
+    autoCurationAttemptsRef.current.add(attemptKey)
+
+    try {
+      const draft = await requestFrontMatterDraft({
+        currentFrontMatter: frontMatter,
+        date: file.date,
+        journalMarkdown: markdown,
+      })
+      const nextFrontMatter = mergeMissingFrontMatterFields(frontMatter, draft)
+
+      if (!hasFrontMatterChanged(nextFrontMatter, frontMatter)) {
+        return true
+      }
+
+      const savedFile = await saveJournalFile(file.date, markdown, nextFrontMatter)
+
+      if (!savedFile) {
+        return true
+      }
+
+      const savedEntry = parseJournalMarkdown(savedFile.content)
+      const isCurrentFile = journalFileRef.current?.date === savedFile.date
+
+      if (isCurrentFile) {
+        journalFileRef.current = savedFile
+        lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
+        lastSavedFrontMatterRef.current = savedEntry.frontMatter
+
+        if (shouldUpdateState) {
+          setJournalFile(savedFile)
+          setJournalFrontMatter(savedEntry.frontMatter)
+          setJournalMarkdown(stripManagedFrontMatter(savedFile.content))
+        }
+      }
+
+      await refreshJournalIndex().catch(() => undefined)
+    } catch {
+      return true
+    }
+
+    return true
+  }, [refreshJournalIndex, requestFrontMatterDraft, saveJournalFile])
+
+  const autoCurateLatestPastJournal = useCallback(async () => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.loadDate || hasCheckedPastCurationRef.current) {
+      return
+    }
+
+    hasCheckedPastCurationRef.current = true
+
+    const entries = await loadCurationLibraryEntries().catch(() => [])
+    const targetEntry = entries.find((entry) =>
+      entry.date < realTodayDate && shouldAutoCurateIndexEntry(entry)
+    )
+
+    if (!targetEntry) {
+      return
+    }
+
+    const file = await journalStore.loadDate(targetEntry.date)
+
+    await autoCurateJournalFile(file, false)
+  }, [autoCurateJournalFile, loadCurationLibraryEntries, realTodayDate])
+
   const saveAnnotationsForDate = useCallback(async (date: string, nextAnnotations: Annotation[]) => {
     const journalStore = getJournalStore()
 
@@ -585,16 +799,46 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     }
   }, [journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
 
+  const finalizeJournalBeforeLeaving = useCallback(async (shouldUpdateState = true) => {
+    const didSave = await flushPendingSave(shouldUpdateState)
+
+    if (!didSave) {
+      return false
+    }
+
+    const currentFile = journalFileRef.current
+
+    if (currentFile) {
+      await autoCurateJournalFile(currentFile, shouldUpdateState)
+    }
+
+    return true
+  }, [autoCurateJournalFile, flushPendingSave])
+
   useEffect(() => {
-    flushPendingSaveRef.current = flushPendingSave
-  }, [flushPendingSave])
+    finalizeJournalRef.current = finalizeJournalBeforeLeaving
+  }, [finalizeJournalBeforeLeaving])
 
   useImperativeHandle(ref, () => ({
-    flushPendingSave: () => flushPendingSave(),
-  }), [flushPendingSave])
+    flushPendingSave: () => finalizeJournalBeforeLeaving(),
+  }), [finalizeJournalBeforeLeaving])
 
   useEffect(() => () => {
-    void flushPendingSaveRef.current?.(false)
+    void finalizeJournalRef.current?.(false)
+  }, [])
+
+  useEffect(() => {
+    function finalizeOpenJournal() {
+      void finalizeJournalRef.current?.(false)
+    }
+
+    window.addEventListener('pagehide', finalizeOpenJournal)
+    window.addEventListener('beforeunload', finalizeOpenJournal)
+
+    return () => {
+      window.removeEventListener('pagehide', finalizeOpenJournal)
+      window.removeEventListener('beforeunload', finalizeOpenJournal)
+    }
   }, [])
 
   useEffect(() => {
@@ -618,6 +862,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   useEffect(() => {
     journalFileRef.current = journalFile
   }, [journalFile])
+
+  useEffect(() => {
+    if (date !== null || !journalFile || journalFile.date !== realTodayDate) {
+      return
+    }
+
+    void autoCurateLatestPastJournal().catch(() => undefined)
+  }, [autoCurateLatestPastJournal, date, journalFile, realTodayDate])
 
   useEffect(() => {
     let timeoutId: number | undefined
@@ -790,29 +1042,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }
 
   async function handleGoToToday() {
-    const currentDate = journalFile?.date
-
     saveRequestIdRef.current += 1
 
-    if (
-      currentDate &&
-      (journalMarkdown !== lastSavedMarkdownRef.current ||
-        hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
-    ) {
-      const savedFile = await saveJournalFile(currentDate, journalMarkdown, journalFrontMatter).catch(() => null)
-
-      if (!savedFile) {
-        setDaySwitchError('刚才的内容还没有保存成功，先留在这一天。')
-        return
-      }
-
-      setDaySwitchError('')
-      journalFileRef.current = savedFile
-      lastSavedMarkdownRef.current = stripManagedFrontMatter(savedFile.content)
-      lastSavedFrontMatterRef.current = parseJournalMarkdown(savedFile.content).frontMatter
-      setJournalFile(savedFile)
+    if (!(await finalizeJournalBeforeLeaving(true))) {
+      setDaySwitchError('刚才的内容还没有保存成功，先留在这一天。')
+      return
     }
 
+    setDaySwitchError('')
     await loadTodayJournal().catch(() => undefined)
   }
 
@@ -849,34 +1086,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }
 
   async function handleGenerateFrontMatterDraft(): Promise<EditableJournalFrontMatter> {
-    const codex = getCodexStore()
     const date = journalFile?.date ?? realTodayDate
 
-    if (!codex?.generateFrontMatterDraft) {
-      throw new Error(`当前环境还没有接入${brand.assistantLabel}。`)
-    }
-
-    if (!journalMarkdown.trim()) {
-      throw new Error('今天还没有可整理的内容。')
-    }
-
-    const libraryEntries = await loadCurationLibraryEntries().catch(() => journalIndexEntries)
-    const library = createCurationLibrary(libraryEntries, date)
-
-    const result = await codex.generateFrontMatterDraft({
-      collectionLibrary: library.collections,
-      currentFrontMatter: {
-        collections: journalFrontMatter.collections,
-        excerpt: journalFrontMatter.excerpt,
-        tags: journalFrontMatter.tags,
-        title: journalFrontMatter.title,
-      },
+    return requestFrontMatterDraft({
+      currentFrontMatter: journalFrontMatter,
       date,
       journalMarkdown,
-      tagLibrary: library.tags,
     })
-
-    return result.draft
   }
 
   async function handleImportMurmurImages() {

@@ -276,6 +276,177 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('auto-curates the previous day before switching to today and refreshes the index', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 28, 23, 59, 0))
+
+    const oldJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 旧的一天\n回家时看见台灯亮着。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const newJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 新的一天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValueOnce(oldJournal).mockResolvedValueOnce(newJournal)
+    const saveDate = vi.fn((date: string, content: string) => Promise.resolve({
+      ...oldJournal,
+      content,
+      date,
+      updatedAt: '2026-04-28T16:01:00.000Z',
+    }))
+    const listIndex = vi.fn().mockResolvedValue([
+      {
+        collections: ['房间里的光'],
+        date: '2026-04-27',
+        excerpt: '雨夜里留着一盏灯。',
+        favorite: false,
+        fileName: '2026-04-27.md',
+        filePath: '/Users/zilin/.journal/2026-04-27.md',
+        images: [],
+        murmurs: [],
+        searchableText: '雨夜里留着一盏灯。',
+        stats: { imageCount: 0, murmurCount: 0, wordCount: 18 },
+        tags: ['台灯'],
+        title: '雨夜台灯',
+        updatedAt: '2026-04-27T06:30:00.000Z',
+      },
+    ])
+    const generateFrontMatterDraft = vi.fn().mockResolvedValue({
+      draft: {
+        collections: ['房间里的光'],
+        excerpt: '回家时看见台灯亮着。',
+        tags: ['台灯', '回家'],
+        title: '台灯亮着',
+      },
+      threadId: 'auto-frontmatter-thread',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { listIndex, loadToday, saveDate })
+    vi.stubGlobal('codex', { generateFrontMatterDraft })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('旧的一天')
+    })
+
+    vi.setSystemTime(new Date(2026, 3, 29, 0, 0, 10))
+    window.dispatchEvent(new Event('focus'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('现在是 4月29日')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '去今天' }))
+
+    await waitFor(() => {
+      expect(generateFrontMatterDraft).toHaveBeenCalledWith(expect.objectContaining({
+        collectionLibrary: ['房间里的光'],
+        date: '2026-04-28',
+        journalMarkdown: '# 旧的一天\n回家时看见台灯亮着。',
+        tagLibrary: ['台灯'],
+      }))
+      expect(saveDate).toHaveBeenCalledWith('2026-04-28', expect.stringContaining('title: 台灯亮着'))
+      expect(saveDate).toHaveBeenCalledWith('2026-04-28', expect.stringContaining('tags: [台灯, 回家]'))
+      expect(listIndex).toHaveBeenCalledTimes(2)
+      expect(loadToday).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('heading', { name: '4月29日 · 周三' })).toBeInTheDocument()
+    })
+  })
+
+  it('auto-curates the latest past journal when opening today', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 3, 29, 9, 0, 0))
+
+    const todayJournal = {
+      content: '---\ndate: 2026-04-29\n---\n\n# 新的一天\n',
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T01:00:00.000Z',
+    }
+    const pastJournal = {
+      content: '---\ndate: 2026-04-28\n---\n\n# 昨天\n回家时看见台灯亮着。\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: '2026-04-28T15:59:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(todayJournal)
+    const loadDate = vi.fn().mockResolvedValue(pastJournal)
+    const saveDate = vi.fn((date: string, content: string) => Promise.resolve({
+      ...pastJournal,
+      content,
+      date,
+      updatedAt: '2026-04-29T01:01:00.000Z',
+    }))
+    const listIndex = vi.fn().mockResolvedValue([
+      {
+        collections: [],
+        date: '2026-04-28',
+        favorite: false,
+        fileName: '2026-04-28.md',
+        filePath: '/Users/zilin/.journal/2026-04-28.md',
+        images: [],
+        murmurs: [],
+        searchableText: '回家时看见台灯亮着。',
+        stats: { imageCount: 0, murmurCount: 0, wordCount: 12 },
+        tags: [],
+        updatedAt: '2026-04-28T15:59:00.000Z',
+      },
+      {
+        collections: ['房间里的光'],
+        date: '2026-04-27',
+        excerpt: '灯还亮着。',
+        favorite: false,
+        fileName: '2026-04-27.md',
+        filePath: '/Users/zilin/.journal/2026-04-27.md',
+        images: [],
+        murmurs: [],
+        searchableText: '灯还亮着。',
+        stats: { imageCount: 0, murmurCount: 0, wordCount: 8 },
+        tags: ['台灯'],
+        title: '台灯',
+        updatedAt: '2026-04-27T06:30:00.000Z',
+      },
+    ])
+    const generateFrontMatterDraft = vi.fn().mockResolvedValue({
+      draft: {
+        collections: ['房间里的光'],
+        excerpt: '回家时看见台灯亮着。',
+        tags: ['台灯', '回家'],
+        title: '台灯亮着',
+      },
+      threadId: 'past-frontmatter-thread',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { listIndex, loadDate, loadToday, saveDate })
+    vi.stubGlobal('codex', { generateFrontMatterDraft })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '4月29日 · 周三' })).toBeInTheDocument()
+      expect(loadDate).toHaveBeenCalledWith('2026-04-28')
+      expect(generateFrontMatterDraft).toHaveBeenCalledWith(expect.objectContaining({
+        collectionLibrary: ['房间里的光'],
+        date: '2026-04-28',
+        tagLibrary: ['台灯'],
+      }))
+      expect(saveDate).toHaveBeenCalledWith('2026-04-28', expect.stringContaining('title: 台灯亮着'))
+      expect(listIndex).toHaveBeenCalledTimes(3)
+    })
+  })
+
   it('ignores stale weather refreshes that return a different date', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))
@@ -638,9 +809,24 @@ describe('MarkdownPreviewPage', () => {
         murmurs: [],
         searchableText: '雨夜里留着一盏灯。',
         stats: { imageCount: 0, murmurCount: 0, wordCount: 18 },
-        tags: ['台灯', '雨', '夜晚'],
+        tags: ['台灯', '台灯', '雨', '夜晚'],
         title: '雨夜台灯',
         updatedAt: '2026-04-27T06:30:00.000Z',
+      },
+      {
+        collections: ['雨天', '雨天'],
+        date: '2026-04-26',
+        excerpt: '雨声和植物。',
+        favorite: false,
+        fileName: '2026-04-26.md',
+        filePath: '/Users/zilin/.journal/2026-04-26.md',
+        images: [],
+        murmurs: [],
+        searchableText: '雨声和植物。',
+        stats: { imageCount: 0, murmurCount: 0, wordCount: 12 },
+        tags: ['雨', '雨', '植物'],
+        title: '雨声',
+        updatedAt: '2026-04-26T06:30:00.000Z',
       },
     ])
     const generateFrontMatterDraft = vi.fn().mockResolvedValue({
@@ -668,10 +854,10 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(generateFrontMatterDraft).toHaveBeenCalledWith(expect.objectContaining({
-        collectionLibrary: ['房间里的光', '雨天'],
+        collectionLibrary: ['雨天', '房间里的光'],
         date: '2026-04-28',
         journalMarkdown: '# 测试日记\n今天回家时看见台灯亮着。',
-        tagLibrary: ['台灯', '雨', '夜晚'],
+        tagLibrary: ['雨', '台灯', '夜晚', '植物'],
       }))
       expect(screen.getByDisplayValue('台灯亮着')).toBeInTheDocument()
       expect(screen.getByDisplayValue('台灯, 回家, 夜晚')).toBeInTheDocument()
