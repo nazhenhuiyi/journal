@@ -17,6 +17,16 @@ type SizedSketchPoint = Stroke['points'][number] & {
   width: number
 }
 
+type RenderedSizedPoint = SizedSketchPoint & {
+  renderX: number
+  renderY: number
+}
+
+type OutlinePoint = {
+  x: number
+  y: number
+}
+
 export function setupCanvasDpi(
   canvas: HTMLCanvasElement,
   width: number,
@@ -119,25 +129,37 @@ function drawVariableWidthPath(
   jitterY: number,
   widthScale: number,
 ) {
-  const points = buildSizedPoints(stroke)
+  const points = buildSizedPoints(stroke).map((point) => ({
+    ...point,
+    renderX: point.x + jitterFor(point.t, jitterX),
+    renderY: point.y + jitterFor(point.t + 17, jitterY),
+  }))
 
   if (points.length === 1) {
     drawSizedPoint(context, points[0], jitterX, jitterY, widthScale)
     return
   }
 
-  let startPoint = points[0]
+  const outline = buildStrokeOutline(points, widthScale)
 
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const controlPoint = points[index]
-    const nextPoint = points[index + 1]
-    const endPoint = midpointBetween(controlPoint, nextPoint)
-
-    drawSizedCurve(context, startPoint, controlPoint, endPoint, jitterX, jitterY, widthScale)
-    startPoint = endPoint
+  if (!outline) {
+    drawSizedPoint(context, points[0], jitterX, jitterY, widthScale)
+    return
   }
 
-  drawSizedLine(context, startPoint, points[points.length - 1], jitterX, jitterY, widthScale)
+  context.beginPath()
+  context.moveTo(outline.left[0].x, outline.left[0].y)
+
+  for (const point of outline.left.slice(1)) {
+    context.lineTo(point.x, point.y)
+  }
+
+  for (const point of [...outline.right].reverse()) {
+    context.lineTo(point.x, point.y)
+  }
+
+  context.closePath()
+  context.fill()
 }
 
 function buildSizedPoints(stroke: Stroke): SizedSketchPoint[] {
@@ -183,56 +205,57 @@ function drawSizedPoint(
   context.fill()
 }
 
-function drawSizedCurve(
-  context: CanvasRenderingContext2D,
-  startPoint: SizedSketchPoint,
-  controlPoint: SizedSketchPoint,
-  endPoint: SizedSketchPoint,
-  jitterX: number,
-  jitterY: number,
-  widthScale: number,
-) {
-  context.lineWidth = scaledSegmentWidth(
-    (startPoint.width + controlPoint.width + endPoint.width) / 3,
-    widthScale,
-  )
-  context.beginPath()
-  context.moveTo(
-    startPoint.x + jitterFor(startPoint.t, jitterX),
-    startPoint.y + jitterFor(startPoint.t + 17, jitterY),
-  )
-  context.quadraticCurveTo(
-    controlPoint.x + jitterFor(controlPoint.t, jitterX),
-    controlPoint.y + jitterFor(controlPoint.t + 17, jitterY),
-    endPoint.x + jitterFor(endPoint.t, jitterX),
-    endPoint.y + jitterFor(endPoint.t + 17, jitterY),
-  )
-  context.stroke()
-}
+function buildStrokeOutline(points: RenderedSizedPoint[], widthScale: number) {
+  const left: OutlinePoint[] = []
+  const right: OutlinePoint[] = []
 
-function drawSizedLine(
-  context: CanvasRenderingContext2D,
-  startPoint: SizedSketchPoint,
-  endPoint: SizedSketchPoint,
-  jitterX: number,
-  jitterY: number,
-  widthScale: number,
-) {
-  context.lineWidth = scaledSegmentWidth((startPoint.width + endPoint.width) / 2, widthScale)
-  context.beginPath()
-  context.moveTo(
-    startPoint.x + jitterFor(startPoint.t, jitterX),
-    startPoint.y + jitterFor(startPoint.t + 17, jitterY),
-  )
-  context.lineTo(
-    endPoint.x + jitterFor(endPoint.t, jitterX),
-    endPoint.y + jitterFor(endPoint.t + 17, jitterY),
-  )
-  context.stroke()
-}
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index]
+    const previousPoint = points[index - 1]
+    const nextPoint = points[index + 1]
+    const tangentX = nextPoint && previousPoint
+      ? nextPoint.renderX - previousPoint.renderX
+      : nextPoint
+        ? nextPoint.renderX - point.renderX
+        : previousPoint
+          ? point.renderX - previousPoint.renderX
+          : 0
+    const tangentY = nextPoint && previousPoint
+      ? nextPoint.renderY - previousPoint.renderY
+      : nextPoint
+        ? nextPoint.renderY - point.renderY
+        : previousPoint
+          ? point.renderY - previousPoint.renderY
+          : 0
+    const tangentLength = Math.hypot(tangentX, tangentY)
 
-function scaledSegmentWidth(width: number, widthScale: number) {
-  return Math.max(0.7, width * widthScale)
+    if (tangentLength === 0) {
+      continue
+    }
+
+    const isEndpoint = index === 0 || index === points.length - 1
+    const radius = isEndpoint ? 0 : Math.max(0.35, (point.width * widthScale) / 2)
+    const normalX = -tangentY / tangentLength
+    const normalY = tangentX / tangentLength
+
+    const leftPoint = {
+      x: point.renderX + normalX * radius,
+      y: point.renderY + normalY * radius,
+    }
+    const rightPoint = {
+      x: point.renderX - normalX * radius,
+      y: point.renderY - normalY * radius,
+    }
+
+    left.push(leftPoint)
+    right.push(rightPoint)
+  }
+
+  if (left.length < 2 || right.length < 2) {
+    return null
+  }
+
+  return { left, right }
 }
 
 function drawSmoothPath(context: CanvasRenderingContext2D, stroke: Stroke, jitterX: number, jitterY: number) {
@@ -281,15 +304,6 @@ function distanceBetween(
   secondPoint: Pick<SizedSketchPoint, 'x' | 'y'>,
 ) {
   return Math.hypot(secondPoint.x - firstPoint.x, secondPoint.y - firstPoint.y)
-}
-
-function midpointBetween(firstPoint: SizedSketchPoint, secondPoint: SizedSketchPoint): SizedSketchPoint {
-  return {
-    x: (firstPoint.x + secondPoint.x) / 2,
-    y: (firstPoint.y + secondPoint.y) / 2,
-    t: (firstPoint.t + secondPoint.t) / 2,
-    width: (firstPoint.width + secondPoint.width) / 2,
-  }
 }
 
 function lerp(start: number, end: number, progress: number) {

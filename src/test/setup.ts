@@ -5,6 +5,7 @@ const canvasContext = {
   arc: vi.fn(),
   beginPath: vi.fn(),
   clearRect: vi.fn(),
+  closePath: vi.fn(),
   fill: vi.fn(),
   lineTo: vi.fn(),
   moveTo: vi.fn(),
