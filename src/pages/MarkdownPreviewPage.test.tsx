@@ -1313,6 +1313,9 @@ time: 2026-04-29T21:38:00+08:00
     })
 
     fireEvent.click(screen.getByRole('button', { name: '添一条' }))
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '碎碎念正文' })).toHaveFocus()
+    })
     fireEvent.change(screen.getByRole('textbox', { name: '碎碎念正文' }), {
       target: { value: '刚才下雨了。' },
     })

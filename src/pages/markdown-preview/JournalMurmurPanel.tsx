@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, MessageSquareText, Trash } from '../../components/HandDrawnIcons'
 import type { ImageBlock, MurmurBlock } from '../../domain/markdown'
 
@@ -15,15 +15,27 @@ function JournalMurmurPanel({ date, murmurs, onChange, onImportImages }: Journal
   const [preferredMurmurId, setPreferredMurmurId] = useState(murmurs[0]?.id ?? '')
   const [isImporting, setIsImporting] = useState(false)
   const [importError, setImportError] = useState('')
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const pendingFocusMurmurIdRef = useRef('')
   const selectedMurmur = useMemo(
     () => murmurs.find((murmur) => murmur.id === preferredMurmurId) ?? murmurs[murmurs.length - 1] ?? null,
     [murmurs, preferredMurmurId],
   )
   const selectedMurmurId = selectedMurmur?.id ?? ''
 
+  useEffect(() => {
+    if (!selectedMurmurId || pendingFocusMurmurIdRef.current !== selectedMurmurId) {
+      return
+    }
+
+    bodyTextareaRef.current?.focus()
+    pendingFocusMurmurIdRef.current = ''
+  }, [selectedMurmurId])
+
   function handleCreateMurmur() {
     const murmur = createMurmur(date, murmurs)
 
+    pendingFocusMurmurIdRef.current = murmur.id
     onChange([...murmurs, murmur])
     setPreferredMurmurId(murmur.id)
   }
@@ -115,6 +127,7 @@ function JournalMurmurPanel({ date, murmurs, onChange, onImportImages }: Journal
                   updateSelectedMurmur((murmur) => ({ ...murmur, body: event.target.value }))
                 }
                 placeholder="这一刻发生了什么？"
+                ref={bodyTextareaRef}
                 value={selectedMurmur.body}
               />
             </label>
