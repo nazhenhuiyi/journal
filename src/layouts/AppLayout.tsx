@@ -7,6 +7,7 @@ import {
   Image,
   PenLine,
   Settings,
+  Sparkles,
   StickyNote,
   type HandDrawnIcon,
 } from '../components/HandDrawnIcons'
@@ -22,6 +23,7 @@ const menuItems: Array<{
 }> = [
   { label: '今日', description: '', icon: PenLine, to: '/preview' },
   { label: '回声', description: '旧页轻轻翻起', icon: BookOpen, to: '/pages' },
+  { label: '组件', description: '开发样张', icon: Sparkles, to: '/components' },
   { label: '随画', description: '落笔也留下', icon: StickyNote, to: '/sketch' },
   { label: '照片', description: '画面待安放', icon: Image, disabled: true },
   { label: '日历', description: '月份书架', icon: CalendarDays, to: '/calendar' },

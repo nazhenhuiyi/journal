@@ -2,8 +2,10 @@ import {
   ArrowRight,
   BookOpen,
   CalendarDays,
-  MoreHorizontal,
   Play,
+  Redo,
+  Sparkles,
+  StickyNote,
 } from '../components/HandDrawnIcons'
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
@@ -13,13 +15,20 @@ import {
   type StoredSketchDocument,
   useSketchSession,
 } from '../domain/sketch'
-import CardStyleShowcase from './all-pages/CardStyleShowcase'
+import {
+  createDailyCuration,
+  getLocalDateKey,
+  type DailyCuration,
+} from '../domain/dailyCuration'
 import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
+import foundPostmarkImage from '../assets/postmarks/found.png'
+import riverMotifImage from '../assets/postcard-motifs/river-light.png'
+import stickyPinImage from '../assets/sticky-pin.svg'
 
-const memoryTones = ['rain', 'plant', 'night', 'spring']
 const emptySketchEvents: SketchEvent[] = []
+const DAILY_CURATION_STORAGE_KEY = 'journal:daily-curations:v1'
 
 type IndexLoadStatus = 'loading' | 'ready' | 'failed'
 
@@ -33,10 +42,19 @@ function AllPagesHomePage() {
   const [indexLoadStatus, setIndexLoadStatus] = useState<IndexLoadStatus>(() =>
     getJournalStore()?.listIndex ? 'loading' : 'ready',
   )
+  const todayDateKey = useMemo(() => getLocalDateKey(), [])
+  const [savedDailyCuration, setSavedDailyCuration] = useState<DailyCuration | null>(() =>
+    readSavedDailyCuration(todayDateKey),
+  )
+  const [curationGeneration, setCurationGeneration] = useState(() => savedDailyCuration?.generation ?? 0)
   const [sketchGallery, setSketchGallery] = useState<StoredSketchDocument[]>([])
   const [selectedSketchId, setSelectedSketchId] = useState<string | null>(null)
   const [sketchReplayRequest, setSketchReplayRequest] = useState<{ id: string; count: number } | null>(null)
-  const recentMemories = useMemo(() => journalIndex.slice(0, 4).map(toMemoryRow), [journalIndex])
+  const draftedDailyCuration = useMemo(
+    () => createDailyCuration(journalIndex, new Date(`${todayDateKey}T12:00:00`), curationGeneration),
+    [curationGeneration, journalIndex, todayDateKey],
+  )
+  const dailyCuration = savedDailyCuration ?? draftedDailyCuration
   const homeDateLabel = useMemo(() => formatHomeDate(new Date()), [])
   const selectedSketchIndex = Math.max(
     sketchGallery.findIndex((document) => document.id === selectedSketchId),
@@ -86,6 +104,15 @@ function AllPagesHomePage() {
       isCancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (savedDailyCuration || !draftedDailyCuration || indexLoadStatus !== 'ready') {
+      return
+    }
+
+    saveDailyCuration(draftedDailyCuration)
+    setSavedDailyCuration(draftedDailyCuration)
+  }, [draftedDailyCuration, indexLoadStatus, savedDailyCuration])
 
   useEffect(() => {
     if (!window.sketchStore?.list || !window.sketchStore.load) {
@@ -166,6 +193,18 @@ function AllPagesHomePage() {
     setSketchReplayRequest(null)
   }
 
+  function regenerateDailyCuration() {
+    const nextGeneration = curationGeneration + 1
+    const nextCuration = createDailyCuration(journalIndex, new Date(`${todayDateKey}T12:00:00`), nextGeneration)
+
+    setCurationGeneration(nextGeneration)
+
+    if (nextCuration) {
+      saveDailyCuration(nextCuration)
+      setSavedDailyCuration(nextCuration)
+    }
+  }
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -230,44 +269,150 @@ function AllPagesHomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="old-pages-title" className="all-pages-memory-shelf">
-        <div className="all-pages-memory-header">
-          <BookOpen aria-hidden="true" size={19} strokeWidth={2.15} />
-          <h2 id="old-pages-title">翻到几声回声</h2>
-        </div>
-
-        <div className="all-pages-memory-board">
-          {recentMemories.length > 0 ? recentMemories.map((memory) => (
-            <article
-              className={`all-pages-memory-card is-${memory.variant} ${memory.image ? '' : 'is-text-only'}`}
-              key={`${memory.date}-${memory.text}`}
-            >
-              {memory.image ? (
-                <div aria-hidden="true" className={`all-pages-memory-thumb is-${memory.tone}`}>
-                  <img alt="" draggable="false" src={memory.image} />
-                </div>
-              ) : null}
-              <div className="all-pages-memory-copy">
-                <time>{memory.date}</time>
-                <p>{memory.text}</p>
-              </div>
-              <button aria-label={`打开 ${memory.date} 的回忆`} type="button">
-                <MoreHorizontal aria-hidden="true" size={20} strokeWidth={2.1} />
-              </button>
-            </article>
-          )) : (
-            <article className="all-pages-memory-card is-feature is-text-only">
-              <div className="all-pages-memory-copy">
-                <time>{indexLoadStatus === 'failed' ? '暂时没翻到' : '还没有旧页'}</time>
-                <p>{indexLoadStatus === 'failed' ? '索引没有读出来，但今天仍然可以继续写。' : '写下第一页以后，这里会开始出现回声。'}</p>
-              </div>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <CardStyleShowcase />
+      <DailyCurationSection
+        curation={dailyCuration}
+        indexLoadStatus={indexLoadStatus}
+        onRegenerate={regenerateDailyCuration}
+      />
     </motion.div>
+  )
+}
+
+function DailyCurationSection({
+  curation,
+  indexLoadStatus,
+  onRegenerate,
+}: {
+  curation: DailyCuration | null
+  indexLoadStatus: IndexLoadStatus
+  onRegenerate: () => void
+}) {
+  return (
+    <section aria-labelledby="daily-curation-title" className="all-pages-daily-curation">
+      <div className="all-pages-daily-curation-inner">
+        <div className="all-pages-daily-curation-header">
+          <div>
+            <p>
+              <Sparkles aria-hidden="true" size={16} strokeWidth={2.15} />
+              今日策展 · 已保存
+            </p>
+            <h2 id="daily-curation-title">{curation?.title ?? '今天还没有可翻出的旧页'}</h2>
+          </div>
+          <button disabled={!curation} onClick={onRegenerate} type="button">
+            <Redo aria-hidden="true" size={17} strokeWidth={2.2} />
+            <span>重新生成</span>
+          </button>
+        </div>
+
+        {curation ? (
+          <div className="all-pages-curation-board">
+            <article className="journal-postcard all-pages-curation-postcard">
+              <img alt="" aria-hidden="true" className="journal-postcard-motif" src={riverMotifImage} />
+              <div className="journal-postcard-photo">
+                {curation.source.image ? (
+                  <img
+                    alt={curation.source.image.caption ?? curation.source.title}
+                    className="journal-postcard-image"
+                    src={resolveJournalMemoryImageSrc(curation.source.image.src)}
+                  />
+                ) : (
+                  <div className="all-pages-curation-photo-placeholder" aria-hidden="true">
+                    {curation.artifact === 'receipt' ? 'RECEIPT' : 'ARCHIVE'}
+                  </div>
+                )}
+                <span aria-hidden="true">ECHO</span>
+              </div>
+              <div className="journal-postcard-divider" aria-hidden="true" />
+              <div className="journal-postcard-copy">
+                <div className="journal-postcard-topline">
+                  <div>
+                    <div className="journal-postcard-place">
+                      <BookOpen aria-hidden="true" size={16} strokeWidth={2.1} />
+                      <span>{curation.recall.label}</span>
+                    </div>
+                    <time dateTime={curation.source.date}>{curation.source.date.replace(/-/g, '.')}</time>
+                  </div>
+                  <img alt="" aria-hidden="true" className="journal-postcard-stamp" src={foundPostmarkImage} />
+                </div>
+                <span className="journal-postcard-kicker">DAILY CURATION</span>
+                <h3>{curation.source.title}</h3>
+                <p>{curation.source.excerpt}</p>
+                <div className="journal-postcard-address" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="journal-postcard-code" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            </article>
+
+            <article className="journal-sticky-card is-mist all-pages-curation-note">
+              <span className="journal-sticky-pin" aria-hidden="true">
+                <img alt="" src={stickyPinImage} />
+              </span>
+              <div className="journal-sticky-meta">
+                <StickyNote aria-hidden="true" size={17} strokeWidth={2.12} />
+                <span>策展人旁白</span>
+              </div>
+              <h3>朋友式翻页</h3>
+              <p>{curation.curatorNote}</p>
+            </article>
+
+            <article className="journal-library-card all-pages-curation-library">
+              <div className="journal-library-card-header">
+                <div>
+                  <span>回声借阅卡</span>
+                  <h4>为什么今天</h4>
+                  <p>{curation.reason}</p>
+                </div>
+                <strong>{curation.recall.rule}</strong>
+              </div>
+
+              <div className="journal-library-card-meta">
+                <span>来源 {curation.source.date}</span>
+                <span>第 {curation.generation + 1} 版</span>
+              </div>
+
+              <div className="journal-library-ledger" role="table" aria-label="策展线索">
+                <div className="journal-library-ledger-head" role="row">
+                  <span role="columnheader">线索</span>
+                  <span role="columnheader">内容</span>
+                  <span role="columnheader">说明</span>
+                </div>
+                <div className="journal-library-ledger-row" role="row">
+                  <time dateTime={curation.source.date} role="cell">
+                    日期
+                  </time>
+                  <span role="cell">{curation.source.date.replace(/-/g, '.')}</span>
+                  <span role="cell">{curation.recall.label}</span>
+                </div>
+                <div className="journal-library-ledger-row" role="row">
+                  <span role="cell">标签</span>
+                  <span role="cell">{formatCurationTags(curation)}</span>
+                  <span role="cell">标签与归档一起作证</span>
+                </div>
+                <div className="journal-library-ledger-row" role="row">
+                  <span role="cell">问题</span>
+                  <span role="cell">{curation.question}</span>
+                  <span role="cell">只留一个入口</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        ) : (
+          <article className="all-pages-curation-empty">
+            <p>{indexLoadStatus === 'failed' ? '索引暂时没有读出来。' : '写下几页以后，策展人就有旧日可翻了。'}</p>
+          </article>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -296,36 +441,6 @@ function formatSketchTime(value: string | undefined) {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${hour}:${minute} 留下`
 }
 
-function toMemoryRow(entry: JournalIndexEntry, index: number) {
-  const image = entry.images[0]
-  const text = entry.title ?? entry.excerpt ?? createIndexExcerpt(entry.searchableText) ?? '这一天留下了一点痕迹。'
-
-  return {
-    date: formatIndexDate(entry.date, entry.tags),
-    image: image ? resolveJournalMemoryImageSrc(image.src) : undefined,
-    text,
-    tone: memoryTones[index % memoryTones.length],
-    variant: index === 0 ? 'feature' : 'small',
-  }
-}
-
-function formatIndexDate(dateKey: string, tags: string[]) {
-  const dateLabel = dateKey.replace(/-/g, '.')
-  const tagLabel = tags[0]
-
-  return tagLabel ? `${dateLabel} · ${tagLabel}` : dateLabel
-}
-
-function createIndexExcerpt(text: string) {
-  const excerpt = text.replace(/\s+/g, ' ').trim()
-
-  if (!excerpt) {
-    return ''
-  }
-
-  return excerpt.length > 34 ? `${excerpt.slice(0, 34).trimEnd()}...` : excerpt
-}
-
 function resolveJournalMemoryImageSrc(src: string) {
   if (isAbsoluteUrl(src) || src.startsWith('/')) {
     return src
@@ -336,6 +451,54 @@ function resolveJournalMemoryImageSrc(src: string) {
 
 function isAbsoluteUrl(src: string) {
   return /^[a-z][a-z0-9+.-]*:/i.test(src)
+}
+
+function formatCurationTags(curation: DailyCuration) {
+  const tags = [...curation.source.tags, ...curation.source.collections]
+
+  return tags.length > 0 ? tags.slice(0, 3).join(' / ') : '未标注'
+}
+
+function readSavedDailyCuration(dateKey: string): DailyCuration | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const saved = window.localStorage.getItem(DAILY_CURATION_STORAGE_KEY)
+
+    if (!saved) {
+      return null
+    }
+
+    const parsed = JSON.parse(saved) as Record<string, DailyCuration>
+    const curation = parsed[dateKey]
+
+    return curation?.version === 1 ? curation : null
+  } catch {
+    return null
+  }
+}
+
+function saveDailyCuration(curation: DailyCuration) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const saved = window.localStorage.getItem(DAILY_CURATION_STORAGE_KEY)
+    const parsed = saved ? (JSON.parse(saved) as Record<string, DailyCuration>) : {}
+
+    window.localStorage.setItem(
+      DAILY_CURATION_STORAGE_KEY,
+      JSON.stringify({
+        ...parsed,
+        [curation.curationDate]: curation,
+      }),
+    )
+  } catch {
+    // Local storage is only the first dev-facing persistence layer.
+  }
 }
 
 export default AllPagesHomePage

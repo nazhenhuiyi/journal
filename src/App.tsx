@@ -4,6 +4,7 @@ import { SketchSessionProvider } from './domain/sketch'
 import AppLayout from './layouts/AppLayout'
 import AllPagesHomePage from './pages/AllPagesHomePage'
 import CalendarPage from './pages/CalendarPage'
+import ComponentGalleryPage from './pages/ComponentGalleryPage'
 import MarkdownPreviewPage from './pages/MarkdownPreviewPage'
 import SettingsPage from './pages/SettingsPage'
 import SketchPage from './pages/sketch/SketchPage'
@@ -17,6 +18,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route element={<Navigate to="/pages" replace />} index />
               <Route element={<AllPagesHomePage />} path="/pages" />
+              <Route element={<ComponentGalleryPage />} path="/components" />
               <Route element={<MarkdownPreviewPage />} path="/preview" />
               <Route element={<CalendarPage />} path="/calendar" />
               <Route element={<SketchPage />} path="/sketch" />
