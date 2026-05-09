@@ -1,10 +1,11 @@
 import { type Dirent, promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Codex, type ThreadItem } from '@openai/codex-sdk'
+import { Codex, type SandboxMode, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
-import type { DailyCuration, DailyCurationAiDraft, EchoObjectSlot } from '../../src/domain/dailyCuration'
+import type { DailyCuration } from '../../src/domain/dailyCuration'
 import type { JournalCodexSettingsFile } from '../codexSettings'
+import { loadDailyCuration, saveDailyCuration } from '../dailyCurationStore'
 
 export type CodexActivity = {
   id: string
@@ -72,10 +73,12 @@ export type CodexFrontMatterDraftResult = {
 
 export type CodexDailyCurationDraftPayload = {
   curation: DailyCuration
+  candidateCurations?: DailyCuration[]
 }
 
 export type CodexDailyCurationDraftResult = {
-  draft: DailyCurationAiDraft
+  curation: DailyCuration
+  filePath: string
   threadId: string | null
   usage: CodexAskResult['usage']
 }
@@ -147,76 +150,13 @@ const frontMatterDraftSchema = {
   additionalProperties: false,
 } as const
 
-const dailyCurationDraftSchema = {
+const dailyCurationWriteResultSchema = {
   type: 'object',
   properties: {
-    subtitle: { type: 'string' },
-    curatorVoice: { type: 'string' },
-    closingQuestion: { type: 'string' },
-    themeNoteTitle: { type: 'string' },
-    themeNoteBody: { type: 'string' },
-    parallelConnection: { type: 'string' },
-    receiptItems: {
-      type: 'array',
-      minItems: 4,
-      maxItems: 4,
-      items: {
-        type: 'object',
-        properties: {
-          label: { type: 'string', enum: ['今天', '回声', '天气', '找零'] },
-          value: { type: 'string' },
-        },
-        required: ['label', 'value'],
-        additionalProperties: false,
-      },
-    },
-    objectDrafts: {
-      type: 'array',
-      minItems: 1,
-      maxItems: 5,
-      items: {
-        type: 'object',
-        properties: {
-          slot: {
-            type: 'string',
-            enum: ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'],
-          },
-          enabled: { type: ['boolean', 'null'] },
-          title: { type: ['string', 'null'] },
-          body: { type: ['string', 'null'] },
-          meta: { type: ['string', 'null'] },
-          caption: { type: ['string', 'null'] },
-          connection: { type: ['string', 'null'] },
-          question: { type: ['string', 'null'] },
-          items: {
-            type: ['array', 'null'],
-            maxItems: 4,
-            items: {
-              type: 'object',
-              properties: {
-                label: { type: 'string', enum: ['今天', '回声', '天气', '找零'] },
-                value: { type: 'string' },
-              },
-              required: ['label', 'value'],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ['slot', 'enabled', 'title', 'body', 'meta', 'caption', 'connection', 'question', 'items'],
-        additionalProperties: false,
-      },
-    },
+    selectedSourceDate: { type: 'string' },
+    filePath: { type: 'string' },
   },
-  required: [
-    'subtitle',
-    'curatorVoice',
-    'closingQuestion',
-    'themeNoteTitle',
-    'themeNoteBody',
-    'parallelConnection',
-    'receiptItems',
-    'objectDrafts',
-  ],
+  required: ['selectedSourceDate', 'filePath'],
   additionalProperties: false,
 } as const
 
@@ -336,14 +276,51 @@ export async function generateDailyCurationDraft(
   settings: JournalCodexSettingsFile,
 ): Promise<CodexDailyCurationDraftResult> {
   const normalizedPayload = normalizeDailyCurationDraftPayload(payload)
-  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
-  const turn = await thread.run(buildDailyCurationDraftPrompt(normalizedPayload), {
-    outputSchema: dailyCurationDraftSchema,
+  const targetFilePath = getDailyCurationTargetFilePath(workingDirectory, normalizedPayload.curation.curationDate)
+  const allowedSourceDates = new Set(
+    getDailyCurationPromptCandidates(normalizedPayload).map((candidate) => candidate.source.date),
+  )
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings, 'workspace-write'))
+  const turn = await thread.run(buildDailyCurationWritePrompt(normalizedPayload, workingDirectory, targetFilePath), {
+    outputSchema: dailyCurationWriteResultSchema,
   })
-  const draft = parseDailyCurationDraftResponse(turn.finalResponse)
+  const writeResult = parseDailyCurationWriteResponse(turn.finalResponse)
+
+  if (path.resolve(writeResult.filePath) !== path.resolve(targetFilePath)) {
+    throw new Error('Codex 写入的今日回声路径不符合预期。')
+  }
+
+  if (!allowedSourceDates.has(writeResult.selectedSourceDate)) {
+    throw new Error('Codex 选择了候选之外的旧页。')
+  }
+
+  const storedCuration = await loadDailyCuration(workingDirectory, normalizedPayload.curation.curationDate)
+
+  if (!storedCuration) {
+    throw new Error('Codex 没有写出今日回声 JSON。')
+  }
+
+  if (!isDailyCurationRecord(storedCuration.curation)) {
+    throw new Error('Codex 写出的今日回声 JSON 结构不完整。')
+  }
+
+  if (storedCuration.curation.source.date !== writeResult.selectedSourceDate) {
+    throw new Error('Codex 写出的今日回声和最终选择的旧页不一致。')
+  }
+
+  const savedCuration = await saveDailyCuration(workingDirectory, {
+    ...storedCuration.curation,
+    ai: {
+      generatedAt: new Date().toISOString(),
+      provider: 'codex',
+      threadId: thread.id,
+      usage: turn.usage,
+    },
+  })
 
   return {
-    draft,
+    curation: savedCuration.curation,
+    filePath: savedCuration.filePath,
     threadId: thread.id,
     usage: turn.usage,
   }
@@ -396,12 +373,16 @@ function createCodex(settings: JournalCodexSettingsFile) {
   })
 }
 
-function createThreadOptions(workingDirectory: string, settings: JournalCodexSettingsFile) {
+function createThreadOptions(
+  workingDirectory: string,
+  settings: JournalCodexSettingsFile,
+  sandboxMode: SandboxMode = 'read-only',
+) {
   return {
     approvalPolicy: 'never' as const,
     model: settings.model,
     modelReasoningEffort: settings.modelReasoningEffort,
-    sandboxMode: 'read-only' as const,
+    sandboxMode,
     skipGitRepoCheck: true,
     workingDirectory,
   }
@@ -480,11 +461,32 @@ function normalizeDailyCurationDraftPayload(payload: unknown): CodexDailyCuratio
 
   const curation = asRecord(payload.curation)
 
-  if (!curation || curation.version !== 6 || !isRecord(curation.source) || !isRecord(curation.thesis)) {
+  if (!isDailyCurationRecord(curation)) {
     throw new Error('今日回声需要一份可用的本地策展草稿。')
   }
 
-  return { curation: curation as DailyCuration }
+  return {
+    candidateCurations: normalizeDailyCurationCandidates(payload.candidateCurations),
+    curation: curation as DailyCuration,
+  }
+}
+
+function normalizeDailyCurationCandidates(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(isDailyCurationRecord).slice(0, 5) as DailyCuration[]
+}
+
+function isDailyCurationRecord(value: unknown): value is Record<string, unknown> {
+  const record = asRecord(value)
+
+  return record.version === 6 && isRecord(record.source) && isRecord(record.thesis)
+}
+
+function getDailyCurationTargetFilePath(workingDirectory: string, date: string) {
+  return path.join(workingDirectory, 'curations', 'daily', `${date}.json`)
 }
 
 function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
@@ -551,84 +553,213 @@ JOURNAL_MARKDOWN:
 ${payload.journalMarkdown}`
 }
 
-function buildDailyCurationDraftPrompt(payload: CodexDailyCurationDraftPayload) {
+function buildDailyCurationWritePrompt(
+  payload: CodexDailyCurationDraftPayload,
+  workingDirectory: string,
+  targetFilePath: string,
+) {
   const curation = payload.curation
-  const parallelSupport = curation.supports.find((support) => support.role === 'parallel-memory')
+  const candidateCurations = getDailyCurationPromptCandidates(payload)
+  const candidateOldPages = candidateCurations.map((candidate) => ({
+    collections: candidate.source.collections,
+    date: candidate.source.date,
+    filePath: candidate.hero.entryId,
+    image: candidate.source.image,
+    objects: candidate.objects?.map((object) => ({
+      action: object.action,
+      date: object.date,
+      hasImage: Boolean(object.image),
+      image: object.image,
+      itemLabels: object.items?.map((item) => item.label) ?? object.rows?.map((row) => row.label),
+      place: object.place,
+      slot: object.slot,
+      style: object.style,
+    })),
+    tags: candidate.source.tags,
+    title: candidate.source.title,
+  }))
+  const candidatePagePaths = candidateCurations.map((candidate) => ({
+    date: candidate.source.date,
+    path: candidate.hero.entryId,
+  }))
+  const candidateStructure = candidateCurations.map(createDailyCurationAgentSkeleton)
+  const todayJournalPath = path.join(workingDirectory, `${curation.today.date}.md`)
 
-  return `你是「且留」里的今日回声策展助手。请基于本地规则已经选出的旧页，为今日策展重写面向用户的展示文案。
+  return `你是「且留」里的今日回声策展 agent。你有文件系统写入权限，请自己读取日记原文、选择旧页和物件，并把完整 DailyCuration v6 JSON 写入指定路径。
 
-重要边界：
-- 本地规则已经完成“主旧页”和“候选物件”的选择，你不要重新选择旧页，不要质疑选择，也不要改变 source/image/action。
-- 你可以利用内部线索理解今天和旧页的关系，但最终文案不能暴露推理过程。
-- 禁止出现这些词或近似栏目名：为什么今天、主题线索、时间线索、旧页证据、召回、打分、候选、匹配、算法。
-- 不要让 AI、模型、系统、助手或 Codex 成为叙述主语；除非原文标题或正文正在讨论 AI，不要主动写“AI”。
-- 不要写“AI 想问：”“AI 先替今天……”“我帮你……”这类把工具放到台前的句子。
-- 不做心理诊断，不替用户下结论，不要像文学评论、咨询师或产品说明。
-- 语气像一个安静的日记阅读同伴：具体、克制、有画面，允许留白。
-- 少用套话，不要连续依赖“旧日子 / 并排 / 余味 / 轻轻 / 慢慢”等词撑完整段。
-- 宁可少一点，也不要凑满。只保留真正有内容、有物件感、和今天/旧页关系清楚的物件。
-- 不要复述标题和摘要，不要把同一个意思分别写进主文、便签、小票、票根。
-- 每个物件都要像一个真实小物件上的短文案：便签有手边动作，明信片有一页旧场景，借阅卡有可借的片段，小票有日常结算，票根给一个继续写的入口。
-- 只返回结构化 JSON，不要写解释。
+任务：
+1. 阅读 TODAY_JOURNAL_PATH 的今日日记原文。
+2. 阅读 CANDIDATE_PAGE_PATHS 中每一页候选旧页原文。
+3. 从候选旧页中选择一页作为主旧页，selectedSourceDate 必须是候选 date 之一。
+4. 判断今天和旧页之间最具体、最值得展示的回声，并选择适合的物件。
+5. 以 CANDIDATE_STRUCTURE_JSON 中对应候选作为结构骨架，写出完整 JSON 到 TARGET_FILE_PATH。
 
-字段要求：
-- subtitle：14-30 个中文字符，一句话，会跟页面上的“今日翻到”标签并列展示；不要以“今天先”“AI 先”“替今天”开头，不要解释选择逻辑。
-- curatorVoice：55-95 个中文字符，读出旧页和今天可以互相照见的感觉；可以引用一个具体物件/动作，但不要复述 source.excerpt 或 today.journal.excerpt，不要把标题、摘要换一种说法再写一遍，不要写成段落总结。
-- closingQuestion：一个具体、轻的问题，适合让用户继续写；直接问问题，不要带“AI 想问：”“想问你：”这样的前缀。
-- themeNoteTitle：4-12 个中文字符，便签标题，可以含“便签”。
-- themeNoteBody：32-66 个中文字符，像贴在旁边的短便签；必须有一个具体动作/物件/场景，不要写“让今天不用解释自己”这类空话。
-- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头；不要重复主标题，不要写泛泛的“另一种日常回声”。
-- receiptItems：固定 4 行，label 必须依次为“今天 / 回声 / 天气 / 找零”，value 不超过 12 个中文字符，像小票上的短条目；不要重复旧页标题或旧页日期。
-- objectDrafts：只返回你决定展示的物件，1-5 个，按你希望页面展示的顺序返回；通常 2-4 个最合适。不要为了凑数保留弱物件，没有必要展示的候选直接省略。每项必须包含 slot；enabled 可用 true/null，只有明确丢弃时才用 false；不要新增 slot，不要改变 source/image/action。
-- objectDrafts 每项按 schema 返回所有字段；不适用的字段填 null，不要编造。
-- objectDrafts.today-thread：便利贴。title 4-10 字，body 28-58 字，必须贴住今天和旧页之间的一个具体连接。
-- objectDrafts.nearby-memory：明信片/拍立得。title 可改得更像旧页标题，body 32-70 字，connection 必须以“相近余味：”或“旁边也有：”开头，指出两页之间的具体关系。
-- objectDrafts.archive-ledger：借阅卡。只有当 rows 里的片段有可看性时才保留；title 4-12 字，body 可省略或写一句“借阅理由”。
-- objectDrafts.daily-receipt：小票。只有当能把今天压成四个好看的短条目时才保留；items 必须使用“今天 / 回声 / 天气 / 找零”四个 label，value 不超过 12 个中文字符，避免抽象词。
-- objectDrafts.reply-ticket：票根。通常保留，除非 closingQuestion 很弱；question 是写在票根上的继续书写问题，必须具体到一个动作/画面/选择。
+判断原则：
+- 选页不是找“最像”的旧页，而是找能让用户感觉“原来今天翻到这页，是因为这里有一个具体回声”的旧页。
+- 原文是唯一事实来源。TODAY_CONTEXT、旧页摘要、source.excerpt、summary/searchable 类文本都只能当索引线索，不能当正文事实。
+- CANDIDATE_STRUCTURE_JSON 是写文件用的结构骨架，不是文案建议；里面空着的展示字段需要你根据原文重新写。
+- 不暴露算法过程。面向用户的中文展示字段里不要出现：为什么今天、主题线索、时间线索、旧页证据、召回、打分、候选、匹配、算法。
+- 不要让 AI、模型、系统、助手或 Codex 成为叙述主语；除非原文就在讨论 AI，不要主动写“AI”。
+- 语气像一个安静的日记阅读同伴：具体、克制、有画面，允许留白。不要做心理诊断，不替用户下结论。
+- 少用套话，不要连续依赖“旧日子 / 并排 / 余味 / 轻轻 / 慢慢 / 接住 / 松弛”这类词撑完整段。
+- 宁可少一点，也不要凑满。没有独立展示功能的物件就删掉。
+- 物件是可选的附加发现，不是版式配额。如果今天和旧页没有足够具体的内容支撑物件，就把 objects 写成 []。
 
-示例风格，不要照抄：
-- 好：把“游了六百米”放进小票，找零写“一点松弛”。
-- 好：便签写“先把那本手账和今天的游泳放在一起，不急着变成计划。”
-- 坏：这页和今天形成呼应，说明你正在重新理解自己。
-- 坏：旧日子轻轻并排，余味慢慢回来。
+物件决策：
+- 先写好主卡和 bridgeNote，再决定需不需要物件。不要先假设一定有物件。
+- 每个物件保留前，问自己两件事：这张卡有没有带出一个主卡没讲过的原文细节？删掉它，用户会不会少看到一点真正有意思的东西？
+- 如果答案是否定的，就删掉这张物件卡。页面空一点没关系，空洞的物件比没有物件更糟。
+- 不要把“给空页一个入口、先留一句、补长、继续写、递回今天”这类抽象动作当成物件内容；除非原文里有更具体的名词、动作、场景或原句支撑。
+- 你可以返回 0、1 或 2 张物件；只有当每一张都各自有用时才超过 2 张。
+
+物件职责：
+- today-thread / 便利贴：一个手边动作、轻提醒或临时贴上的念头；如果只能总结主卡，就不要选。
+- nearby-memory / 明信片或拍立得：给用户一个旁边可看的旧场景、图片、地点或物件；不要写成第二段主文。
+- archive-ledger / 借阅卡：旧页里有几条可借用的片段、清单或记录感时使用；不要为了形式保留。
+- daily-receipt / 小票：今天有钱、时间、身体、天气、消费、完成量等日常结算材料，且能压成四个短条目时使用。
+- reply-ticket / 票根：适合留下一个继续写、继续做或继续选择的具体入口。
+- daily-receipt 和 reply-ticket 都是收尾物件，通常二选一；只有当两者功能完全不重叠时才可同时保留。
+
+写入要求：
+- 目标文件是 TARGET_FILE_PATH。你必须创建父目录并写入完整 JSON 对象；不要修改其他文件。
+- 输出文件必须是 DailyCuration v6，不是 patch、draft 或外层 wrapper。
+- 从 CANDIDATE_STRUCTURE_JSON 中复制 selectedSourceDate 对应的对象作为底稿；保留 version、id、curationDate、generation、today、artifact、recall、anchors，以及 object 的 id/slot/style/source/image/action/tone/place/date 等结构字段。
+- source.date 必须等于 selectedSourceDate；title 应保持“今日回声：{source.title}”的形态。
+- source.excerpt 和 hero.excerpt 请从旧页原文中整理成忠实、可展示的短摘录；不要使用 Front Matter excerpt 当正文。
+- thesis.curatorVoice 负责让用户感到“这页为什么会回到今天”；objects 不要复述主卡。
+- bridgeNote 是左侧旧页卡片里的页边小记，请写成一段自然语言，不要拆成“内容/时间”两条，不要写解释表。
+- objects 只保留你决定展示的物件，顺序就是展示顺序。不要新增 slot，不要改变 source/image/action。没有值得展示的物件时，objects 必须写成 []。
+- ai 字段可先写成 {"provider":"codex","generatedAt":"${new Date().toISOString()}","threadId":null,"usage":null}，应用会在读取后补上真实 threadId/usage。
+- 写完后请自己校验 JSON 能被 JSON.parse 解析，并确认 curationDate 是 ${curation.curationDate}。
+- 最终回复只返回结构化 JSON：{"filePath": TARGET_FILE_PATH, "selectedSourceDate": "你选中的日期"}。
+
+展示字段建议：
+- thesis.subtitle：14-30 个中文字符，和“今日翻到”并列展示；暗示今天和旧页的连接。
+- thesis.curatorVoice：55-95 个中文字符；同时包含今天的一个具体细节和旧页的一个具体线索。
+- bridgeNote：45-90 个中文字符，像人翻到旧页时顺手写在页边的一段话；它要说明这页怎么自然地回到今天，但不要出现“内容相接、时间距离、因为、所以、从某日到某日隔了几天”这类说明腔。
+- closingQuestion 和 question：写成同一句具体、轻的问题。
+- anchors.theme.body / anchors.time.body：作为兼容字段保留，可写短一点；真正展示优先使用 bridgeNote。
+- supports 可同步整理兼容字段，但真正展示以 objects 为准。
+- objects 通常 0-2 个最合适。每张物件卡必须通过“原文钩子”测试：它要带出主卡没有讲过的具体名词、动作、场景或原句，而且最好同时碰到今天和旧页。做不到就删掉。
+- 不要把“空页、没内容、先留一句、写一句、补长、入口、继续写、递回今天”本身当作物件内容。除非原文里有更具体的东西支撑，否则这些只能留在主卡或问题里，不要生成卡片。
 
 TODAY_CONTEXT:
 ${JSON.stringify(curation.today, null, 2)}
 
-SELECTED_OLD_PAGE:
-${JSON.stringify({
-    date: curation.source.date,
-    title: curation.source.title,
-    excerpt: curation.source.excerpt,
-    tags: curation.source.tags,
-    collections: curation.source.collections,
-    recallLabel: curation.recall.label,
-  }, null, 2)}
+TODAY_JOURNAL_PATH:
+${todayJournalPath}
 
-INTERNAL_CONTEXT_FOR_YOUR_UNDERSTANDING_ONLY_DO_NOT_EXPOSE:
-${JSON.stringify({
-    anchors: curation.anchors,
-    reason: curation.reason,
-  }, null, 2)}
+CANDIDATE_PAGE_PATHS:
+${JSON.stringify(candidatePagePaths, null, 2)}
 
-PARALLEL_PAGE_IF_ANY:
-${JSON.stringify(parallelSupport?.source ?? null, null, 2)}
+CANDIDATE_OLD_PAGES:
+${JSON.stringify(candidateOldPages, null, 2)}
 
-CURRENT_RULE_COPY_TO_IMPROVE:
-${JSON.stringify({
-    subtitle: curation.thesis.subtitle,
-    curatorVoice: curation.thesis.curatorVoice,
-    closingQuestion: curation.closingQuestion,
-    objects: curation.objects,
-    supports: curation.supports.map((support) => ({
-      role: support.role,
-      title: support.title,
-      body: support.body,
-      connection: support.connection,
-      items: support.items,
+CANDIDATE_STRUCTURE_JSON:
+${JSON.stringify(candidateStructure, null, 2)}
+
+TARGET_FILE_PATH:
+${targetFilePath}`
+}
+
+function getDailyCurationPromptCandidates(payload: CodexDailyCurationDraftPayload) {
+  return payload.candidateCurations?.length ? payload.candidateCurations : [payload.curation]
+}
+
+function createDailyCurationAgentSkeleton(curation: DailyCuration): DailyCuration {
+  const { ai: _ai, ...curationWithoutAi } = curation
+
+  return {
+    ...curationWithoutAi,
+    anchors: {
+      primary: curation.anchors.primary,
+      theme: {
+        label: '页边',
+        body: '',
+      },
+      time: {
+        label: '旁注',
+        body: '',
+      },
+    },
+    bridgeNote: '',
+    closingQuestion: '',
+    curatorNote: '',
+    hero: {
+      ...curation.hero,
+      excerpt: '',
+      recallReason: '',
+    },
+    objects: curation.objects?.map(createDailyCurationObjectSkeleton),
+    question: '',
+    reason: '',
+    recall: {
+      ...curation.recall,
+      rule: '',
+      score: 0,
+    },
+    source: {
+      ...curation.source,
+      excerpt: '',
+    },
+    supports: curation.supports.map(createDailyCurationSupportSkeleton),
+    thesis: {
+      ...curation.thesis,
+      curatorVoice: '',
+      reason: '',
+      subtitle: '',
+      title: curation.source.title,
+    },
+    title: `今日回声：${curation.source.title}`,
+  }
+}
+
+function createDailyCurationSupportSkeleton(
+  support: DailyCuration['supports'][number],
+): DailyCuration['supports'][number] {
+  return {
+    ...support,
+    body: '',
+    connection: support.connection === undefined ? undefined : '',
+    items: support.items?.map((item) => ({
+      label: item.label,
+      value: '',
     })),
-  }, null, 2)}`
+    source: support.source
+      ? {
+          ...support.source,
+          excerpt: '',
+        }
+      : undefined,
+    title: '',
+  }
+}
+
+function createDailyCurationObjectSkeleton(
+  object: NonNullable<DailyCuration['objects']>[number],
+): NonNullable<DailyCuration['objects']>[number] {
+  return {
+    ...object,
+    body: '',
+    caption: object.caption === undefined ? undefined : '',
+    connection: object.connection === undefined ? undefined : '',
+    items: object.items?.map((item) => ({
+      label: item.label,
+      value: '',
+    })),
+    rows: object.rows?.map((row) => ({
+      ...row,
+      note: '',
+      value: '',
+    })),
+    source: object.source
+      ? {
+          ...object.source,
+          excerpt: '',
+        }
+      : undefined,
+    title: '',
+  }
 }
 
 function buildAnnotationChatPrompt(payload: CodexAnnotationChatPayload) {
@@ -804,76 +935,21 @@ function parseFrontMatterDraftResponse(response: string): CodexFrontMatterDraft 
   }
 }
 
-function parseDailyCurationDraftResponse(response: string): DailyCurationAiDraft {
+function parseDailyCurationWriteResponse(response: string) {
   const parsed = JSON.parse(response) as unknown
 
   if (!isRecord(parsed)) {
-    throw new Error('Codex 没有返回可用的今日回声草稿。')
+    throw new Error('Codex 没有返回可用的今日回声写入结果。')
   }
 
-  return {
-    closingQuestion: stringFromRecord(parsed, 'closingQuestion'),
-    curatorVoice: stringFromRecord(parsed, 'curatorVoice'),
-    objectDrafts: normalizeDailyCurationObjectDrafts(parsed.objectDrafts),
-    parallelConnection: stringFromRecord(parsed, 'parallelConnection'),
-    receiptItems: normalizeDailyCurationReceiptItems(parsed.receiptItems),
-    subtitle: stringFromRecord(parsed, 'subtitle'),
-    themeNoteBody: stringFromRecord(parsed, 'themeNoteBody'),
-    themeNoteTitle: stringFromRecord(parsed, 'themeNoteTitle'),
-  }
-}
+  const filePath = stringFromRecord(parsed, 'filePath')
+  const selectedSourceDate = stringFromRecord(parsed, 'selectedSourceDate')
 
-function normalizeDailyCurationObjectDrafts(value: unknown): DailyCurationAiDraft['objectDrafts'] {
-  if (!Array.isArray(value)) {
-    return undefined
+  if (!filePath || !selectedSourceDate) {
+    throw new Error('Codex 没有返回今日回声文件路径和旧页选择。')
   }
 
-  return value.flatMap((item) => {
-    const record = asRecord(item)
-    const slot = stringFromRecord(record, 'slot')
-
-    if (!slot || !isEchoObjectSlot(slot)) {
-      return []
-    }
-
-    return [
-      {
-        body: stringFromRecord(record, 'body'),
-        caption: stringFromRecord(record, 'caption'),
-        connection: stringFromRecord(record, 'connection'),
-        enabled: booleanFromRecord(record, 'enabled'),
-        items: normalizeDailyCurationReceiptItems(record.items),
-        meta: stringFromRecord(record, 'meta'),
-        question: stringFromRecord(record, 'question'),
-        slot,
-        title: stringFromRecord(record, 'title'),
-      },
-    ]
-  }).slice(0, 5)
-}
-
-function booleanFromRecord(record: Record<string, unknown> | undefined, key: string) {
-  const value = record?.[key]
-
-  return typeof value === 'boolean' ? value : undefined
-}
-
-function isEchoObjectSlot(value: string): value is EchoObjectSlot {
-  return ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'].includes(value)
-}
-
-function normalizeDailyCurationReceiptItems(value: unknown): DailyCurationAiDraft['receiptItems'] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value.flatMap((item) => {
-    const record = asRecord(item)
-    const label = stringFromRecord(record, 'label')
-    const itemValue = stringFromRecord(record, 'value')
-
-    return label && itemValue ? [{ label, value: itemValue }] : []
-  }).slice(0, 4)
+  return { filePath, selectedSourceDate }
 }
 
 function stringFromRecord(record: Record<string, unknown>, key: string) {

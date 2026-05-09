@@ -130,6 +130,7 @@ export type DailyCurationAiObjectDraft = {
 }
 
 export type DailyCurationAiDraft = {
+  selectedSourceDate?: string
   subtitle?: string
   curatorVoice?: string
   closingQuestion?: string
@@ -150,6 +151,7 @@ export type DailyCuration = {
   generatedAt: string
   generation: number
   today: TodayContext
+  bridgeNote?: string
   anchors: CurationAnchors
   thesis: CurationThesis
   hero: EchoArtifact
@@ -205,6 +207,15 @@ export type DailyCurationDisplay = {
       src: string
     }
   }
+  bridge: {
+    eyebrow: string
+    title: string
+    lines: Array<{
+      body: string
+      isPrimary: boolean
+      label: string
+    }>
+  }
   main: {
     excerpt: string
     kicker: string
@@ -247,21 +258,58 @@ export function createDailyCuration(
   generation = 0,
   todayContext = createDefaultTodayContext(date),
 ): DailyCuration | null {
-  const curationDate = getLocalDateKey(date)
-  const allCandidates = entries
-    .filter((entry) => entry.date < curationDate)
-    .map((entry) => scoreEntry(entry, date, generation, todayContext))
-    .sort((left, right) => right.score - left.score)
-  const candidates = createCandidatePool(allCandidates)
+  const candidates = createScoredDailyCurationCandidates(entries, date, generation, todayContext)
 
   if (candidates.length === 0) {
     return null
   }
 
   const selected = candidates[generation % Math.min(candidates.length, 5)]
+
+  return createDailyCurationFromScoredEntry(selected, candidates, date, generation, todayContext)
+}
+
+export function createDailyCurationCandidates(
+  entries: JournalIndexEntry[],
+  date = new Date(),
+  generation = 0,
+  todayContext = createDefaultTodayContext(date),
+  limit = 5,
+): DailyCuration[] {
+  const candidates = createScoredDailyCurationCandidates(entries, date, generation, todayContext)
+  const normalizedLimit = Math.max(1, Math.floor(limit))
+
+  return candidates
+    .slice(0, normalizedLimit)
+    .map((selected) => createDailyCurationFromScoredEntry(selected, candidates, date, generation, todayContext))
+}
+
+function createScoredDailyCurationCandidates(
+  entries: JournalIndexEntry[],
+  date: Date,
+  generation: number,
+  todayContext: TodayContext,
+) {
+  const curationDate = getLocalDateKey(date)
+  const allCandidates = entries
+    .filter((entry) => entry.date < curationDate)
+    .map((entry) => scoreEntry(entry, date, generation, todayContext))
+    .sort((left, right) => right.score - left.score)
+
+  return createCandidatePool(allCandidates)
+}
+
+function createDailyCurationFromScoredEntry(
+  selected: ScoredEntry,
+  candidates: ScoredEntry[],
+  date: Date,
+  generation: number,
+  todayContext: TodayContext,
+): DailyCuration {
+  const curationDate = getLocalDateKey(date)
   const source = selected.entry
   const sourceTitle = source.title ?? createEntryTitle(source)
-  const sourceExcerpt = source.excerpt ?? createEntryExcerpt(source.searchableText)
+  const sourceExcerpt = createEntryExcerpt(source.searchableText)
   const noteIndex = stableIndex(`${curationDate}:${source.date}:note:${generation}`, curatorNotes.length)
   const questionIndex = stableIndex(`${curationDate}:${source.date}:question:${generation}`, questions.length)
   const recallLabel = createRecallLabel(selected, date)
@@ -359,6 +407,7 @@ export function createDailyCurationDisplay(curation: DailyCuration): DailyCurati
           }
         : undefined,
     },
+    bridge: createDisplayBridge(curation),
     main: {
       excerpt: curation.source.excerpt,
       kicker: formatDisplaySubtitle(curation),
@@ -369,6 +418,76 @@ export function createDailyCurationDisplay(curation: DailyCuration): DailyCurati
       title: curation.source.title,
     },
   }
+}
+
+function createDisplayBridge(curation: DailyCuration): DailyCurationDisplay['bridge'] {
+  const bridgeNote = cleanDisplayBridgeNote(curation.bridgeNote) ?? createDisplayBridgeFallback(curation)
+
+  return {
+    eyebrow: '页边小记',
+    title: '翻到这里时',
+    lines: [
+      {
+        body: bridgeNote,
+        isPrimary: true,
+        label: '页边',
+      },
+    ],
+  }
+}
+
+function cleanDisplayBridgeNote(note: string | undefined) {
+  if (!note) {
+    return undefined
+  }
+
+  const line = normalizeDisplayLine(note)
+
+  if (line && !isMechanicalBridgeLine(line)) {
+    return line
+  }
+
+  return undefined
+}
+
+function isMechanicalBridgeLine(line: string) {
+  return (
+    /从\s*\d{4}\s*年?\s*\d{1,2}\s*月\s*\d{1,2}\s*日\s*到/.test(line) ||
+    /隔了?[一二三四五六七八九十百\d]+天/.test(line) ||
+    /正好隔了/.test(line) ||
+    /内容相接|时间距离|主题线索|时间线索|候选|匹配|算法|打分/.test(line)
+  )
+}
+
+function createHumanThemeBridgeFallback(curation: DailyCuration) {
+  const todayTitle = curation.today.journal?.title?.trim()
+  const sourceTitle = curation.source.title
+
+  if (todayTitle && sourceTitle) {
+    return `今天的《${todayTitle}》和这页的《${sourceTitle}》没有急着解释，只是把同一个念头放到纸边。`
+  }
+
+  return `这页没有替今天下结论，只把一个还没说完的念头放回手边。`
+}
+
+function createHumanTimeBridgeFallback(curation: DailyCuration) {
+  const sourceMonthDay = formatArchiveMonthDay(curation.source.date)
+
+  return `${sourceMonthDay} 那页隔了一段日子再看，像一张没贴完的便条，又被今天顺手碰到。`
+}
+
+function createDisplayBridgeFallback(curation: DailyCuration) {
+  const primaryLine = cleanDisplayBridgeNote(
+    curation.anchors.primary === 'theme' ? curation.anchors.theme.body : curation.anchors.time.body,
+  )
+
+  if (primaryLine) {
+    return primaryLine
+  }
+
+  return curation.anchors.primary === 'theme'
+    ? createHumanThemeBridgeFallback(curation)
+    : createHumanTimeBridgeFallback(curation)
 }
 
 export function createDailyCurationReceiptItems(curation: DailyCuration) {
@@ -444,7 +563,7 @@ export function createLegacyEchoObjectDeck(curation: DailyCuration): EchoObjectC
       meta: createReceiptOrderNo(curation.today.date, curation.generation),
       slot: 'daily-receipt',
       style: 'receipt',
-      title: receiptSupport?.title ?? '今日回声小票',
+      title: receiptSupport?.title ?? '回声小票',
     },
     {
       action: {
@@ -456,7 +575,7 @@ export function createLegacyEchoObjectDeck(curation: DailyCuration): EchoObjectC
       meta: 'KEEP STUB',
       slot: 'reply-ticket',
       style: 'movie-ticket',
-      title: '给今天留一张票',
+      title: '留一张票',
     },
   ]
 }
@@ -473,7 +592,17 @@ export function applyDailyCurationAiDraft(
   const themeNoteBody = cleanAiText(draft.themeNoteBody, 160)
   const parallelConnection = cleanAiText(draft.parallelConnection, 44)
   const receiptItems = normalizeAiReceiptItems(draft.receiptItems, curation)
-  const objects = applyAiObjectDrafts(curation.objects ?? createLegacyEchoObjectDeck(curation), draft.objectDrafts, receiptItems)
+  const mainCopy = [
+    subtitle ?? curation.thesis.subtitle,
+    curatorVoice ?? curation.thesis.curatorVoice,
+    curation.source.excerpt,
+  ].join(' ')
+  const objects = applyAiObjectDrafts(
+    curation.objects ?? createLegacyEchoObjectDeck(curation),
+    draft.objectDrafts,
+    receiptItems,
+    mainCopy,
+  )
   const supports = curation.supports.map((support) => {
     if (support.role === 'theme-note') {
       return {
@@ -519,6 +648,7 @@ function applyAiObjectDrafts(
   objects: EchoObjectCard[],
   drafts: DailyCurationAiDraft['objectDrafts'],
   legacyReceiptItems?: Array<{ label: string; value: string }>,
+  mainCopy = '',
 ) {
   if (!Array.isArray(drafts) || drafts.length === 0) {
     return objects
@@ -543,7 +673,11 @@ function applyAiObjectDrafts(
     selected.push(applyAiObjectDraft(object, draft, legacyReceiptItems))
   })
 
-  return selected.length > 0 ? selected : objects
+  if (selected.length === 0) {
+    return objects
+  }
+
+  return selected.filter((object) => !isRedundantTodayThreadObject(object, mainCopy))
 }
 
 function applyAiObjectDraft(
@@ -569,6 +703,125 @@ function applyAiObjectDraft(
     title: title ?? object.title,
   }
 }
+
+function isRedundantTodayThreadObject(object: EchoObjectCard, mainCopy: string) {
+  if (object.slot !== 'today-thread') {
+    return false
+  }
+
+  return hasHighCurationTextOverlap([object.title, object.body].filter(Boolean).join(' '), mainCopy)
+}
+
+function hasHighCurationTextOverlap(left: string, right: string) {
+  const leftTokens = extractSignificantCurationTokens(left)
+  const rightTokens = extractSignificantCurationTokens(right)
+
+  if (leftTokens.size < 3 || rightTokens.size < 3) {
+    return false
+  }
+
+  const sharedCount = [...leftTokens].filter((token) => rightTokens.has(token)).length
+  const smallerSetSize = Math.min(leftTokens.size, rightTokens.size)
+
+  return sharedCount >= 3 || (sharedCount >= 2 && sharedCount / smallerSetSize >= 0.5)
+}
+
+function extractSignificantCurationTokens(text: string) {
+  const tokens = new Set<string>()
+  const normalized = text
+    .toLocaleLowerCase()
+    .replace(/[“”「」『』《》]/g, ' ')
+    .replace(/[，。；：、！？,.!?;:()[\]{}]/g, ' ')
+  const segmenter = getChineseWordSegmenter()
+
+  if (segmenter) {
+    for (const segment of segmenter.segment(normalized)) {
+      if (segment.isWordLike !== false) {
+        addSignificantCurationToken(tokens, segment.segment)
+      }
+    }
+  } else {
+    normalized.match(/[\u4e00-\u9fff]{2,}/g)?.forEach((group) => {
+      if (group.length <= 6) {
+        addSignificantCurationToken(tokens, group)
+        return
+      }
+
+      for (let index = 0; index <= group.length - 2; index += 1) {
+        addSignificantCurationToken(tokens, group.slice(index, index + 2))
+      }
+    })
+  }
+
+  normalized.match(/\d+(?:\.\d+)?[\u4e00-\u9fffA-Za-z]{0,3}/g)?.forEach((token) =>
+    addSignificantCurationToken(tokens, token),
+  )
+  normalized.match(/[A-Za-z][A-Za-z0-9_-]{1,}/g)?.forEach((token) => addSignificantCurationToken(tokens, token))
+
+  return tokens
+}
+
+function addSignificantCurationToken(tokens: Set<string>, rawToken: string) {
+  const token = rawToken.replace(/\s+/g, '').trim()
+
+  if (!token || commonCurationTokens.has(token)) {
+    return
+  }
+
+  if (/\d/.test(token) || /^[A-Za-z][A-Za-z0-9_-]{1,}$/.test(token) || /^[\u4e00-\u9fff]{2,}$/.test(token)) {
+    tokens.add(token)
+  }
+}
+
+type WordSegment = {
+  segment: string
+  isWordLike?: boolean
+}
+
+type WordSegmenter = {
+  segment(text: string): Iterable<WordSegment>
+}
+
+let cachedChineseWordSegmenter: WordSegmenter | null | undefined
+
+function getChineseWordSegmenter() {
+  if (cachedChineseWordSegmenter !== undefined) {
+    return cachedChineseWordSegmenter
+  }
+
+  const Segmenter = (Intl as typeof Intl & {
+    Segmenter?: new (locale: string, options: { granularity: 'word' }) => WordSegmenter
+  }).Segmenter
+
+  try {
+    cachedChineseWordSegmenter = Segmenter ? new Segmenter('zh', { granularity: 'word' }) : null
+  } catch {
+    cachedChineseWordSegmenter = null
+  }
+
+  return cachedChineseWordSegmenter
+}
+
+const commonCurationTokens = new Set([
+  '一个',
+  '一点',
+  '一页',
+  '一起',
+  '今天',
+  '便签',
+  '只是',
+  '可以',
+  '回声',
+  '旁边',
+  '日记',
+  '旧页',
+  '现在',
+  '继续',
+  '这个',
+  '这页',
+  '重新',
+  '那页',
+])
 
 function isEchoObjectSlot(value: string): value is EchoObjectSlot {
   return ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'].includes(value)
@@ -770,7 +1023,7 @@ function createCurationAnchors(
 function createThemeAnchorBody(entry: JournalIndexEntry, todayContext: TodayContext, topic: string) {
   const todayTitle = todayContext.journal?.title?.trim()
   const todayTags = todayContext.journal?.tags ?? []
-  const entryText = [entry.title, entry.excerpt, entry.searchableText, ...entry.tags, ...entry.collections]
+  const entryText = [entry.title, entry.searchableText, ...entry.tags, ...entry.collections]
     .filter(Boolean)
     .join(' ')
   const tagMatch = todayTags.find((tag) => entryText.includes(tag))
@@ -844,7 +1097,7 @@ function createSupportCards(
     const connection = createParallelConnection(selected.entry, parallel.entry, todayContext)
 
     cards.push({
-      body: createEntryExcerpt(parallel.entry.excerpt ?? parallel.entry.searchableText),
+      body: createEntryExcerpt(parallel.entry.searchableText),
       cardStyle: 'mini-postcard',
       connection,
       id: `parallel-${parallel.entry.date}-${generation}`,
@@ -864,7 +1117,7 @@ function createSupportCards(
     id: `receipt-${selected.entry.date}-${generation}`,
     items: createReceiptItems(selected.entry, todayContext),
     role: 'receipt',
-    title: '今日回声小票',
+    title: '回声小票',
   })
 
   return cards.slice(0, 3)
@@ -880,11 +1133,11 @@ function createEchoObjectDeck(
 ): EchoObjectCard[] {
   const topic = inferEntryTopic(selected.entry, todayContext)
   const sourceTitle = selected.entry.title ?? createEntryTitle(selected.entry)
-  const sourceExcerpt = selected.entry.excerpt ?? createEntryExcerpt(selected.entry.searchableText)
+  const sourceExcerpt = createEntryExcerpt(selected.entry.searchableText)
   const nearby = selectNearbyObjectCandidate(candidates, selected) ?? selected
   const nearbyEntry = nearby.entry
   const nearbyTitle = nearbyEntry.title ?? createEntryTitle(nearbyEntry)
-  const nearbyExcerpt = nearbyEntry.excerpt ?? createEntryExcerpt(nearbyEntry.searchableText)
+  const nearbyExcerpt = createEntryExcerpt(nearbyEntry.searchableText)
   const nearbyImage = nearbyEntry.images[0]
   const receiptItems = createReceiptItems(selected.entry, todayContext)
 
@@ -944,7 +1197,7 @@ function createEchoObjectDeck(
       meta: createReceiptOrderNo(todayContext.date, generation),
       slot: 'daily-receipt',
       style: 'receipt',
-      title: '今日回声小票',
+      title: '回声小票',
     },
     {
       action: {
@@ -956,7 +1209,7 @@ function createEchoObjectDeck(
       meta: 'KEEP STUB',
       slot: 'reply-ticket',
       style: 'movie-ticket',
-      title: '给今天留一张票',
+      title: '留一张票',
     },
   ]
 }
@@ -1010,14 +1263,14 @@ function createArchiveLedgerRows(
 
   addArchiveLedgerRow(rows, {
     label: '旧页',
-    note: createEntryExcerpt(entry.excerpt ?? entry.searchableText),
+    note: createEntryExcerpt(entry.searchableText),
     value: entry.title ?? createEntryTitle(entry),
   })
 
   if (nearby) {
     addArchiveLedgerRow(rows, {
       label: '旁页',
-      note: createEntryExcerpt(nearby.excerpt ?? nearby.searchableText),
+      note: createEntryExcerpt(nearby.searchableText),
       value: nearby.title ?? createEntryTitle(nearby),
     })
   }
@@ -1199,7 +1452,6 @@ function createParallelConnection(
     tokenize(
       [
         selected.title,
-        selected.excerpt,
         selected.searchableText,
         ...selected.tags,
         ...selected.collections,
@@ -1209,7 +1461,7 @@ function createParallelConnection(
         .join(' '),
     ),
   )
-  const match = tokenize([parallel.title, parallel.excerpt, parallel.searchableText, ...parallel.tags, ...parallel.collections].filter(Boolean).join(' ')).find(
+  const match = tokenize([parallel.title, parallel.searchableText, ...parallel.tags, ...parallel.collections].filter(Boolean).join(' ')).find(
     (token) => selectedTokens.has(token),
   )
 
@@ -1221,7 +1473,7 @@ function createParallelConnection(
 }
 
 function inferEntryTopic(entry: JournalIndexEntry, todayContext?: TodayContext) {
-  const text = [entry.title, entry.excerpt, entry.searchableText, ...entry.tags, ...entry.collections, ...(todayContext?.journal?.tags ?? [])]
+  const text = [entry.title, entry.searchableText, ...entry.tags, ...entry.collections, ...(todayContext?.journal?.tags ?? [])]
     .filter(Boolean)
     .join(' ')
 
@@ -1276,7 +1528,7 @@ function scoreTodayAffinity(entry: JournalIndexEntry, todayContext: TodayContext
     return 0
   }
 
-  const entryTokens = new Set(tokenize([entry.title, entry.excerpt, entry.searchableText, ...entry.tags, ...entry.collections].filter(Boolean).join(' ')))
+  const entryTokens = new Set(tokenize([entry.title, entry.searchableText, ...entry.tags, ...entry.collections].filter(Boolean).join(' ')))
   const matchCount = todayTokens.filter((token) => entryTokens.has(token)).length
 
   return Math.min(matchCount * 5, 24)
@@ -1358,6 +1610,10 @@ function repeatsSourceInMainNote(note: string, curation: DailyCuration) {
 
 function createDisplayTags(curation: DailyCuration) {
   return [...new Set([...curation.source.tags, ...curation.source.collections])].slice(0, 4)
+}
+
+function normalizeDisplayLine(text: string) {
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 function inferCurationTopic(curation: DailyCuration) {

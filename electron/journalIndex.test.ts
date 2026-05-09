@@ -45,6 +45,7 @@ id: m_20260424_213800
 time: 2026-04-24T21:38:00+08:00
 ---
 窗外下雨了。
+这一条碎碎念故意写得长一点，超过原本会被截断的长度，并且保留 **Markdown**。
 
 ::image
 id: img_20260424_213801
@@ -79,7 +80,7 @@ tags: [灯]
       ],
       murmurs: [
         {
-          excerpt: '窗外下雨了。',
+          excerpt: '窗外下雨了。\n这一条碎碎念故意写得长一点，超过原本会被截断的长度，并且保留 **Markdown**。',
           id: 'm_20260424_213800',
           imageCount: 1,
           time: '2026-04-24T21:38:00+08:00',
@@ -88,14 +89,16 @@ tags: [灯]
       stats: {
         imageCount: 1,
         murmurCount: 1,
-        wordCount: 12,
+        wordCount: 41,
       },
       tags: ['雨', '夜晚'],
       title: '雨夜和台灯',
     })
+    expect(index[1]).not.toHaveProperty('excerpt')
     expect(index[1].searchableText).toContain('雨夜和台灯')
     expect(index[1].searchableText).toContain('长日记正文。')
     expect(index[1].searchableText).toContain('窗户')
+    expect(index[1].searchableText).not.toContain('桌面很安静')
     expect(index[0].tags).toEqual(['灯'])
 
     const indexFile = JSON.parse(await readFile(path.join(directory, 'index', 'journal-index.json'), 'utf8'))
@@ -103,6 +106,7 @@ tags: [灯]
     expect(indexFile.version).toBe(1)
     expect(typeof indexFile.generatedAt).toBe('string')
     expect(indexFile.entries.map((entry: { date: string }) => entry.date)).toEqual(['2026-04-25', '2026-04-24'])
+    expect(indexFile.entries[1]).not.toHaveProperty('excerpt')
   })
 
   it('writes an empty index when the journal directory does not exist', async () => {

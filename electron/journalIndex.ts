@@ -89,7 +89,7 @@ function createJournalIndexEntry({
   const tags = normalizeStringArray(frontMatter.tags)
   const collections = normalizeStringArray(frontMatter.collections)
   const murmurs = parsedEntry.murmurs.map((murmur) => ({
-    excerpt: createExcerpt(murmur.body, 36),
+    excerpt: murmur.body,
     id: murmur.id,
     imageCount: murmur.images.length,
     time: murmur.time,
@@ -108,7 +108,6 @@ function createJournalIndexEntry({
   return {
     collections,
     date,
-    excerpt: normalizeOptionalString(frontMatter.excerpt),
     favorite: frontMatter.favorite === true,
     fileName,
     filePath,
@@ -139,14 +138,13 @@ function buildSearchableText(
   murmurs: ReturnType<typeof parseJournalMarkdown>['murmurs'],
 ) {
   const chunks = [
-    frontMatter.title,
-    frontMatter.excerpt,
-    ...normalizeStringArray(frontMatter.tags),
     longEntryMarkdown,
     ...murmurs.flatMap((murmur) => [
       murmur.body,
       ...murmur.images.flatMap((image) => [image.caption, ...image.tags]),
     ]),
+    frontMatter.title,
+    ...normalizeStringArray(frontMatter.tags),
   ]
 
   return chunks
@@ -158,16 +156,6 @@ function buildSearchableText(
 
 function countWords(text: string) {
   return stripMarkdownSyntax(text).match(/[\u4e00-\u9fff]|[A-Za-z0-9]+/g)?.length ?? 0
-}
-
-function createExcerpt(text: string, maxLength: number) {
-  const excerpt = normalizeWhitespace(stripMarkdownSyntax(text))
-
-  if (excerpt.length <= maxLength) {
-    return excerpt
-  }
-
-  return `${excerpt.slice(0, maxLength).trimEnd()}...`
 }
 
 function stripMarkdownSyntax(text: string) {

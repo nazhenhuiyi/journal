@@ -7,12 +7,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router'
 import {
-  applyDailyCurationAiDraft,
   createDailyCuration,
+  createDailyCurationCandidates,
   createDailyCurationDisplay,
   createLegacyEchoObjectDeck,
   getLocalDateKey,
   type DailyCuration,
+  type DailyCurationDisplay,
   type TodayContext,
 } from '../domain/dailyCuration'
 import { EchoObjectCardRenderer } from '../components/MemoryObjectCards'
@@ -58,6 +59,20 @@ function AllPagesHomePage() {
     [curationGeneration, journalIndex, todayContext, todayDateKey],
   )
   const dailyCuration = savedDailyCuration ?? draftedDailyCuration
+  const draftedDailyCurationCandidates = useMemo(
+    () => createDailyCurationCandidates(
+      journalIndex,
+      new Date(`${todayDateKey}T12:00:00`),
+      curationGeneration,
+      todayContext,
+      5,
+    ),
+    [curationGeneration, journalIndex, todayContext, todayDateKey],
+  )
+  const dailyCurationCandidates = useMemo(
+    () => createDailyCurationCandidateSet(dailyCuration, draftedDailyCurationCandidates),
+    [dailyCuration, draftedDailyCurationCandidates],
+  )
   const homeDateLabel = useMemo(() => formatHomeDate(new Date()), [])
 
   useEffect(() => {
@@ -177,7 +192,8 @@ function AllPagesHomePage() {
       return
     }
 
-    const requestKey = `${dailyCuration.id}:${dailyCuration.source.date}:${dailyCuration.generation}`
+    const candidateDates = dailyCurationCandidates.map((candidate) => candidate.source.date).join(',')
+    const requestKey = `${dailyCuration.id}:${dailyCuration.source.date}:${dailyCuration.generation}:${candidateDates}`
 
     if (aiEnhancementRequestsRef.current.has(requestKey)) {
       return
@@ -187,24 +203,21 @@ function AllPagesHomePage() {
     aiEnhancementRequestsRef.current.add(requestKey)
     setDailyCurationError('')
 
-    codex.generateDailyCurationDraft({ curation: dailyCuration })
+    codex.generateDailyCurationDraft({
+      candidateCurations: dailyCurationCandidates,
+      curation: dailyCuration,
+    })
       .then((result) => {
         if (isCancelled) {
           return
         }
 
-        const enhancedCuration = applyDailyCurationAiDraft(dailyCuration, result.draft, {
-          generatedAt: new Date().toISOString(),
-          provider: 'codex',
-          threadId: result.threadId,
-          usage: result.usage,
-        })
+        const enhancedCuration = result.curation
 
         setSavedDailyCuration(enhancedCuration)
         hasSavedDraftRef.current = true
         setDailyCurationError('')
         setIsDailyCurationLoading(false)
-        saveDailyCurationDraft(enhancedCuration)
       })
       .catch((error: unknown) => {
         if (!isCancelled) {
@@ -216,7 +229,13 @@ function AllPagesHomePage() {
     return () => {
       isCancelled = true
     }
-  }, [dailyCuration, indexLoadStatus, isSavedCurationReady, isTodayContextReady])
+  }, [
+    dailyCuration,
+    dailyCurationCandidates,
+    indexLoadStatus,
+    isSavedCurationReady,
+    isTodayContextReady,
+  ])
 
   function regenerateDailyCuration() {
     const nextGeneration = curationGeneration + 1
@@ -345,6 +364,7 @@ function DailyCurationSection({
                         <strong>{display.artifact.dateLabel}</strong>
                       </Link>
                       <small>{display.artifact.badge}</small>
+                      <CurationBridge bridge={display.bridge} className="is-artifact" />
                     </div>
                   )}
                 </div>
@@ -371,6 +391,7 @@ function DailyCurationSection({
                 <h2>{display.main.title}</h2>
                 <blockquote>{display.main.excerpt}</blockquote>
                 <p className="echo-curation-note">{display.main.note}</p>
+                {display.artifact.image ? <CurationBridge bridge={display.bridge} /> : null}
                 <p className="echo-curation-question">
                   <span>留给今天的问题</span>
                   <span>{display.main.question}</span>
@@ -402,6 +423,49 @@ function DailyCurationSection({
       </div>
     </section>
   )
+}
+
+function CurationBridge({
+  bridge,
+  className = '',
+}: {
+  bridge: DailyCurationDisplay['bridge']
+  className?: string
+}) {
+  return (
+    <div className={`echo-curation-bridge ${className}`} aria-label="今日与旧页的连接">
+      <div className="echo-curation-bridge-head">
+        <span>{bridge.eyebrow}</span>
+        <h3>{bridge.title}</h3>
+      </div>
+      <div className="echo-curation-bridge-lines">
+        {bridge.lines.map((line) => (
+          <div className={`echo-curation-bridge-line ${line.isPrimary ? 'is-primary' : ''}`} key={line.body}>
+            <p>{line.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function createDailyCurationCandidateSet(
+  currentCuration: DailyCuration | null,
+  candidates: DailyCuration[],
+) {
+  const bySourceDate = new Map<string, DailyCuration>()
+
+  candidates.forEach((candidate) => {
+    if (!bySourceDate.has(candidate.source.date)) {
+      bySourceDate.set(candidate.source.date, candidate)
+    }
+  })
+
+  if (currentCuration && !bySourceDate.has(currentCuration.source.date)) {
+    bySourceDate.set(currentCuration.source.date, currentCuration)
+  }
+
+  return [...bySourceDate.values()].slice(0, 5)
 }
 
 function formatHomeDate(date: Date) {

@@ -4,6 +4,7 @@ export type JournalIndexEntry = {
   filePath: string
   updatedAt: string | null
   title?: string
+  // Legacy cached indexes may still include this; new index files do not persist it.
   excerpt?: string
   tags: string[]
   favorite: boolean

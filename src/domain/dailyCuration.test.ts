@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyDailyCurationAiDraft,
   createDailyCuration,
+  createDailyCurationCandidates,
   createDailyCurationDisplay,
   createLegacyEchoObjectDeck,
   type DailyCuration,
@@ -25,6 +26,11 @@ describe('dailyCuration', () => {
       kickerLabel: '今日翻到',
       title: curation.source.title,
     })
+    expect(display.bridge).toMatchObject({
+      eyebrow: '页边小记',
+      title: '翻到这里时',
+    })
+    expect(display.bridge.lines.map((line) => line.label)).toEqual(['页边'])
     expect(display.main.tags).toEqual(['春天'])
   })
 
@@ -50,6 +56,14 @@ describe('dailyCuration', () => {
     expect(curation?.objects).toHaveLength(5)
     expect(curation?.objects?.find((object) => object.slot === 'nearby-memory')?.source?.date).toBe('2026-03-30')
     expect(curation?.objects?.find((object) => object.slot === 'archive-ledger')?.rows).toHaveLength(3)
+  })
+
+  it('creates a small set of candidate curations for AI to choose from', () => {
+    const candidates = createDailyCurationCandidates(createCandidateEntries(), new Date('2026-05-09T12:00:00'), 0, undefined, 2)
+
+    expect(candidates).toHaveLength(2)
+    expect(new Set(candidates.map((candidate) => candidate.source.date)).size).toBe(2)
+    expect(candidates.every((candidate) => candidate.objects?.some((object) => object.slot === 'reply-ticket'))).toBe(true)
   })
 
   it('recreates object cards for saved v6 curations that do not have objects yet', () => {
@@ -198,10 +212,51 @@ describe('dailyCuration', () => {
       ],
     })
   })
+
+  it('drops the sticky note when it repeats the main curation copy', () => {
+    const curation = createTestCuration()
+    const refined = applyDailyCurationAiDraft(
+      curation,
+      {
+        curatorVoice: '今天写到存款和三十分钟六百米，旧页里也把“出发点不是喜欢”放在价格旁边。',
+        objectDrafts: [
+          {
+            body: '今天把存款、选择权和六百米写在一起，旧页也在说出发点不是喜欢。',
+            slot: 'today-thread',
+            title: '喜欢便签',
+          },
+          {
+            body: '旁边那页只留一只空杯子，适合换个角度看今天的选择。',
+            slot: 'nearby-memory',
+            title: '空杯旁边',
+          },
+        ],
+      },
+      {
+        generatedAt: '2026-05-09T12:00:00.000Z',
+        provider: 'codex',
+        threadId: null,
+        usage: null,
+      },
+    )
+
+    expect(refined.objects?.map((object) => object.slot)).toEqual(['nearby-memory'])
+  })
 })
 
 function createTestCuration(): DailyCuration {
-  const entries: JournalIndexEntry[] = [
+  const entries = createCandidateEntries()
+  const curation = createDailyCuration(entries, new Date('2026-05-09T12:00:00'))
+
+  if (!curation) {
+    throw new Error('Expected test curation to be created.')
+  }
+
+  return curation
+}
+
+function createCandidateEntries(): JournalIndexEntry[] {
+  return [
     {
       collections: [],
       date: '2026-03-30',
@@ -231,13 +286,6 @@ function createTestCuration(): DailyCuration {
       updatedAt: null,
     },
   ]
-  const curation = createDailyCuration(entries, new Date('2026-05-09T12:00:00'))
-
-  if (!curation) {
-    throw new Error('Expected test curation to be created.')
-  }
-
-  return curation
 }
 
 function createSingleEntry(): JournalIndexEntry {

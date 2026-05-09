@@ -1543,6 +1543,72 @@ body {
   line-height: 1.82;
 }
 
+.echo-curation-bridge {
+  display: grid;
+  gap: 0.56rem;
+  margin: 0.12rem 0;
+  padding: 0.72rem 0 0.72rem 0.86rem;
+  border-left: 2px solid rgba(20, 114, 79, 0.24);
+}
+
+.echo-curation-bridge.is-artifact {
+  gap: 0.5rem;
+  margin-top: 2rem;
+  padding: 0.58rem 0 0.18rem 0.72rem;
+  border-left-color: rgba(20, 114, 79, 0.2);
+}
+
+.echo-curation-bridge-head {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.echo-curation-bridge-head span {
+  color: rgba(20, 114, 79, 0.66);
+  font-size: 0.66rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+}
+
+.echo-curation-bridge-head h3 {
+  margin: 0;
+  color: rgba(47, 38, 31, 0.74);
+  font-size: 0.95rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.echo-curation-bridge.is-artifact .echo-curation-bridge-head h3 {
+  font-size: 0.82rem;
+  line-height: 1.28;
+}
+
+.echo-curation-bridge-lines {
+  display: grid;
+  gap: 0.54rem;
+}
+
+.echo-curation-bridge.is-artifact .echo-curation-bridge-lines {
+  gap: 0.36rem;
+}
+
+.echo-curation-bridge-line {
+  display: block;
+}
+
+.echo-curation-bridge-line p {
+  margin: 0;
+  max-width: 31rem;
+  color: rgba(47, 38, 31, 0.64);
+  font-size: 0.84rem;
+  line-height: 1.72;
+}
+
+.echo-curation-bridge.is-artifact .echo-curation-bridge-line p {
+  font-size: 0.7rem;
+  line-height: 1.58;
+}
+
 .echo-curation-question {
   display: grid;
   gap: 0.28rem;

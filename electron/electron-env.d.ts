@@ -149,8 +149,10 @@ interface Window {
     }>
     generateDailyCurationDraft(payload: {
       curation: import('../src/domain/dailyCuration').DailyCuration
+      candidateCurations?: import('../src/domain/dailyCuration').DailyCuration[]
     }): Promise<{
-      draft: import('../src/domain/dailyCuration').DailyCurationAiDraft
+      curation: import('../src/domain/dailyCuration').DailyCuration
+      filePath: string
       threadId: string | null
       usage: {
         input_tokens: number
