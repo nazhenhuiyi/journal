@@ -3,7 +3,7 @@ import {
   Redo,
   Sparkles,
 } from '../components/HandDrawnIcons'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   createDailyCuration,
@@ -16,7 +16,7 @@ import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
-const DAILY_CURATION_STORAGE_KEY = 'journal:daily-curations:v5'
+const DAILY_CURATION_STORAGE_KEY = 'journal:daily-curations:v6'
 
 type IndexLoadStatus = 'loading' | 'ready' | 'failed'
 
@@ -33,9 +33,13 @@ function AllPagesHomePage() {
   const defaultTodayContext = useMemo(() => createTodayContext(todayDateKey), [todayDateKey])
   const [todayContext, setTodayContext] = useState<TodayContext>(defaultTodayContext)
   const [isTodayContextReady, setIsTodayContextReady] = useState(() => !getJournalStore()?.loadToday)
-  const [savedDailyCuration, setSavedDailyCuration] = useState<DailyCuration | null>(() =>
-    readSavedDailyCuration(todayDateKey),
-  )
+  const [savedDailyCuration, setSavedDailyCuration] = useState<DailyCuration | null>(() => {
+    const journalStore = getJournalStore()
+
+    return journalStore?.loadDailyCuration ? null : readFallbackDailyCuration(todayDateKey)
+  })
+  const [isSavedCurationReady, setIsSavedCurationReady] = useState(() => !getJournalStore()?.loadDailyCuration)
+  const hasSavedDraftRef = useRef(Boolean(savedDailyCuration))
   const [curationGeneration, setCurationGeneration] = useState(() => savedDailyCuration?.generation ?? 0)
   const draftedDailyCuration = useMemo(
     () => createDailyCuration(journalIndex, new Date(`${todayDateKey}T12:00:00`), curationGeneration, todayContext),
@@ -43,6 +47,37 @@ function AllPagesHomePage() {
   )
   const dailyCuration = savedDailyCuration ?? draftedDailyCuration
   const homeDateLabel = useMemo(() => formatHomeDate(new Date()), [])
+
+  useEffect(() => {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.loadDailyCuration) {
+      return
+    }
+
+    let isCancelled = false
+
+    journalStore.loadDailyCuration(todayDateKey)
+      .then((storedCuration) => {
+        if (!isCancelled) {
+          setSavedDailyCuration(storedCuration?.curation ?? null)
+          setCurationGeneration(storedCuration?.curation.generation ?? 0)
+          hasSavedDraftRef.current = Boolean(storedCuration?.curation)
+          setIsSavedCurationReady(true)
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setSavedDailyCuration(null)
+          hasSavedDraftRef.current = false
+          setIsSavedCurationReady(true)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [todayDateKey])
 
   useEffect(() => {
     const journalStore = getJournalStore()
@@ -76,12 +111,10 @@ function AllPagesHomePage() {
     const journalStore = getJournalStore()
 
     if (!journalStore?.loadToday) {
-      setIsTodayContextReady(true)
       return
     }
 
     let isCancelled = false
-    setIsTodayContextReady(false)
 
     journalStore.loadToday()
       .then((file) => {
@@ -103,13 +136,19 @@ function AllPagesHomePage() {
   }, [defaultTodayContext, todayDateKey])
 
   useEffect(() => {
-    if (savedDailyCuration || !draftedDailyCuration || indexLoadStatus !== 'ready' || !isTodayContextReady) {
+    if (
+      hasSavedDraftRef.current ||
+      !draftedDailyCuration ||
+      indexLoadStatus !== 'ready' ||
+      !isTodayContextReady ||
+      !isSavedCurationReady
+    ) {
       return
     }
 
-    saveDailyCuration(draftedDailyCuration)
-    setSavedDailyCuration(draftedDailyCuration)
-  }, [draftedDailyCuration, indexLoadStatus, isTodayContextReady, savedDailyCuration])
+    saveDailyCurationDraft(draftedDailyCuration)
+    hasSavedDraftRef.current = true
+  }, [draftedDailyCuration, indexLoadStatus, isSavedCurationReady, isTodayContextReady])
 
   function regenerateDailyCuration() {
     const nextGeneration = curationGeneration + 1
@@ -123,7 +162,8 @@ function AllPagesHomePage() {
     setCurationGeneration(nextGeneration)
 
     if (nextCuration) {
-      saveDailyCuration(nextCuration)
+      saveDailyCurationDraft(nextCuration)
+      hasSavedDraftRef.current = true
       setSavedDailyCuration(nextCuration)
     }
   }
@@ -209,7 +249,17 @@ function DailyCurationSection({
                 <p className="echo-curation-note">{curation.thesis.curatorVoice}</p>
                 <div className="echo-curation-reason">
                   <span>为什么今天</span>
-                  <p>{curation.thesis.reason}</p>
+                  <div className="echo-curation-anchors" aria-label="今日与旧页的双线索">
+                    <div>
+                      <strong>{curation.anchors.theme.label}</strong>
+                      <p>{curation.anchors.theme.body}</p>
+                    </div>
+                    <div>
+                      <strong>{curation.anchors.time.label}</strong>
+                      <p>{curation.anchors.time.body}</p>
+                    </div>
+                  </div>
+                  <p className="echo-curation-reason-summary">{curation.thesis.reason}</p>
                 </div>
                 <p className="echo-curation-question">{curation.closingQuestion}</p>
                 {curationTags.length > 0 ? (
@@ -312,6 +362,7 @@ function formatSupportRole(role: DailyCuration['supports'][number]['role']) {
     'contrast-memory': '对照',
     'parallel-memory': '旁证',
     receipt: '小票',
+    'scene-memory': '场景',
     'theme-note': '便签',
   }
 
@@ -364,7 +415,7 @@ function formatCurationTags(curation: DailyCuration) {
   return tags.slice(0, 4)
 }
 
-function readSavedDailyCuration(dateKey: string): DailyCuration | null {
+function readFallbackDailyCuration(dateKey: string): DailyCuration | null {
   if (typeof window === 'undefined') {
     return null
   }
@@ -379,13 +430,24 @@ function readSavedDailyCuration(dateKey: string): DailyCuration | null {
     const parsed = JSON.parse(saved) as Record<string, DailyCuration>
     const curation = parsed[dateKey]
 
-    return curation?.version === 4 ? curation : null
+    return curation?.version === 5 ? curation : null
   } catch {
     return null
   }
 }
 
-function saveDailyCuration(curation: DailyCuration) {
+function saveDailyCurationDraft(curation: DailyCuration) {
+  const journalStore = getJournalStore()
+
+  if (journalStore?.saveDailyCuration) {
+    void journalStore.saveDailyCuration(curation).catch(() => saveFallbackDailyCuration(curation))
+    return
+  }
+
+  saveFallbackDailyCuration(curation)
+}
+
+function saveFallbackDailyCuration(curation: DailyCuration) {
   if (typeof window === 'undefined') {
     return
   }

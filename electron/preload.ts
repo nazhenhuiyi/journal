@@ -72,6 +72,12 @@ contextBridge.exposeInMainWorld('journalStore', {
   listIndex() {
     return ipcRenderer.invoke('journal:listIndex')
   },
+  loadDailyCuration(date: string) {
+    return ipcRenderer.invoke('journal:loadDailyCuration', date)
+  },
+  saveDailyCuration(curation: import('../src/domain/dailyCuration').DailyCuration) {
+    return ipcRenderer.invoke('journal:saveDailyCuration', curation)
+  },
   loadDate(date: string) {
     return ipcRenderer.invoke('journal:loadDate', date)
   },

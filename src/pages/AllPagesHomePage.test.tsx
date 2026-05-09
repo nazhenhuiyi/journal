@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AllPagesHomePage from './AllPagesHomePage'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
+import { getLocalDateKey, type DailyCuration } from '../domain/dailyCuration'
 
 function renderHomePage() {
   return render(
@@ -80,14 +81,88 @@ describe('AllPagesHomePage', () => {
     renderHomePage()
 
     expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
-    expect(screen.getByText('今天先翻一页关于“春天”的旧日子。')).toBeInTheDocument()
+    expect(screen.getByText('今天先翻一页关于“春天”的旧日子，再看它和此刻隔着怎样的时间。')).toBeInTheDocument()
     expect(screen.getByText('为什么今天')).toBeInTheDocument()
+    const anchorRegion = screen.getByLabelText('今日与旧页的双线索')
+    expect(anchorRegion).toBeInTheDocument()
+    expect(within(anchorRegion).getByText('主题线索')).toBeInTheDocument()
+    expect(within(anchorRegion).getByText('时间线索')).toBeInTheDocument()
     expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
     expect(screen.getByLabelText('辅助回声')).toBeInTheDocument()
+    expect(screen.getByText('便签')).toBeInTheDocument()
+    expect(screen.getByText('小票')).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('daily-curation')
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('daily-curation')
     })
+  })
+
+  it('persists the daily curation through the filesystem store when available', async () => {
+    const saveDailyCuration = vi.fn().mockImplementation((curation: DailyCuration) =>
+      Promise.resolve({
+        curation,
+        filePath: `/Users/zilin/.journal/curations/daily/${curation.curationDate}.json`,
+      }),
+    )
+
+    vi.stubGlobal('journalStore', {
+      listIndex: vi.fn().mockResolvedValue(indexedMemories),
+      loadDailyCuration: vi.fn().mockResolvedValue(null),
+      saveDailyCuration,
+    })
+
+    renderHomePage()
+
+    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+
+    await waitFor(() => {
+      expect(saveDailyCuration).toHaveBeenCalledOnce()
+    })
+    expect(saveDailyCuration.mock.calls[0][0]).toMatchObject({
+      curationDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      version: 5,
+    })
+    expect(window.localStorage.getItem('journal:daily-curations:v6')).toBeNull()
+  })
+
+  it('explains the daily curation through theme and time anchors together', async () => {
+    vi.stubGlobal('journalStore', {
+      listIndex: vi.fn().mockResolvedValue([
+        {
+          ...indexedMemories[0],
+          date: '2025-05-09',
+          excerpt: '小雨里绕到便利店，买了一杯热咖啡。',
+          searchableText: '小雨里绕到便利店，买了一杯热咖啡。',
+          title: '小雨便利店',
+        },
+      ]),
+      loadToday: vi.fn().mockResolvedValue({
+        content: `---
+date: 2026-05-09
+title: 雨天散步
+weather:
+  text: 小雨
+  temperature: 18
+location:
+  name: 成都
+tags: [小雨, 散步]
+---
+今天在小雨里散了一会儿步。`,
+        date: '2026-05-09',
+        fileName: '2026-05-09.md',
+        filePath: '/Users/zilin/.journal/2026-05-09.md',
+        updatedAt: null,
+      }),
+    })
+
+    renderHomePage()
+
+    expect(await screen.findByRole('heading', { name: '小雨便利店' })).toBeInTheDocument()
+    const anchorRegion = screen.getByLabelText('今日与旧页的双线索')
+    expect(anchorRegion).toHaveTextContent('主题线索')
+    expect(anchorRegion).toHaveTextContent('时间线索')
+    expect(within(anchorRegion).getByText(/今天的《雨天散步》让“.+”先亮起来/)).toBeInTheDocument()
+    expect(within(anchorRegion).getByText(/同一个月日|往年今日/)).toBeInTheDocument()
   })
 
   it('keeps today weather in the header without repeating it as a support card', async () => {
@@ -117,7 +192,7 @@ tags: [雨天, 散步]
     expect(screen.queryByText('今日天气书签')).not.toBeInTheDocument()
 
     await waitFor(() => {
-      expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('"text":"小雨"')
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"text":"小雨"')
     })
   })
 
@@ -139,7 +214,33 @@ tags: [雨天, 散步]
     expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: '重新生成今日策展' }))
 
-    expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('"generation":1')
+    expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"generation":1')
+  })
+
+  it('ignores saved curations from the previous local cache version', async () => {
+    const todayDateKey = getLocalDateKey()
+
+    window.localStorage.setItem(
+      'journal:daily-curations:v6',
+      JSON.stringify({
+        [todayDateKey]: {
+          curationDate: todayDateKey,
+          generation: 0,
+          source: { collections: [], date: '2024-01-01', excerpt: '旧缓存', tags: [], title: '旧缓存回声' },
+          version: 4,
+        },
+      }),
+    )
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue([indexedMemories[1]]) })
+
+    renderHomePage()
+
+    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(screen.queryByText('旧缓存回声')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"version":5')
+    })
   })
 
   it('does not keep card style studies on the echo page', () => {

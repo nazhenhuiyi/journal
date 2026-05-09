@@ -48,6 +48,16 @@ interface Window {
       }[]
     >
     listIndex?(): Promise<import('../src/domain/journalIndex/types').JournalIndexEntry[]>
+    loadDailyCuration?(date: string): Promise<{
+      curation: import('../src/domain/dailyCuration').DailyCuration
+      filePath: string
+    } | null>
+    saveDailyCuration?(
+      curation: import('../src/domain/dailyCuration').DailyCuration,
+    ): Promise<{
+      curation: import('../src/domain/dailyCuration').DailyCuration
+      filePath: string
+    }>
     loadDate?(date: string): Promise<{
       content: string
       date: string

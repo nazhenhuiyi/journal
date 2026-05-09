@@ -11,6 +11,10 @@ import {
   readAnnotationThread,
 } from './codex'
 import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
+import {
+  loadDailyCuration,
+  saveDailyCuration,
+} from './dailyCurationStore'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import { listJournalIndex } from './journalIndex'
 import { importJournalImagesForDate } from './journalMedia'
@@ -108,6 +112,12 @@ ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:listEntries', () => listJournalEntries())
 ipcMain.handle('journal:listIndex', () => listJournalIndex(getJournalDirectory()))
+ipcMain.handle('journal:loadDailyCuration', (_event, date: unknown) =>
+  loadDailyCuration(getJournalDirectory(), date),
+)
+ipcMain.handle('journal:saveDailyCuration', (_event, payload: unknown) =>
+  saveDailyCuration(getJournalDirectory(), payload),
+)
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
 ipcMain.handle('journal:saveDate', (_event, date: unknown, content: unknown) => saveJournal(date, content))
 ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))

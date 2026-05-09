@@ -27,6 +27,18 @@ export type CurationThesis = {
   lens: 'season' | 'anniversary' | 'theme' | 'contrast' | 'forgotten'
 }
 
+export type CurationAnchors = {
+  theme: {
+    label: string
+    body: string
+  }
+  time: {
+    label: string
+    body: string
+  }
+  primary: 'theme' | 'time'
+}
+
 export type EchoArtifact = {
   entryId: string
   date: string
@@ -45,7 +57,7 @@ export type EchoArtifact = {
 
 export type EchoSupportCard = {
   id: string
-  role: 'parallel-memory' | 'contrast-memory' | 'theme-note' | 'receipt'
+  role: 'parallel-memory' | 'contrast-memory' | 'theme-note' | 'receipt' | 'scene-memory'
   title: string
   body: string
   connection?: string
@@ -62,12 +74,13 @@ export type EchoSupportCard = {
 }
 
 export type DailyCuration = {
-  version: 4
+  version: 5
   id: string
   curationDate: string
   generatedAt: string
   generation: number
   today: TodayContext
+  anchors: CurationAnchors
   thesis: CurationThesis
   hero: EchoArtifact
   supports: EchoSupportCard[]
@@ -145,8 +158,9 @@ export function createDailyCuration(
   const noteIndex = stableIndex(`${curationDate}:${source.date}:note:${generation}`, curatorNotes.length)
   const questionIndex = stableIndex(`${curationDate}:${source.date}:question:${generation}`, questions.length)
   const recallLabel = createRecallLabel(selected, date)
-  const recallReason = createReason(selected, date, todayContext)
   const topic = inferEntryTopic(source, todayContext)
+  const anchors = createCurationAnchors(selected, date, todayContext, topic)
+  const recallReason = createReason(selected, date, todayContext, anchors)
   const hero: EchoArtifact = {
     cardStyle: source.images[0] ? 'photo' : topic === '做点吃的' ? 'receipt' : 'letter',
     collections: source.collections,
@@ -164,10 +178,11 @@ export function createDailyCuration(
     tags: source.tags,
     title: sourceTitle,
   }
-  const thesis = createThesis(hero, selected, todayContext, noteIndex)
-  const supports = createSupportCards(candidates, selected, todayContext, generation)
+  const thesis = createThesis(hero, selected, todayContext, noteIndex, anchors)
+  const supports = createSupportCards(candidates, selected, todayContext, generation, anchors)
 
   return {
+    anchors,
     artifact: chooseArtifact(source, generation),
     curationDate,
     curatorNote: createCuratorNote(sourceTitle, sourceExcerpt, noteIndex),
@@ -177,7 +192,7 @@ export function createDailyCuration(
     hero,
     id: `daily-curation-${curationDate}-${generation}`,
     question: questions[questionIndex],
-    reason: createReason(selected, date),
+    reason: createReason(selected, date, todayContext, anchors),
     recall: {
       label: recallLabel,
       rule: createRecallRule(selected, date),
@@ -200,7 +215,7 @@ export function createDailyCuration(
     thesis,
     today: todayContext,
     title: `今日回声：${sourceTitle}`,
-    version: 4,
+    version: 5,
   }
 }
 
@@ -305,28 +320,35 @@ function createEntryExcerpt(text: string) {
   return excerpt.length > 72 ? `${excerpt.slice(0, 72).trimEnd()}...` : excerpt
 }
 
-function createReason(scoredEntry: ScoredEntry, today: Date, todayContext?: TodayContext) {
+function createReason(
+  scoredEntry: ScoredEntry,
+  today: Date,
+  todayContext?: TodayContext,
+  anchors?: CurationAnchors,
+) {
   const topic = inferEntryTopic(scoredEntry.entry, todayContext)
+  const themeLead = anchors?.theme.body ?? `它把“${topic}”留得很具体。`
+  const timeLead = anchors?.time.body ?? createTimeAnchorBody(scoredEntry, today)
 
   if (scoredEntry.ageInDays < SOFT_HISTORY_AGE_DAYS) {
-    return `这页离今天还很近，所以只当作近处回声来听。它关于“${topic}”的部分还没落灰，但已经能从今天旁边退开半步。`
+    return `${themeLead} ${timeLead} 这页离今天还很近，所以只当作近处回声来听。`
   }
 
   if (scoredEntry.ageInDays < MIN_HISTORY_AGE_DAYS) {
-    return `它还不算很久以前，但已经从今天退开了一小段距离。拿它看“${topic}”，不会像复盘，更像把前几天落在桌边的纸条重新展开。`
+    return `${themeLead} ${timeLead} 它还不算很久以前，但已经从今天退开了一小段距离，不像复盘，更像把纸条重新展开。`
   }
 
   if (scoredEntry.dayDistance <= 5) {
-    return `它和今天几乎踩在同一个日历缝隙上，又把“${topic}”留得很具体。不像结论，更像旧日子从抽屉里探头：我还在这儿。`
+    return `${themeLead} ${timeLead} 不像结论，更像旧日子从抽屉里探头：我还在这儿。`
   }
 
   if (scoredEntry.dayDistance <= 14) {
-    return `它离今天的时间节点很近，但已经隔开了一点日子。这个距离刚好适合回看“${topic}”：不贴脸，也不失真。`
+    return `${themeLead} ${timeLead} 这个距离刚好适合回看，不贴脸，也不失真。`
   }
 
   const yearGap = Math.max(1, today.getFullYear() - parseDateKey(scoredEntry.entry.date).getFullYear())
 
-  return `它已经隔了大约 ${yearGap} 年，远到不必立刻解释，近到还认得出当时关于“${topic}”留下的光线。`
+  return `${themeLead} ${timeLead} 它已经隔了大约 ${yearGap} 年，远到不必立刻解释，近到还认得出当时留下的光线。`
 }
 
 function createThesis(
@@ -334,21 +356,99 @@ function createThesis(
   scoredEntry: ScoredEntry,
   todayContext: TodayContext,
   noteIndex: number,
+  anchors: CurationAnchors,
 ): CurationThesis {
   const recallRule = createRecallRule(scoredEntry, parseDateKey(todayContext.date))
   const topic = inferEntryTopic(scoredEntry.entry, todayContext)
-  const lens = recallRule === '时间节点相似' ? 'season' : 'theme'
+  const lens = anchors.primary === 'time' ? 'season' : 'theme'
 
   return {
     curatorVoice: createCuratorNote(hero.title, hero.excerpt, noteIndex),
     lens,
-    reason: createReason(scoredEntry, parseDateKey(todayContext.date), todayContext),
+    reason: createReason(scoredEntry, parseDateKey(todayContext.date), todayContext, anchors),
     subtitle:
-      recallRule === '时间节点相似'
-        ? `今天先翻一页同一段季节里的“${topic}”。`
-        : `今天先翻一页关于“${topic}”的旧日子。`,
+      anchors.primary === 'time' && recallRule === '时间节点相似'
+        ? `今天先翻一页同一段季节里、也关于“${topic}”的旧日子。`
+        : `今天先翻一页关于“${topic}”的旧日子，再看它和此刻隔着怎样的时间。`,
     title: hero.title,
   }
+}
+
+function createCurationAnchors(
+  scoredEntry: ScoredEntry,
+  today: Date,
+  todayContext: TodayContext,
+  topic: string,
+): CurationAnchors {
+  const todayAffinity = scoreTodayAffinity(scoredEntry.entry, todayContext)
+  const hasStrongTimeAnchor =
+    scoredEntry.dayDistance <= 14 || parseDateKey(scoredEntry.entry.date).getMonth() === today.getMonth()
+  const primary = todayAffinity > 0 || !hasStrongTimeAnchor ? 'theme' : 'time'
+
+  return {
+    primary,
+    theme: {
+      body: createThemeAnchorBody(scoredEntry.entry, todayContext, topic),
+      label: '主题线索',
+    },
+    time: {
+      body: createTimeAnchorBody(scoredEntry, today),
+      label: '时间线索',
+    },
+  }
+}
+
+function createThemeAnchorBody(entry: JournalIndexEntry, todayContext: TodayContext, topic: string) {
+  const todayTitle = todayContext.journal?.title?.trim()
+  const todayTags = todayContext.journal?.tags ?? []
+  const entryText = [entry.title, entry.excerpt, entry.searchableText, ...entry.tags, ...entry.collections]
+    .filter(Boolean)
+    .join(' ')
+  const tagMatch = todayTags.find((tag) => entryText.includes(tag))
+
+  if (todayTitle) {
+    return `今天的《${todayTitle}》让“${topic}”先亮起来，旧页正好从另一个角度接住它。`
+  }
+
+  if (tagMatch) {
+    return `今天的「${tagMatch}」和旧页里的“${topic}”彼此搭上了线，像同一件小事换了时间。`
+  }
+
+  if (todayContext.weather?.text && entryText.includes(todayContext.weather.text)) {
+    return `今天的${todayContext.weather.text}把旧页里的“${topic}”叫近了一点，天气先替记忆搭了一座桥。`
+  }
+
+  return `这页把“${topic}”留得很具体，适合替今天补上一点旧光。`
+}
+
+function createTimeAnchorBody(scoredEntry: ScoredEntry, today: Date) {
+  const entryDate = parseDateKey(scoredEntry.entry.date)
+
+  if (scoredEntry.ageInDays < SOFT_HISTORY_AGE_DAYS) {
+    return '它离今天还很近，近到仍能听见当时的呼吸，但已经退开了半步。'
+  }
+
+  if (scoredEntry.ageInDays < MIN_HISTORY_AGE_DAYS) {
+    return '它从今天旁边退开了一小段距离，刚好能被当作短程回声重新看见。'
+  }
+
+  if (entryDate.getMonth() === today.getMonth() && entryDate.getDate() === today.getDate()) {
+    return '它和今天落在同一个月日上，像往年今日把一张纸轻轻递回来。'
+  }
+
+  if (scoredEntry.dayDistance <= 5) {
+    return '它几乎踩在同一段日历缝隙上，季节的气口和今天挨得很近。'
+  }
+
+  if (scoredEntry.dayDistance <= 14) {
+    return '它离今天的时间节点不远，季节还在同一段光线里。'
+  }
+
+  if (entryDate.getMonth() === today.getMonth()) {
+    return '它和今天同在这个月份里，像从同一只抽屉翻出的另一张纸。'
+  }
+
+  return '它已经隔开了一段时间，距离足够让旧日变成可被温柔观看的材料。'
 }
 
 function createSupportCards(
@@ -356,12 +456,13 @@ function createSupportCards(
   selected: ScoredEntry,
   todayContext: TodayContext,
   generation: number,
+  anchors: CurationAnchors,
 ): EchoSupportCard[] {
   const cards: EchoSupportCard[] = []
   const topic = inferEntryTopic(selected.entry, todayContext)
 
   cards.push({
-    body: createThemeNoteBody(selected.entry, todayContext, topic),
+    body: createThemeNoteBody(selected.entry, todayContext, topic, anchors),
     cardStyle: 'sticky',
     id: `theme-${selected.entry.date}-${generation}`,
     role: 'theme-note',
@@ -393,7 +494,7 @@ function createSupportCards(
     body: createReceiptBody(selected.entry, todayContext),
     cardStyle: 'receipt',
     id: `receipt-${selected.entry.date}-${generation}`,
-    items: createReceiptItems(selected.entry, todayContext, topic),
+    items: createReceiptItems(selected.entry, todayContext, topic, anchors),
     role: 'receipt',
     title: '今日回声小票',
   })
@@ -412,26 +513,37 @@ function createReceiptBody(entry: JournalIndexEntry, todayContext: TodayContext)
   return tags.join(' / ')
 }
 
-function createReceiptItems(entry: JournalIndexEntry, todayContext: TodayContext, topic: string) {
+function createReceiptItems(
+  entry: JournalIndexEntry,
+  todayContext: TodayContext,
+  topic: string,
+  anchors: CurationAnchors,
+) {
   const tags = [...(todayContext.journal?.tags ?? []), ...entry.tags, ...entry.collections]
   const sourceTitle = entry.title ?? createEntryTitle(entry)
 
   return [
-    { label: '借出主题', value: topic },
+    { label: '主题线索', value: topic },
+    { label: '时间线索', value: anchors.time.body },
     { label: '旧页证据', value: sourceTitle },
     { label: '找零', value: tags[0] ? `一点${tags[0]}` : '一点普通日常' },
   ]
 }
 
-function createThemeNoteBody(entry: JournalIndexEntry, todayContext: TodayContext, topic: string) {
+function createThemeNoteBody(
+  entry: JournalIndexEntry,
+  todayContext: TodayContext,
+  topic: string,
+  anchors: CurationAnchors,
+) {
   const todayTitle = todayContext.journal?.title
   const entryTitle = entry.title ?? createEntryTitle(entry)
 
   if (todayTitle) {
-    return `今天的《${todayTitle}》旁边，先夹一张《${entryTitle}》。不求对应，只让“${topic}”多一个角度。`
+    return `今天的《${todayTitle}》旁边，先夹一张《${entryTitle}》。${anchors.theme.body}`
   }
 
-  return `策展人把“${topic}”当成书签，不拿它讲大道理，只拿它把旧页翻开。`
+  return `策展人把“${topic}”当成书签。${anchors.theme.body}`
 }
 
 function createParallelConnection(
@@ -469,16 +581,20 @@ function inferEntryTopic(entry: JournalIndexEntry, todayContext?: TodayContext) 
     .filter(Boolean)
     .join(' ')
 
-  if (/菜|饭|肉|烤|炒|吃|餐|咖啡|奶茶|苦瓜|黄瓜|厨房|做法/.test(text)) {
-    return '做点吃的'
-  }
-
   if (/AI|Codex|应用|开发|互联网|产品|灵感|模型|代码/i.test(text)) {
     return '把想法落地'
   }
 
+  if (/创作|创造|绘本|画风|插画|手账|荒诞|加缪/.test(text)) {
+    return '创造的选择权'
+  }
+
   if (/身体|散步|跑|睡|病|疼|累|健身|运动/.test(text)) {
     return '照看身体'
+  }
+
+  if (/菜|饭|肉|烤|炒|吃饭|餐|咖啡|奶茶|苦瓜|黄瓜|厨房|做法/.test(text)) {
+    return '做点吃的'
   }
 
   if (/朋友|家人|妈妈|母亲|父亲|同事|聊天|关系/.test(text)) {
