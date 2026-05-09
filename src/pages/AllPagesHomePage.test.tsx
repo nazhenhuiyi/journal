@@ -80,8 +80,9 @@ describe('AllPagesHomePage', () => {
 
     renderHomePage()
 
-    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
-    expect(screen.getByText('今天先翻到一页旧日子，让它和此刻并排坐一会儿。')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
+    expect(screen.getByText('今日翻到')).toBeInTheDocument()
+    expect(screen.getByText('一页旧日子，让它和此刻并排坐一会儿。')).toBeInTheDocument()
     expect(screen.queryByText('为什么今天')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('今日与旧页的双线索')).not.toBeInTheDocument()
     expect(screen.queryByText('主题线索')).not.toBeInTheDocument()
@@ -112,7 +113,7 @@ describe('AllPagesHomePage', () => {
 
     renderHomePage()
 
-    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
 
     await waitFor(() => {
       expect(saveDailyCuration).toHaveBeenCalledOnce()
@@ -127,18 +128,18 @@ describe('AllPagesHomePage', () => {
   it('asks Codex to refine the daily curation copy when available', async () => {
     const generateDailyCurationDraft = vi.fn().mockResolvedValue({
       draft: {
-        closingQuestion: 'AI 想问：这页现在还留下些什么？',
-        curatorVoice: 'AI 读到这页旧日子没有急着解释什么，只把窗边的新叶和今天并排放下，让一点安静慢慢回来。',
-        parallelConnection: '相近余味：AI 写下的旁证',
+        closingQuestion: '这页现在还留下些什么？',
+        curatorVoice: '这页旧日子没有急着解释什么，只把窗边的新叶和今天放在同一张桌上，让一点安静重新回来。',
+        parallelConnection: '相近余味：窗边的旁证',
         receiptItems: [
-          { label: '夹页', value: '窗边新叶' },
           { label: '今天', value: '今天' },
-          { label: '日期', value: '2026.03.30' },
+          { label: '回声', value: '春天' },
+          { label: '天气', value: '春天' },
           { label: '找零', value: '一点春天' },
         ],
-        subtitle: 'AI 先替今天翻到一页旧日子。',
-        themeNoteBody: 'AI 把这张旧页轻轻放在旁边，让今天不用立刻解释自己。',
-        themeNoteTitle: 'AI 便签',
+        subtitle: '窗边那页旧日子。',
+        themeNoteBody: '这张旧页先放在旁边，让今天不用立刻解释自己。',
+        themeNoteTitle: '窗边便签',
       },
       threadId: 'thread_daily_curation',
       usage: null,
@@ -162,12 +163,12 @@ describe('AllPagesHomePage', () => {
 
     renderHomePage()
 
-    expect(await screen.findByText('AI 先替今天翻到一页旧日子。')).toBeInTheDocument()
-    expect(screen.getByText(/AI 读到这页旧日子/)).toBeInTheDocument()
-    expect(screen.getByText('AI 便签')).toBeInTheDocument()
-    expect(screen.getByText('AI 想问：这页现在还留下些什么？')).toBeInTheDocument()
-    expect(screen.getByText('相近余味：AI 写下的旁证')).toBeInTheDocument()
-    expect(screen.getByText('窗边新叶')).toBeInTheDocument()
+    expect(await screen.findByText('窗边那页旧日子。')).toBeInTheDocument()
+    expect(screen.getByText(/这页旧日子没有急着解释什么/)).toBeInTheDocument()
+    expect(screen.getByText('窗边便签')).toBeInTheDocument()
+    expect(screen.getByText('这页现在还留下些什么？')).toBeInTheDocument()
+    expect(screen.getByText('相近余味：窗边的旁证')).toBeInTheDocument()
+    expect(screen.getAllByText('春天').length).toBeGreaterThan(0)
     expect(screen.getByText('一点春天')).toBeInTheDocument()
 
     await waitFor(() => {
@@ -276,7 +277,7 @@ tags: [雨天, 散步]
 
     renderHomePage()
 
-    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
     expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
     expect(screen.queryByText('ECHO')).not.toBeInTheDocument()
   })
@@ -286,7 +287,7 @@ tags: [雨天, 散步]
 
     renderHomePage()
 
-    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新生成今日策展' }))
 
     expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"generation":1')
@@ -310,7 +311,7 @@ tags: [雨天, 散步]
 
     renderHomePage()
 
-    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
     expect(screen.queryByText('旧缓存回声')).not.toBeInTheDocument()
 
     await waitFor(() => {

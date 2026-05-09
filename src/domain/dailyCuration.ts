@@ -132,6 +132,32 @@ export type DailyCuration = {
   }
 }
 
+export type DailyCurationDisplay = {
+  artifact: {
+    badge: string
+    cardStyle: EchoArtifact['cardStyle']
+    caption?: {
+      badge: string
+      date: string
+    }
+    dateLabel: string
+    eyebrow: string
+    image?: {
+      alt: string
+      src: string
+    }
+  }
+  main: {
+    excerpt: string
+    kicker: string
+    kickerLabel: string
+    note: string
+    question: string
+    tags: string[]
+    title: string
+  }
+}
+
 type ScoredEntry = {
   entry: JournalIndexEntry
   ageInDays: number
@@ -145,7 +171,7 @@ const SOFT_HISTORY_AGE_DAYS = 7
 
 const curatorNotes = [
   '这页不负责解释你，只负责把当时的一点空气递回来。它看起来普通，普通得很有证词感。',
-  '我把它翻出来，是因为它没有用力证明什么。它只是站在那里，像一张小纸条说：你看，当时也有这样的一天。',
+  '这页没有用力证明什么，只是站在那里，像一张小纸条说：你看，当时也有这样的一天。',
   '这页有点像从口袋里摸出来的旧票根，边角不锋利，但确实去过某个地方。今天可以借它坐一会儿。',
   '它不是大事件，更像一个很会躲的逗号。隔了一段时间再看，反而能听见当时没说完的半句。',
 ]
@@ -154,7 +180,7 @@ const questions = [
   '现在的你，会给那一天补一句什么旁白？',
   '如果把这页重新放回今天，它会变成提醒、玩笑，还是一个小小的答案？',
   '当时那个判断，现在还站得住吗？',
-  '这页如果忽然坐到你旁边，会先问你哪一句废话？',
+  '这页如果忽然坐到你旁边，最先让你想起哪个细节？',
 ]
 
 export function createDailyCuration(
@@ -248,6 +274,49 @@ export function getLocalDateKey(date = new Date()) {
   const day = `${date.getDate()}`.padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+export function createDailyCurationDisplay(curation: DailyCuration): DailyCurationDisplay {
+  const image = curation.source.image ?? curation.hero.image
+
+  return {
+    artifact: {
+      badge: curation.recall.label,
+      caption: image
+        ? {
+            badge: curation.recall.label,
+            date: curation.source.date.replace(/-/g, '.'),
+          }
+        : undefined,
+      cardStyle: curation.hero.cardStyle,
+      dateLabel: formatArchiveMonthDay(curation.source.date),
+      eyebrow: 'ARCHIVE NOTE',
+      image: image
+        ? {
+            alt: image.caption ?? curation.source.title,
+            src: image.src,
+          }
+        : undefined,
+    },
+    main: {
+      excerpt: curation.source.excerpt,
+      kicker: formatDisplaySubtitle(curation),
+      kickerLabel: '今日翻到',
+      note: createDisplayConnectionNote(curation),
+      question: curation.closingQuestion,
+      tags: createDisplayTags(curation),
+      title: curation.source.title,
+    },
+  }
+}
+
+export function createDailyCurationReceiptItems(curation: DailyCuration) {
+  return createReceiptItemsFromParts({
+    changeTags: [...(curation.today.journal?.tags ?? []), ...curation.source.tags, ...curation.source.collections],
+    todayContext: curation.today,
+    todayTitle: curation.today.journal?.title ?? '今天',
+    topic: inferCurationTopic(curation),
+  })
 }
 
 export function applyDailyCurationAiDraft(
@@ -442,8 +511,8 @@ function createThesis(
     reason: createReason(scoredEntry, parseDateKey(todayContext.date), todayContext, anchors),
     subtitle:
       anchors.primary === 'time' && recallRule === '时间节点相似'
-        ? '今天先翻到同一段季节里的一页旧日子。'
-        : '今天先翻到一页旧日子，让它和此刻并排坐一会儿。',
+        ? '同一段季节里的一页旧日子。'
+        : '一页旧日子，让它和此刻并排坐一会儿。',
     title: hero.title,
   }
 }
@@ -591,15 +660,41 @@ function createReceiptItems(
   todayContext: TodayContext,
 ) {
   const tags = [...(todayContext.journal?.tags ?? []), ...entry.tags, ...entry.collections]
-  const sourceTitle = entry.title ?? createEntryTitle(entry)
   const todayTitle = todayContext.journal?.title ?? '今天'
 
+  return createReceiptItemsFromParts({
+    changeTags: tags,
+    todayContext,
+    todayTitle,
+    topic: inferEntryTopic(entry, todayContext),
+  })
+}
+
+function createReceiptItemsFromParts({
+  changeTags,
+  todayContext,
+  todayTitle,
+  topic,
+}: {
+  changeTags: string[]
+  todayContext: TodayContext
+  todayTitle: string
+  topic: string
+}) {
   return [
-    { label: '夹页', value: sourceTitle },
     { label: '今天', value: todayTitle },
-    { label: '日期', value: entry.date.replace(/-/g, '.') },
-    { label: '找零', value: tags[0] ? `一点${tags[0]}` : '一点普通日常' },
+    { label: '回声', value: topic },
+    { label: '天气', value: formatReceiptWeather(todayContext) },
+    { label: '找零', value: changeTags[0] ? `一点${changeTags[0]}` : '一点普通日常' },
   ]
+}
+
+function formatReceiptWeather(todayContext: TodayContext) {
+  if (todayContext.weather?.text) {
+    return [todayContext.weather.text, todayContext.weather.temperature].filter(Boolean).join(' ')
+  }
+
+  return todayContext.season
 }
 
 function createThemeNoteBody(
@@ -652,6 +747,10 @@ function inferEntryTopic(entry: JournalIndexEntry, todayContext?: TodayContext) 
     .filter(Boolean)
     .join(' ')
 
+  return inferTopicFromText(text, entry.tags[0] ?? entry.collections[0] ?? todayContext?.season ?? '普通日常')
+}
+
+function inferTopicFromText(text: string, fallback: string) {
   if (/AI|Codex|应用|开发|互联网|产品|灵感|模型|代码/i.test(text)) {
     return '把想法落地'
   }
@@ -672,7 +771,7 @@ function inferEntryTopic(entry: JournalIndexEntry, todayContext?: TodayContext) 
     return '人与人的小信号'
   }
 
-  return entry.tags[0] ?? entry.collections[0] ?? todayContext?.season ?? '普通日常'
+  return fallback
 }
 
 function createDefaultTodayContext(date: Date): TodayContext {
@@ -733,11 +832,77 @@ function getSeason(date: Date) {
 function cleanAiText(value: string | undefined, maxLength: number) {
   const text = value?.replace(/\s+/g, ' ').trim()
 
-  if (!text || containsInternalCurationLanguage(text)) {
+  if (!text || containsInternalCurationLanguage(text) || containsAiNarratorLanguage(text)) {
     return undefined
   }
 
   return text.length > maxLength ? text.slice(0, maxLength).trimEnd() : text
+}
+
+function formatDisplaySubtitle(curation: DailyCuration) {
+  if (/今天先翻一页.*关于|再看它和此刻/.test(curation.thesis.subtitle)) {
+    return curation.thesis.lens === 'season'
+      ? '同一段季节里的一页旧日子。'
+      : '一页旧日子，让它和此刻并排坐一会儿。'
+  }
+
+  return curation.thesis.subtitle
+    .replace(/^AI\s*(?:先)?(?:替)?今天(?:先)?(?:翻到|翻一页|夹进)?/, '')
+    .replace(/^今天先(?:翻到|翻一页|夹进)/, '')
+    .trim()
+}
+
+function createDisplayConnectionNote(curation: DailyCuration) {
+  const note = curation.thesis.curatorVoice.trim()
+
+  if (!note || containsInternalCurationLanguage(note) || containsAiNarratorLanguage(note) || repeatsSourceInMainNote(note, curation)) {
+    return createFallbackDisplayConnectionNote(curation)
+  }
+
+  return note
+}
+
+function createFallbackDisplayConnectionNote(curation: DailyCuration) {
+  const topic = inferCurationTopic(curation)
+
+  return `这页把“${topic}”留在旧时刻里；今天再看，只取它照出的那一点手边动静。`
+}
+
+function repeatsSourceInMainNote(note: string, curation: DailyCuration) {
+  const sourceTitle = curation.source.title.trim()
+  const sourceExcerptLead = curation.source.excerpt.trim().slice(0, 18)
+
+  return Boolean(
+    (sourceTitle && note.includes(`《${sourceTitle}》`)) ||
+      (sourceExcerptLead.length >= 8 && note.includes(sourceExcerptLead)),
+  )
+}
+
+function createDisplayTags(curation: DailyCuration) {
+  return [...new Set([...curation.source.tags, ...curation.source.collections])].slice(0, 4)
+}
+
+function inferCurationTopic(curation: DailyCuration) {
+  return inferTopicFromText(
+    [
+      curation.source.title,
+      curation.source.excerpt,
+      ...curation.source.tags,
+      ...curation.source.collections,
+      curation.today.journal?.title,
+      curation.today.journal?.excerpt,
+      ...(curation.today.journal?.tags ?? []),
+    ]
+      .filter(Boolean)
+      .join(' '),
+    curation.source.tags[0] ?? curation.source.collections[0] ?? curation.today.season,
+  )
+}
+
+function formatArchiveMonthDay(date: string) {
+  const [, month = '', day = ''] = date.split('-')
+
+  return [month, day].filter(Boolean).join('.')
 }
 
 function normalizeAiReceiptItems(
@@ -748,12 +913,7 @@ function normalizeAiReceiptItems(
     return undefined
   }
 
-  const fallback = [
-    { label: '夹页', value: curation.source.title },
-    { label: '今天', value: curation.today.journal?.title ?? '今天' },
-    { label: '日期', value: curation.source.date.replace(/-/g, '.') },
-    { label: '找零', value: curation.source.tags[0] ? `一点${curation.source.tags[0]}` : '一点普通日常' },
-  ]
+  const fallback = createDailyCurationReceiptItems(curation)
   const byLabel = new Map(
     items.flatMap((item) => {
       const label = cleanAiText(item.label, 8)
@@ -771,6 +931,13 @@ function normalizeAiReceiptItems(
 
 function containsInternalCurationLanguage(text: string) {
   return /为什么今天|今日与旧页的双线索|主题线索|时间线索|旧页证据|召回|打分|候选|匹配|算法/.test(text)
+}
+
+function containsAiNarratorLanguage(text: string) {
+  return (
+    /(^|[：:，。；！？、\s])(?:AI|模型|系统|助手|Codex)\s*(?:先|会|想问|读到|把|帮|替|为|给|整理|夹|翻|问|写)/i.test(text) ||
+    /(^|[：:，。；！？、\s])(?:AI|模型|系统|助手|Codex)\s*(?:便签|小票|问题|旁证|回声)$/i.test(text)
+  )
 }
 
 function createRecallLabel(scoredEntry: ScoredEntry, today: Date) {

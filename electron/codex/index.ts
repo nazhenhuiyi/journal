@@ -163,7 +163,7 @@ const dailyCurationDraftSchema = {
       items: {
         type: 'object',
         properties: {
-          label: { type: 'string', enum: ['夹页', '今天', '日期', '找零'] },
+          label: { type: 'string', enum: ['今天', '回声', '天气', '找零'] },
           value: { type: 'string' },
         },
         required: ['label', 'value'],
@@ -524,18 +524,21 @@ function buildDailyCurationDraftPrompt(payload: CodexDailyCurationDraftPayload) 
 - 本地规则已经完成“选择哪一页”，你不要重新选择旧页，不要质疑选择。
 - 你可以利用内部线索理解今天和旧页的关系，但最终文案不能暴露推理过程。
 - 禁止出现这些词或近似栏目名：为什么今天、主题线索、时间线索、旧页证据、召回、打分、候选、匹配、算法。
+- 不要让 AI、模型、系统、助手或 Codex 成为叙述主语；除非原文标题或正文正在讨论 AI，不要主动写“AI”。
+- 不要写“AI 想问：”“AI 先替今天……”“我帮你……”这类把工具放到台前的句子。
 - 不做心理诊断，不替用户下结论，不要像文学评论、咨询师或产品说明。
 - 语气像一个安静的日记阅读同伴：具体、克制、有画面，允许留白。
+- 少用套话，不要连续依赖“旧日子 / 并排 / 余味 / 轻轻 / 慢慢”等词撑完整段。
 - 只返回结构化 JSON，不要写解释。
 
 字段要求：
-- subtitle：18-36 个中文字符，一句话，像“今天先翻到一页旧日子……”这种含蓄引入，不要解释选择逻辑。
-- curatorVoice：70-130 个中文字符，读出旧页和今天可以并排看的感觉；可以引用标题，但不要复述内部线索。
-- closingQuestion：一个具体、轻的问题，适合让用户继续写。
+- subtitle：14-30 个中文字符，一句话，会跟页面上的“今日翻到”标签并列展示；不要以“今天先”“AI 先”“替今天”开头，不要解释选择逻辑。
+- curatorVoice：70-120 个中文字符，读出旧页和今天可以互相照见的感觉；可以引用标题，但不要复述 source.excerpt 或 today.journal.excerpt，不要把标题、摘要换一种说法再写一遍，不要写成段落总结。
+- closingQuestion：一个具体、轻的问题，适合让用户继续写；直接问问题，不要带“AI 想问：”“想问你：”这样的前缀。
 - themeNoteTitle：4-12 个中文字符，便签标题，可以含“便签”。
 - themeNoteBody：40-80 个中文字符，像贴在旁边的短便签。
-- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头。
-- receiptItems：固定 4 行，label 必须依次可用为“夹页 / 今天 / 日期 / 找零”，value 短一些。
+- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头；不要重复主标题。
+- receiptItems：固定 4 行，label 必须依次为“今天 / 回声 / 天气 / 找零”，value 不超过 12 个中文字符，像小票上的短条目；不要重复旧页标题或旧页日期。
 
 TODAY_CONTEXT:
 ${JSON.stringify(curation.today, null, 2)}
