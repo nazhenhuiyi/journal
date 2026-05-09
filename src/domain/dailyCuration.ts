@@ -73,8 +73,21 @@ export type EchoSupportCard = {
   cardStyle: 'sticky' | 'receipt' | 'library' | 'mini-postcard'
 }
 
+export type DailyCurationAiDraft = {
+  subtitle?: string
+  curatorVoice?: string
+  closingQuestion?: string
+  themeNoteTitle?: string
+  themeNoteBody?: string
+  parallelConnection?: string
+  receiptItems?: Array<{
+    label: string
+    value: string
+  }>
+}
+
 export type DailyCuration = {
-  version: 5
+  version: 6
   id: string
   curationDate: string
   generatedAt: string
@@ -106,6 +119,16 @@ export type DailyCuration = {
     label: string
     rule: string
     score: number
+  }
+  ai?: {
+    generatedAt: string
+    provider: 'codex'
+    threadId: string | null
+    usage: {
+      input_tokens: number
+      cached_input_tokens: number
+      output_tokens: number
+    } | null
   }
 }
 
@@ -179,7 +202,7 @@ export function createDailyCuration(
     title: sourceTitle,
   }
   const thesis = createThesis(hero, selected, todayContext, noteIndex, anchors)
-  const supports = createSupportCards(candidates, selected, todayContext, generation, anchors)
+  const supports = createSupportCards(candidates, selected, todayContext, generation)
 
   return {
     anchors,
@@ -215,7 +238,7 @@ export function createDailyCuration(
     thesis,
     today: todayContext,
     title: `今日回声：${sourceTitle}`,
-    version: 5,
+    version: 6,
   }
 }
 
@@ -225,6 +248,58 @@ export function getLocalDateKey(date = new Date()) {
   const day = `${date.getDate()}`.padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+export function applyDailyCurationAiDraft(
+  curation: DailyCuration,
+  draft: DailyCurationAiDraft,
+  metadata: DailyCuration['ai'],
+): DailyCuration {
+  const subtitle = cleanAiText(draft.subtitle, 72)
+  const curatorVoice = cleanAiText(draft.curatorVoice, 240)
+  const closingQuestion = cleanAiText(draft.closingQuestion, 96)
+  const themeNoteTitle = cleanAiText(draft.themeNoteTitle, 24)
+  const themeNoteBody = cleanAiText(draft.themeNoteBody, 160)
+  const parallelConnection = cleanAiText(draft.parallelConnection, 44)
+  const receiptItems = normalizeAiReceiptItems(draft.receiptItems, curation)
+  const supports = curation.supports.map((support) => {
+    if (support.role === 'theme-note') {
+      return {
+        ...support,
+        body: themeNoteBody ?? support.body,
+        title: themeNoteTitle ?? support.title,
+      }
+    }
+
+    if (support.role === 'parallel-memory') {
+      return {
+        ...support,
+        connection: parallelConnection ?? support.connection,
+      }
+    }
+
+    if (support.role === 'receipt') {
+      return {
+        ...support,
+        items: receiptItems ?? support.items,
+      }
+    }
+
+    return support
+  })
+
+  return {
+    ...curation,
+    ai: metadata,
+    closingQuestion: closingQuestion ?? curation.closingQuestion,
+    question: closingQuestion ?? curation.question,
+    supports,
+    thesis: {
+      ...curation.thesis,
+      curatorVoice: curatorVoice ?? curation.thesis.curatorVoice,
+      subtitle: subtitle ?? curation.thesis.subtitle,
+    },
+  }
 }
 
 function scoreEntry(
@@ -359,7 +434,6 @@ function createThesis(
   anchors: CurationAnchors,
 ): CurationThesis {
   const recallRule = createRecallRule(scoredEntry, parseDateKey(todayContext.date))
-  const topic = inferEntryTopic(scoredEntry.entry, todayContext)
   const lens = anchors.primary === 'time' ? 'season' : 'theme'
 
   return {
@@ -368,8 +442,8 @@ function createThesis(
     reason: createReason(scoredEntry, parseDateKey(todayContext.date), todayContext, anchors),
     subtitle:
       anchors.primary === 'time' && recallRule === '时间节点相似'
-        ? `今天先翻一页同一段季节里、也关于“${topic}”的旧日子。`
-        : `今天先翻一页关于“${topic}”的旧日子，再看它和此刻隔着怎样的时间。`,
+        ? '今天先翻到同一段季节里的一页旧日子。'
+        : '今天先翻到一页旧日子，让它和此刻并排坐一会儿。',
     title: hero.title,
   }
 }
@@ -456,13 +530,12 @@ function createSupportCards(
   selected: ScoredEntry,
   todayContext: TodayContext,
   generation: number,
-  anchors: CurationAnchors,
 ): EchoSupportCard[] {
   const cards: EchoSupportCard[] = []
   const topic = inferEntryTopic(selected.entry, todayContext)
 
   cards.push({
-    body: createThemeNoteBody(selected.entry, todayContext, topic, anchors),
+    body: createThemeNoteBody(selected.entry, todayContext, topic),
     cardStyle: 'sticky',
     id: `theme-${selected.entry.date}-${generation}`,
     role: 'theme-note',
@@ -494,7 +567,7 @@ function createSupportCards(
     body: createReceiptBody(selected.entry, todayContext),
     cardStyle: 'receipt',
     id: `receipt-${selected.entry.date}-${generation}`,
-    items: createReceiptItems(selected.entry, todayContext, topic, anchors),
+    items: createReceiptItems(selected.entry, todayContext),
     role: 'receipt',
     title: '今日回声小票',
   })
@@ -516,16 +589,15 @@ function createReceiptBody(entry: JournalIndexEntry, todayContext: TodayContext)
 function createReceiptItems(
   entry: JournalIndexEntry,
   todayContext: TodayContext,
-  topic: string,
-  anchors: CurationAnchors,
 ) {
   const tags = [...(todayContext.journal?.tags ?? []), ...entry.tags, ...entry.collections]
   const sourceTitle = entry.title ?? createEntryTitle(entry)
+  const todayTitle = todayContext.journal?.title ?? '今天'
 
   return [
-    { label: '主题线索', value: topic },
-    { label: '时间线索', value: anchors.time.body },
-    { label: '旧页证据', value: sourceTitle },
+    { label: '夹页', value: sourceTitle },
+    { label: '今天', value: todayTitle },
+    { label: '日期', value: entry.date.replace(/-/g, '.') },
     { label: '找零', value: tags[0] ? `一点${tags[0]}` : '一点普通日常' },
   ]
 }
@@ -534,16 +606,15 @@ function createThemeNoteBody(
   entry: JournalIndexEntry,
   todayContext: TodayContext,
   topic: string,
-  anchors: CurationAnchors,
 ) {
   const todayTitle = todayContext.journal?.title
   const entryTitle = entry.title ?? createEntryTitle(entry)
 
   if (todayTitle) {
-    return `今天的《${todayTitle}》旁边，先夹一张《${entryTitle}》。${anchors.theme.body}`
+    return `今天的《${todayTitle}》旁边，先夹一张《${entryTitle}》。只把相近的余味放在手边，让它慢慢回声。`
   }
 
-  return `策展人把“${topic}”当成书签。${anchors.theme.body}`
+  return `这一页把“${topic}”留在桌面上。先不替它下结论，只让它和今天并排待一会儿。`
 }
 
 function createParallelConnection(
@@ -570,10 +641,10 @@ function createParallelConnection(
   )
 
   if (match) {
-    return `共同线索：${match}`
+    return '相近余味：另一种日常回声'
   }
 
-  return '关系：不是同一件事，但气口挨得很近'
+  return '旁边也有：不是同一件事，但气口挨得很近'
 }
 
 function inferEntryTopic(entry: JournalIndexEntry, todayContext?: TodayContext) {
@@ -657,6 +728,49 @@ function getSeason(date: Date) {
   }
 
   return '冬天'
+}
+
+function cleanAiText(value: string | undefined, maxLength: number) {
+  const text = value?.replace(/\s+/g, ' ').trim()
+
+  if (!text || containsInternalCurationLanguage(text)) {
+    return undefined
+  }
+
+  return text.length > maxLength ? text.slice(0, maxLength).trimEnd() : text
+}
+
+function normalizeAiReceiptItems(
+  items: DailyCurationAiDraft['receiptItems'],
+  curation: DailyCuration,
+) {
+  if (!Array.isArray(items)) {
+    return undefined
+  }
+
+  const fallback = [
+    { label: '夹页', value: curation.source.title },
+    { label: '今天', value: curation.today.journal?.title ?? '今天' },
+    { label: '日期', value: curation.source.date.replace(/-/g, '.') },
+    { label: '找零', value: curation.source.tags[0] ? `一点${curation.source.tags[0]}` : '一点普通日常' },
+  ]
+  const byLabel = new Map(
+    items.flatMap((item) => {
+      const label = cleanAiText(item.label, 8)
+      const value = cleanAiText(item.value, 28)
+
+      return label && value ? [[label, value] as const] : []
+    }),
+  )
+
+  return fallback.map((item) => ({
+    label: item.label,
+    value: byLabel.get(item.label) ?? item.value,
+  }))
+}
+
+function containsInternalCurationLanguage(text: string) {
+  return /为什么今天|今日与旧页的双线索|主题线索|时间线索|旧页证据|召回|打分|候选|匹配|算法/.test(text)
 }
 
 function createRecallLabel(scoredEntry: ScoredEntry, today: Date) {

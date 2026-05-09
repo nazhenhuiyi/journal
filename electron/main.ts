@@ -7,6 +7,7 @@ import {
   askCodex,
   chatWithAnnotation,
   generateAnnotationDrafts,
+  generateDailyCurationDraft,
   generateFrontMatterDraft,
   readAnnotationThread,
 } from './codex'
@@ -93,6 +94,11 @@ ipcMain.handle('codex:generateFrontMatterDraft', async (_event, payload: unknown
   const runtime = await getCodexRuntime()
 
   return generateFrontMatterDraft(payload, runtime.workingDirectory, runtime.settings)
+})
+ipcMain.handle('codex:generateDailyCurationDraft', async (_event, payload: unknown) => {
+  const runtime = await getCodexRuntime()
+
+  return generateDailyCurationDraft(payload, runtime.workingDirectory, runtime.settings)
 })
 ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) => {
   const runtime = await getCodexRuntime()

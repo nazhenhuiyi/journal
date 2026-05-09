@@ -70,7 +70,7 @@ function normalizeDailyCuration(value: unknown, expectedDate?: string): DailyCur
     throw new TypeError('Daily curation must be an object.')
   }
 
-  if (value.version !== 5) {
+  if (value.version !== 6) {
     throw new TypeError('Daily curation version is not supported.')
   }
 

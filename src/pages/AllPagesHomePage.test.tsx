@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AllPagesHomePage from './AllPagesHomePage'
@@ -81,12 +81,11 @@ describe('AllPagesHomePage', () => {
     renderHomePage()
 
     expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
-    expect(screen.getByText('今天先翻一页关于“春天”的旧日子，再看它和此刻隔着怎样的时间。')).toBeInTheDocument()
-    expect(screen.getByText('为什么今天')).toBeInTheDocument()
-    const anchorRegion = screen.getByLabelText('今日与旧页的双线索')
-    expect(anchorRegion).toBeInTheDocument()
-    expect(within(anchorRegion).getByText('主题线索')).toBeInTheDocument()
-    expect(within(anchorRegion).getByText('时间线索')).toBeInTheDocument()
+    expect(screen.getByText('今天先翻到一页旧日子，让它和此刻并排坐一会儿。')).toBeInTheDocument()
+    expect(screen.queryByText('为什么今天')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('今日与旧页的双线索')).not.toBeInTheDocument()
+    expect(screen.queryByText('主题线索')).not.toBeInTheDocument()
+    expect(screen.queryByText('时间线索')).not.toBeInTheDocument()
     expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
     expect(screen.getByLabelText('辅助回声')).toBeInTheDocument()
     expect(screen.getByText('便签')).toBeInTheDocument()
@@ -120,12 +119,83 @@ describe('AllPagesHomePage', () => {
     })
     expect(saveDailyCuration.mock.calls[0][0]).toMatchObject({
       curationDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      version: 5,
+      version: 6,
     })
     expect(window.localStorage.getItem('journal:daily-curations:v6')).toBeNull()
   })
 
-  it('explains the daily curation through theme and time anchors together', async () => {
+  it('asks Codex to refine the daily curation copy when available', async () => {
+    const generateDailyCurationDraft = vi.fn().mockResolvedValue({
+      draft: {
+        closingQuestion: 'AI 想问：这页现在还留下些什么？',
+        curatorVoice: 'AI 读到这页旧日子没有急着解释什么，只把窗边的新叶和今天并排放下，让一点安静慢慢回来。',
+        parallelConnection: '相近余味：AI 写下的旁证',
+        receiptItems: [
+          { label: '夹页', value: '窗边新叶' },
+          { label: '今天', value: '今天' },
+          { label: '日期', value: '2026.03.30' },
+          { label: '找零', value: '一点春天' },
+        ],
+        subtitle: 'AI 先替今天翻到一页旧日子。',
+        themeNoteBody: 'AI 把这张旧页轻轻放在旁边，让今天不用立刻解释自己。',
+        themeNoteTitle: 'AI 便签',
+      },
+      threadId: 'thread_daily_curation',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', {
+      listIndex: vi.fn().mockResolvedValue([
+        ...indexedMemories,
+        {
+          ...indexedMemories[1],
+          date: '2026-04-08',
+          fileName: '2026-04-08.md',
+          filePath: '/Users/zilin/.journal/2026-04-08.md',
+          searchableText: '旧书桌上放着一只空杯子。',
+          stats: { ...indexedMemories[1].stats, wordCount: 4 },
+          title: '旧书桌',
+        },
+      ]),
+    })
+    vi.stubGlobal('codex', { generateDailyCurationDraft })
+
+    renderHomePage()
+
+    expect(await screen.findByText('AI 先替今天翻到一页旧日子。')).toBeInTheDocument()
+    expect(screen.getByText(/AI 读到这页旧日子/)).toBeInTheDocument()
+    expect(screen.getByText('AI 便签')).toBeInTheDocument()
+    expect(screen.getByText('AI 想问：这页现在还留下些什么？')).toBeInTheDocument()
+    expect(screen.getByText('相近余味：AI 写下的旁证')).toBeInTheDocument()
+    expect(screen.getByText('窗边新叶')).toBeInTheDocument()
+    expect(screen.getByText('一点春天')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(generateDailyCurationDraft).toHaveBeenCalledWith({
+        curation: expect.objectContaining({
+          source: expect.objectContaining({ title: '2026.03.30 的一页' }),
+          version: 6,
+        }),
+      })
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"provider":"codex"')
+    })
+  })
+
+  it('shows an error instead of falling back when Codex curation fails', async () => {
+    const generateDailyCurationDraft = vi.fn().mockRejectedValue(new Error('模型暂时不可用'))
+
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
+    vi.stubGlobal('codex', { generateDailyCurationDraft })
+
+    renderHomePage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('今日回声没有生成好：模型暂时不可用。请重新生成一次。')
+    expect(screen.getByRole('button', { name: '重新生成今日策展' })).toBeEnabled()
+    expect(screen.queryByText('ARCHIVE NOTE')).not.toBeInTheDocument()
+    expect(window.localStorage.getItem('journal:daily-curations:v6')).toBeNull()
+  })
+
+  it('keeps selection rationale internal while rendering the curation', async () => {
     vi.stubGlobal('journalStore', {
       listIndex: vi.fn().mockResolvedValue([
         {
@@ -158,11 +228,16 @@ tags: [小雨, 散步]
     renderHomePage()
 
     expect(await screen.findByRole('heading', { name: '小雨便利店' })).toBeInTheDocument()
-    const anchorRegion = screen.getByLabelText('今日与旧页的双线索')
-    expect(anchorRegion).toHaveTextContent('主题线索')
-    expect(anchorRegion).toHaveTextContent('时间线索')
-    expect(within(anchorRegion).getByText(/今天的《雨天散步》让“.+”先亮起来/)).toBeInTheDocument()
-    expect(within(anchorRegion).getByText(/同一个月日|往年今日/)).toBeInTheDocument()
+    expect(screen.queryByText('为什么今天')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('今日与旧页的双线索')).not.toBeInTheDocument()
+    expect(screen.queryByText('主题线索')).not.toBeInTheDocument()
+    expect(screen.queryByText('时间线索')).not.toBeInTheDocument()
+    expect(screen.queryByText(/今天的《雨天散步》让“.+”先亮起来/)).not.toBeInTheDocument()
+    expect(screen.getByText(/只把相近的余味放在手边/)).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"anchors"')
+    })
   })
 
   it('keeps today weather in the header without repeating it as a support card', async () => {
@@ -227,7 +302,7 @@ tags: [雨天, 散步]
           curationDate: todayDateKey,
           generation: 0,
           source: { collections: [], date: '2024-01-01', excerpt: '旧缓存', tags: [], title: '旧缓存回声' },
-          version: 4,
+          version: 5,
         },
       }),
     )
@@ -239,7 +314,7 @@ tags: [雨天, 散步]
     expect(screen.queryByText('旧缓存回声')).not.toBeInTheDocument()
 
     await waitFor(() => {
-      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"version":5')
+      expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"version":6')
     })
   })
 

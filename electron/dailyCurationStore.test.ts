@@ -33,7 +33,7 @@ describe('dailyCurationStore', () => {
     await expect(loadDailyCuration(journalDirectory, '2026-05-09')).resolves.toMatchObject({
       curation: {
         curationDate: '2026-05-09',
-        version: 5,
+        version: 6,
       },
       filePath: saved.filePath,
     })
@@ -42,7 +42,7 @@ describe('dailyCurationStore', () => {
   it('rejects unsupported curation versions instead of silently migrating them', async () => {
     const curation = {
       ...createTestCuration(),
-      version: 4,
+      version: 5,
     }
 
     await expect(saveDailyCuration(journalDirectory, curation)).rejects.toThrow('version is not supported')

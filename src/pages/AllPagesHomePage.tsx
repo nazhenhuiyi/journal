@@ -6,6 +6,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
+  applyDailyCurationAiDraft,
   createDailyCuration,
   getLocalDateKey,
   type DailyCuration,
@@ -24,6 +25,10 @@ function getJournalStore() {
   return typeof window === 'undefined' ? undefined : window.journalStore
 }
 
+function getCodexStore() {
+  return typeof window === 'undefined' ? undefined : window.codex
+}
+
 function AllPagesHomePage() {
   const [journalIndex, setJournalIndex] = useState<JournalIndexEntry[]>([])
   const [indexLoadStatus, setIndexLoadStatus] = useState<IndexLoadStatus>(() =>
@@ -40,6 +45,8 @@ function AllPagesHomePage() {
   })
   const [isSavedCurationReady, setIsSavedCurationReady] = useState(() => !getJournalStore()?.loadDailyCuration)
   const hasSavedDraftRef = useRef(Boolean(savedDailyCuration))
+  const aiEnhancementRequestsRef = useRef(new Set<string>())
+  const [dailyCurationError, setDailyCurationError] = useState('')
   const [curationGeneration, setCurationGeneration] = useState(() => savedDailyCuration?.generation ?? 0)
   const draftedDailyCuration = useMemo(
     () => createDailyCuration(journalIndex, new Date(`${todayDateKey}T12:00:00`), curationGeneration, todayContext),
@@ -139,6 +146,7 @@ function AllPagesHomePage() {
     if (
       hasSavedDraftRef.current ||
       !draftedDailyCuration ||
+      getCodexStore()?.generateDailyCurationDraft ||
       indexLoadStatus !== 'ready' ||
       !isTodayContextReady ||
       !isSavedCurationReady
@@ -150,8 +158,62 @@ function AllPagesHomePage() {
     hasSavedDraftRef.current = true
   }, [draftedDailyCuration, indexLoadStatus, isSavedCurationReady, isTodayContextReady])
 
+  useEffect(() => {
+    const codex = getCodexStore()
+
+    if (
+      !codex?.generateDailyCurationDraft ||
+      !dailyCuration ||
+      dailyCuration.ai?.provider === 'codex' ||
+      indexLoadStatus !== 'ready' ||
+      !isTodayContextReady ||
+      !isSavedCurationReady
+    ) {
+      return
+    }
+
+    const requestKey = `${dailyCuration.id}:${dailyCuration.source.date}:${dailyCuration.generation}`
+
+    if (aiEnhancementRequestsRef.current.has(requestKey)) {
+      return
+    }
+
+    let isCancelled = false
+    aiEnhancementRequestsRef.current.add(requestKey)
+    setDailyCurationError('')
+
+    codex.generateDailyCurationDraft({ curation: dailyCuration })
+      .then((result) => {
+        if (isCancelled) {
+          return
+        }
+
+        const enhancedCuration = applyDailyCurationAiDraft(dailyCuration, result.draft, {
+          generatedAt: new Date().toISOString(),
+          provider: 'codex',
+          threadId: result.threadId,
+          usage: result.usage,
+        })
+
+        setSavedDailyCuration(enhancedCuration)
+        hasSavedDraftRef.current = true
+        setDailyCurationError('')
+        saveDailyCurationDraft(enhancedCuration)
+      })
+      .catch((error: unknown) => {
+        if (!isCancelled) {
+          setDailyCurationError(formatDailyCurationError(error))
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [dailyCuration, indexLoadStatus, isSavedCurationReady, isTodayContextReady])
+
   function regenerateDailyCuration() {
     const nextGeneration = curationGeneration + 1
+    const codex = getCodexStore()
     const nextCuration = createDailyCuration(
       journalIndex,
       new Date(`${todayDateKey}T12:00:00`),
@@ -160,10 +222,16 @@ function AllPagesHomePage() {
     )
 
     setCurationGeneration(nextGeneration)
+    setDailyCurationError('')
 
     if (nextCuration) {
-      saveDailyCurationDraft(nextCuration)
-      hasSavedDraftRef.current = true
+      if (!codex?.generateDailyCurationDraft) {
+        saveDailyCurationDraft(nextCuration)
+        hasSavedDraftRef.current = true
+      } else {
+        hasSavedDraftRef.current = false
+      }
+
       setSavedDailyCuration(nextCuration)
     }
   }
@@ -178,6 +246,7 @@ function AllPagesHomePage() {
       <DailyCurationSection
         dateLabel={homeDateLabel}
         curation={dailyCuration}
+        dailyCurationError={dailyCurationError}
         entryCount={journalIndex.length}
         indexLoadStatus={indexLoadStatus}
         onRegenerate={regenerateDailyCuration}
@@ -189,12 +258,14 @@ function AllPagesHomePage() {
 function DailyCurationSection({
   curation,
   dateLabel,
+  dailyCurationError,
   entryCount,
   indexLoadStatus,
   onRegenerate,
 }: {
   curation: DailyCuration | null
   dateLabel: string
+  dailyCurationError: string
   entryCount: number
   indexLoadStatus: IndexLoadStatus
   onRegenerate: () => void
@@ -217,7 +288,11 @@ function DailyCurationSection({
           </button>
         </div>
 
-        {curation ? (
+        {dailyCurationError ? (
+          <div className="all-pages-curation-empty is-error" role="alert">
+            <p>{dailyCurationError}</p>
+          </div>
+        ) : curation ? (
           <>
             <article className={`echo-curation-exhibit is-${curation.hero.cardStyle}`}>
               <figure className="echo-curation-media">
@@ -243,24 +318,10 @@ function DailyCurationSection({
               </figure>
 
               <div className="echo-curation-copy">
-                <p className="echo-curation-kicker">{curation.thesis.subtitle}</p>
+                <p className="echo-curation-kicker">{formatCurationSubtitle(curation)}</p>
                 <h2>{curation.source.title}</h2>
                 <blockquote>{curation.source.excerpt}</blockquote>
                 <p className="echo-curation-note">{curation.thesis.curatorVoice}</p>
-                <div className="echo-curation-reason">
-                  <span>为什么今天</span>
-                  <div className="echo-curation-anchors" aria-label="今日与旧页的双线索">
-                    <div>
-                      <strong>{curation.anchors.theme.label}</strong>
-                      <p>{curation.anchors.theme.body}</p>
-                    </div>
-                    <div>
-                      <strong>{curation.anchors.time.label}</strong>
-                      <p>{curation.anchors.time.body}</p>
-                    </div>
-                  </div>
-                  <p className="echo-curation-reason-summary">{curation.thesis.reason}</p>
-                </div>
                 <p className="echo-curation-question">{curation.closingQuestion}</p>
                 {curationTags.length > 0 ? (
                   <div className="echo-curation-tags" aria-label="策展标签">
@@ -277,9 +338,9 @@ function DailyCurationSection({
                   <article className={`echo-support-card is-${support.cardStyle}`} key={support.id}>
                     <span>{formatSupportRole(support.role)}</span>
                     <h3>{support.title}</h3>
-                    {support.items ? (
+                    {formatSupportItems(support, curation).length > 0 ? (
                       <dl>
-                        {support.items.map((item) => (
+                        {formatSupportItems(support, curation).map((item) => (
                           <div key={item.label}>
                             <dt>{item.label}</dt>
                             <dd>{item.value}</dd>
@@ -289,7 +350,7 @@ function DailyCurationSection({
                     ) : (
                       <p>{support.body}</p>
                     )}
-                    {support.connection ? <small>{support.connection}</small> : null}
+                    {support.connection ? <small>{formatSupportConnection(support.connection)}</small> : null}
                     {support.source ? (
                       <time dateTime={support.source.date}>{support.source.date.replace(/-/g, '.')}</time>
                     ) : null}
@@ -357,6 +418,24 @@ function formatTodayWeather(today?: TodayContext) {
   return [today.weather.text, today.weather.temperature, today.weather.location].filter(Boolean).join(' · ')
 }
 
+function formatDailyCurationError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return `今日回声没有生成好：${error.message}。请重新生成一次。`
+  }
+
+  return '今日回声没有生成好。请重新生成一次。'
+}
+
+function formatCurationSubtitle(curation: DailyCuration) {
+  if (/今天先翻一页.*关于|再看它和此刻/.test(curation.thesis.subtitle)) {
+    return curation.thesis.lens === 'season'
+      ? '今天先翻到同一段季节里的一页旧日子。'
+      : '今天先翻到一页旧日子，让它和此刻并排坐一会儿。'
+  }
+
+  return curation.thesis.subtitle
+}
+
 function formatSupportRole(role: DailyCuration['supports'][number]['role']) {
   const labels: Record<DailyCuration['supports'][number]['role'], string> = {
     'contrast-memory': '对照',
@@ -367,6 +446,44 @@ function formatSupportRole(role: DailyCuration['supports'][number]['role']) {
   }
 
   return labels[role]
+}
+
+function formatSupportItems(support: DailyCuration['supports'][number], curation: DailyCuration) {
+  if (support.role === 'receipt') {
+    const cleanedItems = cleanReceiptItems(support.items)
+
+    if (cleanedItems.length > 0) {
+      return cleanedItems
+    }
+
+    const todayLabel = curation.today.journal?.title ?? curation.curationDate.replace(/-/g, '.')
+    const tags = [...(curation.today.journal?.tags ?? []), ...curation.source.tags, ...curation.source.collections]
+
+    return [
+      { label: '夹页', value: curation.source.title },
+      { label: '今天', value: todayLabel },
+      { label: '日期', value: curation.source.date.replace(/-/g, '.') },
+      { label: '找零', value: tags[0] ? `一点${tags[0]}` : '一点普通日常' },
+    ]
+  }
+
+  return support.items ?? []
+}
+
+function formatSupportConnection(connection: string) {
+  return connection
+    .replace(/^共同线索：.+$/, '相近余味：另一种日常回声')
+    .replace(/^关系：/, '旁边也有：')
+}
+
+function cleanReceiptItems(items: DailyCuration['supports'][number]['items']) {
+  if (!items) {
+    return []
+  }
+
+  const blockedLabels = new Set(['主题线索', '时间线索', '旧页证据'])
+
+  return items.filter((item) => !blockedLabels.has(item.label))
 }
 
 function formatSeason(date: Date) {
@@ -430,7 +547,7 @@ function readFallbackDailyCuration(dateKey: string): DailyCuration | null {
     const parsed = JSON.parse(saved) as Record<string, DailyCuration>
     const curation = parsed[dateKey]
 
-    return curation?.version === 5 ? curation : null
+    return curation?.version === 6 ? curation : null
   } catch {
     return null
   }

@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Codex, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
+import type { DailyCuration, DailyCurationAiDraft } from '../../src/domain/dailyCuration'
 import type { JournalCodexSettingsFile } from '../codexSettings'
 
 export type CodexActivity = {
@@ -65,6 +66,16 @@ export type CodexFrontMatterDraftPayload = {
 
 export type CodexFrontMatterDraftResult = {
   draft: CodexFrontMatterDraft
+  threadId: string | null
+  usage: CodexAskResult['usage']
+}
+
+export type CodexDailyCurationDraftPayload = {
+  curation: DailyCuration
+}
+
+export type CodexDailyCurationDraftResult = {
+  draft: DailyCurationAiDraft
   threadId: string | null
   usage: CodexAskResult['usage']
 }
@@ -133,6 +144,42 @@ const frontMatterDraftSchema = {
     },
   },
   required: ['title', 'excerpt', 'tags', 'collections'],
+  additionalProperties: false,
+} as const
+
+const dailyCurationDraftSchema = {
+  type: 'object',
+  properties: {
+    subtitle: { type: 'string' },
+    curatorVoice: { type: 'string' },
+    closingQuestion: { type: 'string' },
+    themeNoteTitle: { type: 'string' },
+    themeNoteBody: { type: 'string' },
+    parallelConnection: { type: 'string' },
+    receiptItems: {
+      type: 'array',
+      minItems: 4,
+      maxItems: 4,
+      items: {
+        type: 'object',
+        properties: {
+          label: { type: 'string', enum: ['夹页', '今天', '日期', '找零'] },
+          value: { type: 'string' },
+        },
+        required: ['label', 'value'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [
+    'subtitle',
+    'curatorVoice',
+    'closingQuestion',
+    'themeNoteTitle',
+    'themeNoteBody',
+    'parallelConnection',
+    'receiptItems',
+  ],
   additionalProperties: false,
 } as const
 
@@ -238,6 +285,25 @@ export async function generateFrontMatterDraft(
     outputSchema: frontMatterDraftSchema,
   })
   const draft = parseFrontMatterDraftResponse(turn.finalResponse)
+
+  return {
+    draft,
+    threadId: thread.id,
+    usage: turn.usage,
+  }
+}
+
+export async function generateDailyCurationDraft(
+  payload: unknown,
+  workingDirectory: string,
+  settings: JournalCodexSettingsFile,
+): Promise<CodexDailyCurationDraftResult> {
+  const normalizedPayload = normalizeDailyCurationDraftPayload(payload)
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
+  const turn = await thread.run(buildDailyCurationDraftPrompt(normalizedPayload), {
+    outputSchema: dailyCurationDraftSchema,
+  })
+  const draft = parseDailyCurationDraftResponse(turn.finalResponse)
 
   return {
     draft,
@@ -370,6 +436,20 @@ function normalizeFrontMatterDraftPayload(payload: unknown): CodexFrontMatterDra
   }
 }
 
+function normalizeDailyCurationDraftPayload(payload: unknown): CodexDailyCurationDraftPayload {
+  if (!isRecord(payload)) {
+    throw new Error('今日回声请求格式不正确。')
+  }
+
+  const curation = asRecord(payload.curation)
+
+  if (!curation || curation.version !== 6 || !isRecord(curation.source) || !isRecord(curation.thesis)) {
+    throw new Error('今日回声需要一份可用的本地策展草稿。')
+  }
+
+  return { curation: curation as DailyCuration }
+}
+
 function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
   return `你是「且留」里的页边批注者。请只基于下面这一天的长日记生成 3-5 条页边批注草稿。
 
@@ -432,6 +512,66 @@ ${JSON.stringify(payload.currentFrontMatter ?? {}, null, 2)}
 
 JOURNAL_MARKDOWN:
 ${payload.journalMarkdown}`
+}
+
+function buildDailyCurationDraftPrompt(payload: CodexDailyCurationDraftPayload) {
+  const curation = payload.curation
+  const parallelSupport = curation.supports.find((support) => support.role === 'parallel-memory')
+
+  return `你是「且留」里的今日回声策展助手。请基于本地规则已经选出的旧页，为今日策展重写面向用户的展示文案。
+
+重要边界：
+- 本地规则已经完成“选择哪一页”，你不要重新选择旧页，不要质疑选择。
+- 你可以利用内部线索理解今天和旧页的关系，但最终文案不能暴露推理过程。
+- 禁止出现这些词或近似栏目名：为什么今天、主题线索、时间线索、旧页证据、召回、打分、候选、匹配、算法。
+- 不做心理诊断，不替用户下结论，不要像文学评论、咨询师或产品说明。
+- 语气像一个安静的日记阅读同伴：具体、克制、有画面，允许留白。
+- 只返回结构化 JSON，不要写解释。
+
+字段要求：
+- subtitle：18-36 个中文字符，一句话，像“今天先翻到一页旧日子……”这种含蓄引入，不要解释选择逻辑。
+- curatorVoice：70-130 个中文字符，读出旧页和今天可以并排看的感觉；可以引用标题，但不要复述内部线索。
+- closingQuestion：一个具体、轻的问题，适合让用户继续写。
+- themeNoteTitle：4-12 个中文字符，便签标题，可以含“便签”。
+- themeNoteBody：40-80 个中文字符，像贴在旁边的短便签。
+- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头。
+- receiptItems：固定 4 行，label 必须依次可用为“夹页 / 今天 / 日期 / 找零”，value 短一些。
+
+TODAY_CONTEXT:
+${JSON.stringify(curation.today, null, 2)}
+
+SELECTED_OLD_PAGE:
+${JSON.stringify({
+    date: curation.source.date,
+    title: curation.source.title,
+    excerpt: curation.source.excerpt,
+    tags: curation.source.tags,
+    collections: curation.source.collections,
+    recallLabel: curation.recall.label,
+  }, null, 2)}
+
+INTERNAL_CONTEXT_FOR_YOUR_UNDERSTANDING_ONLY_DO_NOT_EXPOSE:
+${JSON.stringify({
+    anchors: curation.anchors,
+    reason: curation.reason,
+  }, null, 2)}
+
+PARALLEL_PAGE_IF_ANY:
+${JSON.stringify(parallelSupport?.source ?? null, null, 2)}
+
+CURRENT_RULE_COPY_TO_IMPROVE:
+${JSON.stringify({
+    subtitle: curation.thesis.subtitle,
+    curatorVoice: curation.thesis.curatorVoice,
+    closingQuestion: curation.closingQuestion,
+    supports: curation.supports.map((support) => ({
+      role: support.role,
+      title: support.title,
+      body: support.body,
+      connection: support.connection,
+      items: support.items,
+    })),
+  }, null, 2)}`
 }
 
 function buildAnnotationChatPrompt(payload: CodexAnnotationChatPayload) {
@@ -605,6 +745,38 @@ function parseFrontMatterDraftResponse(response: string): CodexFrontMatterDraft 
     tags: stringArrayFromRecord(parsed, 'tags').slice(0, 8),
     title: stringFromRecord(parsed, 'title'),
   }
+}
+
+function parseDailyCurationDraftResponse(response: string): DailyCurationAiDraft {
+  const parsed = JSON.parse(response) as unknown
+
+  if (!isRecord(parsed)) {
+    throw new Error('Codex 没有返回可用的今日回声草稿。')
+  }
+
+  return {
+    closingQuestion: stringFromRecord(parsed, 'closingQuestion'),
+    curatorVoice: stringFromRecord(parsed, 'curatorVoice'),
+    parallelConnection: stringFromRecord(parsed, 'parallelConnection'),
+    receiptItems: normalizeDailyCurationReceiptItems(parsed.receiptItems),
+    subtitle: stringFromRecord(parsed, 'subtitle'),
+    themeNoteBody: stringFromRecord(parsed, 'themeNoteBody'),
+    themeNoteTitle: stringFromRecord(parsed, 'themeNoteTitle'),
+  }
+}
+
+function normalizeDailyCurationReceiptItems(value: unknown): DailyCurationAiDraft['receiptItems'] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item) => {
+    const record = asRecord(item)
+    const label = stringFromRecord(record, 'label')
+    const itemValue = stringFromRecord(record, 'value')
+
+    return label && itemValue ? [{ label, value: itemValue }] : []
+  }).slice(0, 4)
 }
 
 function stringFromRecord(record: Record<string, unknown>, key: string) {

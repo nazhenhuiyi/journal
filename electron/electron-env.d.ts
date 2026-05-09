@@ -147,6 +147,17 @@ interface Window {
         output_tokens: number
       } | null
     }>
+    generateDailyCurationDraft(payload: {
+      curation: import('../src/domain/dailyCuration').DailyCuration
+    }): Promise<{
+      draft: import('../src/domain/dailyCuration').DailyCurationAiDraft
+      threadId: string | null
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      } | null
+    }>
     chatWithAnnotation(payload: {
       date: string
       journalMarkdown: string
