@@ -10,11 +10,12 @@ import {
   applyDailyCurationAiDraft,
   createDailyCuration,
   createDailyCurationDisplay,
-  createDailyCurationReceiptItems,
+  createLegacyEchoObjectDeck,
   getLocalDateKey,
   type DailyCuration,
   type TodayContext,
 } from '../domain/dailyCuration'
+import { EchoObjectCardRenderer } from '../components/MemoryObjectCards'
 import { parseJournalMarkdown } from '../domain/markdown/parseJournalMarkdown'
 import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
@@ -284,6 +285,7 @@ function DailyCurationSection({
   onRegenerate: () => void
 }) {
   const display = curation ? createDailyCurationDisplay(curation) : null
+  const objects = curation ? (curation.objects ?? createLegacyEchoObjectDeck(curation)) : []
 
   return (
     <section
@@ -382,29 +384,12 @@ function DailyCurationSection({
                 ) : null}
               </div>
             </article>
-            {curation.supports.length > 0 ? (
-              <div className="echo-support-grid" aria-label="辅助回声">
-                {curation.supports.map((support) => (
-                  <article className={`echo-support-card is-${support.cardStyle} is-${support.role}`} key={support.id}>
-                    <span>{formatSupportRole(support.role)}</span>
-                    <h3>{support.title}</h3>
-                    {formatSupportItems(support, curation).length > 0 ? (
-                      <dl>
-                        {formatSupportItems(support, curation).map((item) => (
-                          <div key={item.label}>
-                            <dt>{item.label}</dt>
-                            <dd>{item.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : (
-                      <p>{support.body}</p>
-                    )}
-                    {support.connection ? <small>{formatSupportConnection(support.connection)}</small> : null}
-                    {support.source ? (
-                      <time dateTime={support.source.date}>{support.source.date.replace(/-/g, '.')}</time>
-                    ) : null}
-                  </article>
+            {objects.length > 0 ? (
+              <div className="echo-object-grid" aria-label="今日记忆物件">
+                {objects.map((object) => (
+                  <div className={`echo-object-card is-${object.slot} is-${object.style}`} key={object.id}>
+                    <EchoObjectCardRenderer object={object} resolveImageSrc={resolveJournalMemoryImageSrc} />
+                  </div>
                 ))}
               </div>
             ) : null}
@@ -474,57 +459,6 @@ function formatDailyCurationError(error: unknown) {
   }
 
   return '今日回声没有生成好。请重新生成一次。'
-}
-
-function formatSupportRole(role: DailyCuration['supports'][number]['role']) {
-  const labels: Record<DailyCuration['supports'][number]['role'], string> = {
-    'contrast-memory': '对照',
-    'parallel-memory': '旁证',
-    receipt: '小票',
-    'scene-memory': '场景',
-    'theme-note': '便签',
-  }
-
-  return labels[role]
-}
-
-function formatSupportItems(support: DailyCuration['supports'][number], curation: DailyCuration) {
-  if (support.role === 'receipt') {
-    const cleanedItems = cleanReceiptItems(support.items)
-
-    if (cleanedItems.length > 0 && !hasLegacyReceiptItems(cleanedItems)) {
-      return cleanedItems
-    }
-
-    const existingByLabel = new Map(cleanedItems.map((item) => [item.label, item.value]))
-
-    return createDailyCurationReceiptItems(curation).map((item) => ({
-      ...item,
-      value: existingByLabel.get(item.label) ?? item.value,
-    }))
-  }
-
-  return support.items ?? []
-}
-
-function formatSupportConnection(connection: string) {
-  return connection
-    .replace(/^共同线索：.+$/, '相近余味：另一种日常回声')
-    .replace(/^关系：/, '旁边也有：')
-}
-
-function cleanReceiptItems(items: DailyCuration['supports'][number]['items']) {
-  if (!items) {
-    return []
-  }
-
-  const blockedLabels = new Set(['主题线索', '时间线索', '旧页证据'])
-
-  return items.filter((item) => !blockedLabels.has(item.label))
-}
-
-function hasLegacyReceiptItems(items: Array<{ label: string; value: string }>) {
-  return items.some((item) => item.label === '夹页' || item.label === '日期')
 }
 
 function formatSeason(date: Date) {

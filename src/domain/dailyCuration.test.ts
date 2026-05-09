@@ -3,6 +3,7 @@ import {
   applyDailyCurationAiDraft,
   createDailyCuration,
   createDailyCurationDisplay,
+  createLegacyEchoObjectDeck,
   type DailyCuration,
   type DailyCurationAiDraft,
 } from './dailyCuration'
@@ -25,6 +26,43 @@ describe('dailyCuration', () => {
       title: curation.source.title,
     })
     expect(display.main.tags).toEqual(['春天'])
+  })
+
+  it('creates five candidate memory objects for the daily echo', () => {
+    const curation = createTestCuration()
+
+    expect(curation.objects?.map((object) => object.slot)).toEqual([
+      'today-thread',
+      'nearby-memory',
+      'archive-ledger',
+      'daily-receipt',
+      'reply-ticket',
+    ])
+    expect(curation.objects?.find((object) => object.slot === 'reply-ticket')?.action).toMatchObject({
+      label: '写一句回应',
+      to: `/calendar?date=${curation.today.date}`,
+    })
+  })
+
+  it('can build full object candidates from a single historical entry', () => {
+    const curation = createDailyCuration([createSingleEntry()], new Date('2026-05-09T12:00:00'))
+
+    expect(curation?.objects).toHaveLength(5)
+    expect(curation?.objects?.find((object) => object.slot === 'nearby-memory')?.source?.date).toBe('2026-03-30')
+    expect(curation?.objects?.find((object) => object.slot === 'archive-ledger')?.rows).toHaveLength(3)
+  })
+
+  it('recreates object cards for saved v6 curations that do not have objects yet', () => {
+    const curation = createTestCuration()
+    const legacyDeck = createLegacyEchoObjectDeck({ ...curation, objects: undefined })
+
+    expect(legacyDeck.map((object) => object.slot)).toEqual([
+      'today-thread',
+      'nearby-memory',
+      'archive-ledger',
+      'daily-receipt',
+      'reply-ticket',
+    ])
   })
 
   it('falls back to anchor copy when AI copy repeats the source title', () => {
@@ -52,9 +90,21 @@ describe('dailyCuration', () => {
     const curation = createTestCuration()
     const originalThemeNote = curation.supports.find((support) => support.role === 'theme-note')
     const originalParallel = curation.supports.find((support) => support.role === 'parallel-memory')
+    const originalThread = curation.objects?.find((object) => object.slot === 'today-thread')
     const draft: DailyCurationAiDraft = {
       closingQuestion: 'AI 想问：这页现在还留下些什么？',
       curatorVoice: 'AI 读到这页旧日子没有急着解释什么，只把窗边的新叶和今天并排放下。',
+      objectDrafts: [
+        {
+          body: 'AI 把这张旧页轻轻放在旁边。',
+          slot: 'today-thread',
+          title: 'AI 便签',
+        },
+        {
+          question: 'AI 想问：这页现在还留下些什么？',
+          slot: 'reply-ticket',
+        },
+      ],
       parallelConnection: '相近余味：AI 写下的旁证',
       receiptItems: [
         { label: '今天', value: '今天' },
@@ -84,12 +134,69 @@ describe('dailyCuration', () => {
     expect(refined.supports.find((support) => support.role === 'parallel-memory')?.connection).toBe(
       originalParallel?.connection,
     )
+    expect(refined.objects?.find((object) => object.slot === 'today-thread')).toMatchObject({
+      body: originalThread?.body,
+      title: originalThread?.title,
+    })
     expect(refined.supports.find((support) => support.role === 'receipt')?.items).toEqual([
       { label: '今天', value: '今天' },
       { label: '回声', value: '春天' },
       { label: '天气', value: '春天' },
       { label: '找零', value: '一点春天' },
     ])
+  })
+
+  it('lets AI choose object count and order without changing selected sources', () => {
+    const curation = createTestCuration()
+    const originalNearby = curation.objects?.find((object) => object.slot === 'nearby-memory')
+    const originalReceipt = curation.objects?.find((object) => object.slot === 'daily-receipt')
+    const refined = applyDailyCurationAiDraft(
+      curation,
+      {
+        objectDrafts: [
+          {
+            enabled: false,
+            slot: 'today-thread',
+          },
+          {
+            body: '旁边那页不解释今天，只把书桌上的安静也放到同一张桌面。',
+            slot: 'nearby-memory',
+            title: '书桌旁边',
+          },
+          {
+            items: [
+              { label: '今天', value: '窗边新叶' },
+              { label: '回声', value: '旧书桌' },
+              { label: '天气', value: '春天' },
+              { label: '找零', value: '一点安静' },
+            ],
+            slot: 'daily-receipt',
+          },
+        ],
+      },
+      {
+        generatedAt: '2026-05-09T12:00:00.000Z',
+        provider: 'codex',
+        threadId: null,
+        usage: null,
+      },
+    )
+
+    expect(refined.objects?.map((object) => object.slot)).toEqual(['nearby-memory', 'daily-receipt'])
+    expect(refined.objects?.find((object) => object.slot === 'nearby-memory')).toMatchObject({
+      body: '旁边那页不解释今天，只把书桌上的安静也放到同一张桌面。',
+      source: originalNearby?.source,
+      title: '书桌旁边',
+    })
+    expect(refined.objects?.find((object) => object.slot === 'daily-receipt')).toMatchObject({
+      id: originalReceipt?.id,
+      items: [
+        { label: '今天', value: '窗边新叶' },
+        { label: '回声', value: '旧书桌' },
+        { label: '天气', value: '春天' },
+        { label: '找零', value: '一点安静' },
+      ],
+    })
   })
 })
 
@@ -131,4 +238,21 @@ function createTestCuration(): DailyCuration {
   }
 
   return curation
+}
+
+function createSingleEntry(): JournalIndexEntry {
+  return {
+    collections: [],
+    date: '2026-03-30',
+    favorite: false,
+    fileName: '2026-03-30.md',
+    filePath: '/Users/zilin/.journal/2026-03-30.md',
+    images: [],
+    murmurs: [],
+    searchableText: '只有这一页旧日记，窗边那盆植物又长出一点新叶。',
+    stats: { imageCount: 0, murmurCount: 0, wordCount: 20 },
+    tags: ['春天'],
+    title: '窗边新叶',
+    updatedAt: null,
+  }
 }

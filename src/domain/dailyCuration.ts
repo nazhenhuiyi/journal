@@ -1,6 +1,8 @@
 import type { JournalIndexEntry } from './journalIndex/types'
 
 export type DailyCurationArtifact = 'postcard' | 'library-card' | 'receipt'
+export type EchoObjectSlot = 'today-thread' | 'nearby-memory' | 'archive-ledger' | 'daily-receipt' | 'reply-ticket'
+export type EchoObjectStyle = 'sticky' | 'postcard' | 'polaroid' | 'library-card' | 'receipt' | 'movie-ticket'
 
 export type TodayContext = {
   date: string
@@ -73,6 +75,60 @@ export type EchoSupportCard = {
   cardStyle: 'sticky' | 'receipt' | 'library' | 'mini-postcard'
 }
 
+export type EchoObjectCard = {
+  id: string
+  slot: EchoObjectSlot
+  style: EchoObjectStyle
+  title: string
+  body: string
+  meta?: string
+  tone?: string
+  kicker?: string
+  date?: string
+  place?: string
+  caption?: string
+  connection?: string
+  source?: {
+    date: string
+    title: string
+    excerpt: string
+  }
+  image?: {
+    src: string
+    alt: string
+    caption?: string
+  }
+  items?: Array<{
+    label: string
+    value: string
+  }>
+  rows?: Array<{
+    label: string
+    value: string
+    note: string
+    dateTime?: string
+  }>
+  action?: {
+    label: string
+    to: string
+  }
+}
+
+export type DailyCurationAiObjectDraft = {
+  slot?: EchoObjectSlot
+  enabled?: boolean
+  title?: string
+  body?: string
+  meta?: string
+  caption?: string
+  connection?: string
+  question?: string
+  items?: Array<{
+    label: string
+    value: string
+  }>
+}
+
 export type DailyCurationAiDraft = {
   subtitle?: string
   curatorVoice?: string
@@ -84,6 +140,7 @@ export type DailyCurationAiDraft = {
     label: string
     value: string
   }>
+  objectDrafts?: DailyCurationAiObjectDraft[]
 }
 
 export type DailyCuration = {
@@ -97,6 +154,7 @@ export type DailyCuration = {
   thesis: CurationThesis
   hero: EchoArtifact
   supports: EchoSupportCard[]
+  objects?: EchoObjectCard[]
   closingQuestion: string
   // Compatibility fields for the current renderer while the curation package evolves.
   artifact: DailyCurationArtifact
@@ -210,6 +268,7 @@ export function createDailyCuration(
   const topic = inferEntryTopic(source, todayContext)
   const anchors = createCurationAnchors(selected, date, todayContext, topic)
   const recallReason = createReason(selected, date, todayContext, anchors)
+  const closingQuestion = questions[questionIndex]
   const hero: EchoArtifact = {
     cardStyle: source.images[0] ? 'photo' : topic === '做点吃的' ? 'receipt' : 'letter',
     collections: source.collections,
@@ -229,18 +288,20 @@ export function createDailyCuration(
   }
   const thesis = createThesis(hero, selected, todayContext, noteIndex, anchors)
   const supports = createSupportCards(candidates, selected, todayContext, generation)
+  const objects = createEchoObjectDeck(candidates, selected, todayContext, generation, closingQuestion, anchors)
 
   return {
     anchors,
     artifact: chooseArtifact(source, generation),
     curationDate,
     curatorNote: createCuratorNote(sourceTitle, sourceExcerpt, noteIndex),
-    closingQuestion: questions[questionIndex],
+    closingQuestion,
     generatedAt: new Date().toISOString(),
     generation,
     hero,
     id: `daily-curation-${curationDate}-${generation}`,
-    question: questions[questionIndex],
+    objects,
+    question: closingQuestion,
     reason: createReason(selected, date, todayContext, anchors),
     recall: {
       label: recallLabel,
@@ -319,6 +380,87 @@ export function createDailyCurationReceiptItems(curation: DailyCuration) {
   })
 }
 
+export function createLegacyEchoObjectDeck(curation: DailyCuration): EchoObjectCard[] {
+  const topic = inferCurationTopic(curation)
+  const themeSupport = curation.supports.find((support) => support.role === 'theme-note')
+  const parallelSupport = curation.supports.find((support) => support.role === 'parallel-memory')
+  const receiptSupport = curation.supports.find((support) => support.role === 'receipt')
+  const nearbySource = parallelSupport?.source ?? {
+    date: curation.source.date,
+    excerpt: curation.source.excerpt,
+    title: curation.source.title,
+  }
+  const receiptItems = receiptSupport?.items?.length ? receiptSupport.items : createDailyCurationReceiptItems(curation)
+
+  return [
+    {
+      body: themeSupport?.body ?? createFallbackDisplayConnectionNote(curation),
+      id: `object-today-thread-${curation.source.date}-${curation.generation}`,
+      meta: `轻连接 · ${curation.today.weekday}`,
+      slot: 'today-thread',
+      style: 'sticky',
+      title: themeSupport?.title ?? `${topic}便签`,
+      tone: createStickyTone(`${curation.id}:thread`),
+    },
+    {
+      body: nearbySource.excerpt,
+      caption: parallelSupport?.connection,
+      connection: parallelSupport?.connection,
+      date: nearbySource.date,
+      id: `object-nearby-${nearbySource.date}-${curation.generation}`,
+      image: curation.source.image
+        ? {
+            alt: curation.source.image.caption ?? nearbySource.title,
+            caption: curation.source.image.caption,
+            src: curation.source.image.src,
+          }
+        : undefined,
+      meta: formatObjectDate(nearbySource.date),
+      place: createObjectPlace(curation.source.collections, curation.source.tags, curation.today),
+      slot: 'nearby-memory',
+      source: nearbySource,
+      style: 'postcard',
+      title: nearbySource.title,
+      tone: createPostcardTone(`${nearbySource.date}:legacy`),
+    },
+    {
+      body: curation.source.excerpt,
+      id: `object-ledger-${curation.source.date}-${curation.generation}`,
+      meta: `馆藏号 ${createArchiveNo(curation.source.date)}`,
+      rows: createLegacyArchiveRows(curation, parallelSupport?.source),
+      slot: 'archive-ledger',
+      source: {
+        date: curation.source.date,
+        excerpt: curation.source.excerpt,
+        title: curation.source.title,
+      },
+      style: 'library-card',
+      title: '这页的借阅记录',
+    },
+    {
+      body: receiptSupport?.body ?? receiptItems.map((item) => item.value).join(' / '),
+      id: `object-receipt-${curation.source.date}-${curation.generation}`,
+      items: receiptItems,
+      meta: createReceiptOrderNo(curation.today.date, curation.generation),
+      slot: 'daily-receipt',
+      style: 'receipt',
+      title: receiptSupport?.title ?? '今日回声小票',
+    },
+    {
+      action: {
+        label: '写一句回应',
+        to: `/calendar?date=${encodeURIComponent(curation.today.date)}`,
+      },
+      body: curation.closingQuestion,
+      id: `object-reply-${curation.today.date}-${curation.generation}`,
+      meta: 'KEEP STUB',
+      slot: 'reply-ticket',
+      style: 'movie-ticket',
+      title: '给今天留一张票',
+    },
+  ]
+}
+
 export function applyDailyCurationAiDraft(
   curation: DailyCuration,
   draft: DailyCurationAiDraft,
@@ -331,6 +473,7 @@ export function applyDailyCurationAiDraft(
   const themeNoteBody = cleanAiText(draft.themeNoteBody, 160)
   const parallelConnection = cleanAiText(draft.parallelConnection, 44)
   const receiptItems = normalizeAiReceiptItems(draft.receiptItems, curation)
+  const objects = applyAiObjectDrafts(curation.objects ?? createLegacyEchoObjectDeck(curation), draft.objectDrafts, receiptItems)
   const supports = curation.supports.map((support) => {
     if (support.role === 'theme-note') {
       return {
@@ -361,6 +504,7 @@ export function applyDailyCurationAiDraft(
     ...curation,
     ai: metadata,
     closingQuestion: closingQuestion ?? curation.closingQuestion,
+    objects,
     question: closingQuestion ?? curation.question,
     supports,
     thesis: {
@@ -369,6 +513,88 @@ export function applyDailyCurationAiDraft(
       subtitle: subtitle ?? curation.thesis.subtitle,
     },
   }
+}
+
+function applyAiObjectDrafts(
+  objects: EchoObjectCard[],
+  drafts: DailyCurationAiDraft['objectDrafts'],
+  legacyReceiptItems?: Array<{ label: string; value: string }>,
+) {
+  if (!Array.isArray(drafts) || drafts.length === 0) {
+    return objects
+  }
+
+  const objectBySlot = new Map(objects.map((object) => [object.slot, object]))
+  const selected: EchoObjectCard[] = []
+  const seenSlots = new Set<EchoObjectSlot>()
+
+  drafts.forEach((draft) => {
+    if (!draft.slot || !isEchoObjectSlot(draft.slot) || seenSlots.has(draft.slot) || draft.enabled === false) {
+      return
+    }
+
+    const object = objectBySlot.get(draft.slot)
+
+    if (!object) {
+      return
+    }
+
+    seenSlots.add(draft.slot)
+    selected.push(applyAiObjectDraft(object, draft, legacyReceiptItems))
+  })
+
+  return selected.length > 0 ? selected : objects
+}
+
+function applyAiObjectDraft(
+  object: EchoObjectCard,
+  draft: DailyCurationAiObjectDraft,
+  legacyReceiptItems?: Array<{ label: string; value: string }>,
+) {
+  const title = cleanAiText(draft.title, 36)
+  const body = cleanAiText(draft.body, 180)
+  const meta = cleanAiText(draft.meta, 36)
+  const caption = cleanAiText(draft.caption, 72)
+  const connection = cleanAiText(draft.connection, 72)
+  const question = object.slot === 'reply-ticket' ? cleanAiText(draft.question, 96) : undefined
+  const items = normalizeAiObjectItems(draft.items, object.items) ?? (object.slot === 'daily-receipt' ? legacyReceiptItems : undefined)
+
+  return {
+    ...object,
+    body: question ?? body ?? object.body,
+    caption: caption ?? object.caption,
+    connection: connection ?? object.connection,
+    items: items ?? object.items,
+    meta: meta ?? object.meta,
+    title: title ?? object.title,
+  }
+}
+
+function isEchoObjectSlot(value: string): value is EchoObjectSlot {
+  return ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'].includes(value)
+}
+
+function normalizeAiObjectItems(
+  items: DailyCurationAiObjectDraft['items'],
+  fallback: EchoObjectCard['items'],
+) {
+  if (!Array.isArray(items) || !fallback?.length) {
+    return undefined
+  }
+
+  const byLabel = new Map(
+    items.flatMap((item) => {
+      const label = cleanAiText(item.label, 8)
+      const value = cleanAiText(item.value, 28)
+
+      return label && value ? [[label, value] as const] : []
+    }),
+  )
+
+  return fallback.map((item) => ({
+    label: item.label,
+    value: byLabel.get(item.label) ?? item.value,
+  }))
 }
 
 function scoreEntry(
@@ -642,6 +868,258 @@ function createSupportCards(
   })
 
   return cards.slice(0, 3)
+}
+
+function createEchoObjectDeck(
+  candidates: ScoredEntry[],
+  selected: ScoredEntry,
+  todayContext: TodayContext,
+  generation: number,
+  closingQuestion: string,
+  anchors: CurationAnchors,
+): EchoObjectCard[] {
+  const topic = inferEntryTopic(selected.entry, todayContext)
+  const sourceTitle = selected.entry.title ?? createEntryTitle(selected.entry)
+  const sourceExcerpt = selected.entry.excerpt ?? createEntryExcerpt(selected.entry.searchableText)
+  const nearby = selectNearbyObjectCandidate(candidates, selected) ?? selected
+  const nearbyEntry = nearby.entry
+  const nearbyTitle = nearbyEntry.title ?? createEntryTitle(nearbyEntry)
+  const nearbyExcerpt = nearbyEntry.excerpt ?? createEntryExcerpt(nearbyEntry.searchableText)
+  const nearbyImage = nearbyEntry.images[0]
+  const receiptItems = createReceiptItems(selected.entry, todayContext)
+
+  return [
+    {
+      body: createTodayThreadBody(selected.entry, todayContext, topic, anchors),
+      id: `object-today-thread-${selected.entry.date}-${generation}`,
+      meta: `轻连接 · ${todayContext.weekday}`,
+      slot: 'today-thread',
+      style: 'sticky',
+      title: `${topic}便签`,
+      tone: createStickyTone(`${todayContext.date}:${selected.entry.date}:thread:${generation}`),
+    },
+    {
+      body: nearbyExcerpt,
+      caption: createParallelConnection(selected.entry, nearbyEntry, todayContext),
+      connection: createParallelConnection(selected.entry, nearbyEntry, todayContext),
+      date: nearbyEntry.date,
+      id: `object-nearby-${nearbyEntry.date}-${generation}`,
+      image: nearbyImage
+        ? {
+            alt: nearbyImage.caption ?? nearbyTitle,
+            caption: nearbyImage.caption,
+            src: nearbyImage.src,
+          }
+        : undefined,
+      meta: nearby === selected ? '同一页再看' : '旁边一页',
+      place: createObjectPlace(nearbyEntry.collections, nearbyEntry.tags, todayContext),
+      slot: 'nearby-memory',
+      source: {
+        date: nearbyEntry.date,
+        excerpt: nearbyExcerpt,
+        title: nearbyTitle,
+      },
+      style: nearbyImage && stableIndex(`${nearbyEntry.date}:object-style:${generation}`, 2) === 1 ? 'polaroid' : 'postcard',
+      title: nearby === selected ? '这一页还有余光' : nearbyTitle,
+      tone: createPostcardTone(`${nearbyEntry.date}:${generation}`),
+    },
+    {
+      body: sourceExcerpt,
+      id: `object-ledger-${selected.entry.date}-${generation}`,
+      meta: `馆藏号 ${createArchiveNo(selected.entry.date)}`,
+      rows: createArchiveLedgerRows(selected.entry, nearby === selected ? undefined : nearbyEntry, todayContext),
+      slot: 'archive-ledger',
+      source: {
+        date: selected.entry.date,
+        excerpt: sourceExcerpt,
+        title: sourceTitle,
+      },
+      style: 'library-card',
+      title: '这页的借阅记录',
+    },
+    {
+      body: createReceiptBody(selected.entry, todayContext),
+      id: `object-receipt-${selected.entry.date}-${generation}`,
+      items: receiptItems,
+      meta: createReceiptOrderNo(todayContext.date, generation),
+      slot: 'daily-receipt',
+      style: 'receipt',
+      title: '今日回声小票',
+    },
+    {
+      action: {
+        label: '写一句回应',
+        to: `/calendar?date=${encodeURIComponent(todayContext.date)}`,
+      },
+      body: closingQuestion,
+      id: `object-reply-${todayContext.date}-${generation}`,
+      meta: 'KEEP STUB',
+      slot: 'reply-ticket',
+      style: 'movie-ticket',
+      title: '给今天留一张票',
+    },
+  ]
+}
+
+function selectNearbyObjectCandidate(candidates: ScoredEntry[], selected: ScoredEntry) {
+  const alternates = candidates.filter((candidate) => candidate.entry.date !== selected.entry.date)
+  const topAlternate = alternates[0]
+
+  if (!topAlternate) {
+    return null
+  }
+
+  return (
+    alternates
+      .slice(0, 5)
+      .find((candidate) => candidate.entry.images.length > 0 && topAlternate.score - candidate.score <= 12) ?? topAlternate
+  )
+}
+
+function createTodayThreadBody(
+  entry: JournalIndexEntry,
+  todayContext: TodayContext,
+  topic: string,
+  anchors: CurationAnchors,
+) {
+  const todayTitle = todayContext.journal?.title?.trim()
+  const entryTitle = entry.title ?? createEntryTitle(entry)
+
+  if (todayTitle) {
+    return `今天的《${todayTitle}》和旧页里的“${topic}”搭上了一根细线。先不解释，只把《${entryTitle}》放到手边。`
+  }
+
+  if (anchors.primary === 'time') {
+    return `日历把这页递回来了。它不急着说明什么，只把同一段季节里的手感放到今天旁边。`
+  }
+
+  return `这页把“${topic}”留得很具体。今天再看，只取它照亮的那一点手边动静。`
+}
+
+function createArchiveLedgerRows(
+  entry: JournalIndexEntry,
+  nearby: JournalIndexEntry | undefined,
+  todayContext: TodayContext,
+): EchoObjectCard['rows'] {
+  const rows: NonNullable<EchoObjectCard['rows']> = entry.murmurs.slice(0, 3).map((murmur) => ({
+    dateTime: createLedgerDateTime(entry.date, murmur.time),
+    label: murmur.time,
+    note: createEntryExcerpt(murmur.excerpt),
+    value: '碎碎念',
+  }))
+
+  addArchiveLedgerRow(rows, {
+    label: '旧页',
+    note: createEntryExcerpt(entry.excerpt ?? entry.searchableText),
+    value: entry.title ?? createEntryTitle(entry),
+  })
+
+  if (nearby) {
+    addArchiveLedgerRow(rows, {
+      label: '旁页',
+      note: createEntryExcerpt(nearby.excerpt ?? nearby.searchableText),
+      value: nearby.title ?? createEntryTitle(nearby),
+    })
+  }
+
+  if (todayContext.journal?.excerpt) {
+    addArchiveLedgerRow(rows, {
+      label: '今天',
+      note: createEntryExcerpt(todayContext.journal.excerpt),
+      value: todayContext.journal.title ?? '今日日记',
+    })
+  }
+
+  addArchiveLedgerRow(rows, {
+    label: '回看',
+    note: '把这页先借到今天桌上，只看它照亮的一点手边动静。',
+    value: '今日回声',
+  })
+  addArchiveLedgerRow(rows, {
+    label: '续借',
+    note: '没有更多片段时，就把这一页安静地多放一会儿。',
+    value: todayContext.season,
+  })
+
+  return rows.slice(0, 3)
+}
+
+function createLegacyArchiveRows(
+  curation: DailyCuration,
+  nearby: EchoSupportCard['source'] | undefined,
+): EchoObjectCard['rows'] {
+  const rows: NonNullable<EchoObjectCard['rows']> = []
+
+  addArchiveLedgerRow(rows, {
+    label: '旧页',
+    note: curation.source.excerpt,
+    value: curation.source.title,
+  })
+
+  if (nearby) {
+    addArchiveLedgerRow(rows, {
+      label: '旁页',
+      note: nearby.excerpt,
+      value: nearby.title,
+    })
+  }
+
+  if (curation.today.journal?.excerpt) {
+    addArchiveLedgerRow(rows, {
+      label: '今天',
+      note: curation.today.journal.excerpt,
+      value: curation.today.journal.title ?? '今日日记',
+    })
+  }
+
+  addArchiveLedgerRow(rows, {
+    label: '回看',
+    note: curation.thesis.curatorVoice,
+    value: curation.recall.label,
+  })
+  addArchiveLedgerRow(rows, {
+    label: '续借',
+    note: '没有更多片段时，就把这一页安静地多放一会儿。',
+    value: curation.today.season,
+  })
+
+  return rows.slice(0, 3)
+}
+
+function addArchiveLedgerRow(rows: NonNullable<EchoObjectCard['rows']>, row: NonNullable<EchoObjectCard['rows']>[number]) {
+  if (rows.length >= 3 || rows.some((existing) => existing.note === row.note)) {
+    return
+  }
+
+  rows.push(row)
+}
+
+function createLedgerDateTime(date: string, time: string) {
+  return /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date
+}
+
+function createStickyTone(seed: string) {
+  return ['honey', 'mist', 'leaf'][stableIndex(seed, 3)]
+}
+
+function createPostcardTone(seed: string) {
+  return ['river', 'bookshop'][stableIndex(seed, 2)]
+}
+
+function createObjectPlace(collections: string[], tags: string[], todayContext: TodayContext) {
+  return collections[0] ?? tags[0] ?? todayContext.weather?.location ?? todayContext.season
+}
+
+function createArchiveNo(date: string) {
+  return `MEM-${date.replace(/-/g, '')}`
+}
+
+function createReceiptOrderNo(date: string, generation: number) {
+  return `${date.slice(5).replace('-', '')}-${`${generation + 1}`.padStart(2, '0')}`
+}
+
+function formatObjectDate(date: string) {
+  return date.replace(/-/g, '.')
 }
 
 function createReceiptBody(entry: JournalIndexEntry, todayContext: TodayContext) {

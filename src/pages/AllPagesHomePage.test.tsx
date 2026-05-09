@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AllPagesHomePage from './AllPagesHomePage'
@@ -88,10 +88,18 @@ describe('AllPagesHomePage', () => {
     expect(screen.queryByText('主题线索')).not.toBeInTheDocument()
     expect(screen.queryByText('时间线索')).not.toBeInTheDocument()
     expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
-    expect(screen.getByLabelText('辅助回声')).toBeInTheDocument()
-    expect(screen.getByText('便签')).toBeInTheDocument()
-    expect(screen.getByText('小票')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '打开 2026-03-30 的日记' })).toHaveAttribute(
+    const objectDeck = screen.getByLabelText('今日记忆物件')
+    expect(objectDeck).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('heading', { name: /便签/ })).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('heading', { name: '这页的借阅记录' })).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('heading', { name: '今日回声小票' })).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('heading', { name: '给今天留一张票' })).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('link', { name: /打开 \d{4}-\d{2}-\d{2} 的日记/ })).toBeInTheDocument()
+    expect(within(objectDeck).getByRole('link', { name: '写一句回应' })).toHaveAttribute(
+      'href',
+      `/calendar?date=${getLocalDateKey()}`,
+    )
+    expect(screen.getAllByRole('link', { name: '打开 2026-03-30 的日记' })[0]).toHaveAttribute(
       'href',
       '/calendar?date=2026-03-30',
     )
@@ -141,6 +149,31 @@ describe('AllPagesHomePage', () => {
           { label: '天气', value: '春天' },
           { label: '找零', value: '一点春天' },
         ],
+        objectDrafts: [
+          {
+            body: '这张旧页先放在旁边，让今天不用立刻解释自己。',
+            slot: 'today-thread',
+            title: '窗边便签',
+          },
+          {
+            caption: '相近余味：窗边的旁证',
+            connection: '相近余味：窗边的旁证',
+            slot: 'nearby-memory',
+          },
+          {
+            items: [
+              { label: '今天', value: '今天' },
+              { label: '回声', value: '春天' },
+              { label: '天气', value: '春天' },
+              { label: '找零', value: '一点春天' },
+            ],
+            slot: 'daily-receipt',
+          },
+          {
+            question: '这页现在还留下些什么？',
+            slot: 'reply-ticket',
+          },
+        ],
         subtitle: '窗边那页旧日子。',
         themeNoteBody: '这张旧页先放在旁边，让今天不用立刻解释自己。',
         themeNoteTitle: '窗边便签',
@@ -170,10 +203,10 @@ describe('AllPagesHomePage', () => {
     expect(await screen.findByText('窗边那页旧日子。')).toBeInTheDocument()
     expect(screen.getByText(/这页旧日子没有急着解释什么/)).toBeInTheDocument()
     expect(screen.getByText('窗边便签')).toBeInTheDocument()
-    expect(screen.getByText('这页现在还留下些什么？')).toBeInTheDocument()
+    expect(screen.getAllByText('这页现在还留下些什么？').length).toBeGreaterThan(0)
     expect(screen.getByText('相近余味：窗边的旁证')).toBeInTheDocument()
     expect(screen.getAllByText('春天').length).toBeGreaterThan(0)
-    expect(screen.getByText('一点春天')).toBeInTheDocument()
+    expect(screen.getAllByText('一点春天').length).toBeGreaterThan(0)
 
     await waitFor(() => {
       expect(generateDailyCurationDraft).toHaveBeenCalledWith({
@@ -238,7 +271,7 @@ tags: [小雨, 散步]
     expect(screen.queryByText('主题线索')).not.toBeInTheDocument()
     expect(screen.queryByText('时间线索')).not.toBeInTheDocument()
     expect(screen.queryByText(/今天的《雨天散步》让“.+”先亮起来/)).not.toBeInTheDocument()
-    expect(screen.getByText(/只把相近的余味放在手边/)).toBeInTheDocument()
+    expect(screen.getByText(/搭上了一根细线/)).toBeInTheDocument()
 
     await waitFor(() => {
       expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"anchors"')
@@ -283,7 +316,7 @@ tags: [雨天, 散步]
 
     expect(await screen.findByRole('heading', { name: '2026.03.30 的一页' })).toBeInTheDocument()
     expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
-    expect(screen.queryByText('ECHO')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('今日记忆物件')).toBeInTheDocument()
   })
 
   it('lets the dev regenerate today curation while keeping it saved', async () => {
@@ -381,6 +414,26 @@ function createAiCurationDraft(subtitle: string): DailyCurationAiDraft {
       { label: '回声', value: '春天' },
       { label: '天气', value: '春天' },
       { label: '找零', value: '一点春天' },
+    ],
+    objectDrafts: [
+      {
+        body: '这张旧页先放在旁边，让今天不用立刻解释自己。',
+        slot: 'today-thread',
+        title: '窗边便签',
+      },
+      {
+        items: [
+          { label: '今天', value: '今天' },
+          { label: '回声', value: '春天' },
+          { label: '天气', value: '春天' },
+          { label: '找零', value: '一点春天' },
+        ],
+        slot: 'daily-receipt',
+      },
+      {
+        question: '这页现在还留下些什么？',
+        slot: 'reply-ticket',
+      },
     ],
     subtitle,
     themeNoteBody: '这张旧页先放在旁边，让今天不用立刻解释自己。',

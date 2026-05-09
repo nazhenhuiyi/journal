@@ -1733,6 +1733,79 @@ body {
   font-size: 0.86rem;
 }
 
+.echo-object-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1.05rem;
+  align-items: start;
+  margin-top: 1.35rem;
+}
+
+.echo-object-card {
+  min-width: 0;
+}
+
+.echo-object-card > a {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.echo-object-card.is-today-thread {
+  grid-column: span 2;
+}
+
+.echo-object-card.is-nearby-memory {
+  grid-column: span 4;
+}
+
+.echo-object-card.is-archive-ledger {
+  grid-column: span 4;
+}
+
+.echo-object-card.is-daily-receipt {
+  grid-column: span 2;
+}
+
+.echo-object-card.is-reply-ticket {
+  grid-column: span 4;
+}
+
+.echo-object-card:only-child {
+  grid-column: span 4;
+}
+
+.echo-object-card .journal-sticky-card {
+  min-height: 14.05rem;
+}
+
+.echo-object-card .journal-postcard {
+  min-height: 13.4rem;
+}
+
+.echo-object-card .journal-library-card {
+  min-height: 18.4rem;
+}
+
+.echo-object-card .journal-movie-ticket {
+  min-height: 14.6rem;
+}
+
+.echo-object-card .journal-receipt {
+  width: 100%;
+}
+
+.echo-object-card .journal-receipt-meta div,
+.echo-object-card .journal-receipt-totals div {
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.48rem;
+}
+
+.echo-object-card .journal-receipt-row {
+  grid-template-columns: minmax(2.7rem, 0.42fr) minmax(6.4rem, 1fr);
+  gap: 0.44rem;
+}
+
 .all-pages-curation-empty {
   display: grid;
   min-height: 22rem;
@@ -2688,6 +2761,22 @@ body {
   filter: saturate(0.82) contrast(0.96) sepia(0.1);
 }
 
+.journal-postcard-placeholder {
+  display: grid;
+  place-items: center;
+  color: rgba(47, 38, 31, 0.34);
+  background:
+    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.03) 0 1px, transparent 1px 18px),
+    linear-gradient(135deg, rgba(255, 253, 244, 0.8), rgba(234, 224, 201, 0.62));
+  font-family: var(--font-display);
+}
+
+.journal-postcard-placeholder strong {
+  font-size: 2.2rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
 .journal-postcard-photo span {
   position: absolute;
   right: 0.5rem;
@@ -2769,6 +2858,17 @@ body {
   line-height: 1.56;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.journal-postcard-connection {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.34rem;
+  color: rgba(36, 89, 188, 0.62);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .journal-postcard-address {
@@ -3078,6 +3178,26 @@ body {
   object-fit: cover;
   animation: polaroid-image-develop 2.45s cubic-bezier(0.2, 0.72, 0.18, 1) var(--polaroid-develop-delay) both;
   filter: saturate(0.82) contrast(0.92) sepia(0.08);
+}
+
+.journal-polaroid-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 15.1rem;
+  place-items: center;
+  border-radius: 3px;
+  color: rgba(47, 38, 31, 0.34);
+  background:
+    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.032) 0 1px, transparent 1px 20px),
+    linear-gradient(135deg, rgba(255, 253, 244, 0.88), rgba(229, 218, 195, 0.66));
+  font-family: var(--font-display);
+}
+
+.journal-polaroid-placeholder strong {
+  font-size: 2.25rem;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .journal-polaroid-card.is-lamp .journal-polaroid-photo img {
@@ -3765,6 +3885,21 @@ body {
   letter-spacing: 0.08em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.journal-movie-ticket-action {
+  display: inline-grid;
+  max-width: 100%;
+  min-height: 1.82rem;
+  place-items: center;
+  border: 1px solid rgba(143, 47, 41, 0.24);
+  border-radius: 999px;
+  padding: 0 0.58rem;
+  color: #8f2f29;
+  background: rgba(255, 253, 244, 0.34);
+  font-size: 0.66rem;
+  font-weight: 750;
+  text-decoration: none;
 }
 
 .journal-library-showcase {

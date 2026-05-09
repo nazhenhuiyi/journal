@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { BookOpen, Camera, Feather, MapPin, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
+import { BookOpen, Camera, Feather, Stamp, StickyNote, type HandDrawnIcon } from '../../components/HandDrawnIcons'
+import {
+  LibraryObjectCard as LibraryBorrowCard,
+  MovieTicketObjectCard as MovieTicketCard,
+  PolaroidObjectCard as PolaroidMemoryCard,
+  PostcardObjectCard as PostcardCard,
+  ReceiptObjectCard as DailyReceiptCard,
+  StickyObjectCard as StickyNoteCard,
+  type ReceiptObjectCardData,
+} from '../../components/MemoryObjectCards'
 import bookshopMotifImage from '../../assets/postcard-motifs/bookshop-ticket.png'
 import riverMotifImage from '../../assets/postcard-motifs/river-light.png'
 import bookshopTicketImage from '../../assets/postcards/bookshop-ticket.png'
@@ -10,7 +19,6 @@ import rainyNightPhoto from '../../assets/memory-photos/rainy-night.jpg'
 import windowPlantPhoto from '../../assets/memory-photos/window-plant.jpg'
 import foundPostmarkImage from '../../assets/postmarks/found.png'
 import springPostmarkImage from '../../assets/postmarks/spring.png'
-import stickyPinImage from '../../assets/sticky-pin.svg'
 
 const stickyNotes: Array<{
   title: string
@@ -154,25 +162,10 @@ const polaroidSnapshots: Array<{
 
 const cdTracks = ['出门前又找了一遍钥匙', '便利店的灯比雨天更亮', '没发出去的那条消息', '回家后把杯子洗干净']
 
-type ReceiptVariant = {
+type ReceiptVariant = ReceiptObjectCardData & {
   id: string
   tabLabel: string
   actionLabel: string
-  shop: string
-  label: string
-  date: string
-  dateTime: string
-  time: string
-  cashier: string
-  orderNo: string
-  items: Array<{ name: string; qty: string }>
-  subtotal: string
-  discount: string
-  tax: string
-  total: string
-  payment: string
-  change: string
-  footer: string
 }
 
 const dailyReceipts: ReceiptVariant[] = [
@@ -310,111 +303,6 @@ const libraryCard = {
   ],
 }
 
-function StickyNoteCard({ note }: { note: (typeof stickyNotes)[number] }) {
-  const Icon = note.icon
-
-  return (
-    <article className={`journal-sticky-card is-${note.tone}`}>
-      <span className="journal-sticky-pin" aria-hidden="true">
-        <img alt="" src={stickyPinImage} />
-      </span>
-      <div className="journal-sticky-meta">
-        <Icon aria-hidden="true" size={17} strokeWidth={2.12} />
-        <span>{note.meta}</span>
-      </div>
-      <h3>{note.title}</h3>
-      <p>{note.body}</p>
-    </article>
-  )
-}
-
-function PostcardCard({ postcard }: { postcard: (typeof postcards)[number] }) {
-  return (
-    <article className={`journal-postcard is-${postcard.tone}`}>
-      <img alt="" aria-hidden="true" className="journal-postcard-motif" src={postcard.motifImage} />
-      <div className="journal-postcard-photo">
-        <img alt={postcard.imageAlt} className="journal-postcard-image" src={postcard.image} />
-        <span aria-hidden="true">FILM</span>
-      </div>
-      <div className="journal-postcard-divider" aria-hidden="true" />
-      <div className="journal-postcard-copy">
-        <div className="journal-postcard-topline">
-          <div>
-            <div className="journal-postcard-place">
-              <MapPin aria-hidden="true" size={16} strokeWidth={2.1} />
-              <span>{postcard.place}</span>
-            </div>
-            <time dateTime={postcard.dateTime}>{postcard.date}</time>
-          </div>
-          <img alt="" aria-hidden="true" className="journal-postcard-stamp" src={postcard.stampImage} />
-        </div>
-        <span className="journal-postcard-kicker">POST CARD</span>
-        <h3>{postcard.title}</h3>
-        <p>{postcard.body}</p>
-        <div className="journal-postcard-address" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="journal-postcard-code" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function PolaroidMemoryCard({
-  snapshot,
-  isFlipped,
-}: {
-  snapshot: (typeof polaroidSnapshots)[number]
-  isFlipped: boolean
-}) {
-  return (
-    <article
-      className={`journal-polaroid-card is-${snapshot.tone} ${isFlipped ? 'is-flipped' : ''}`}
-      aria-labelledby="polaroid-card-title"
-    >
-      <div className="journal-polaroid-card-inner">
-        <div className="journal-polaroid-face journal-polaroid-front">
-          <div className="journal-polaroid-photo">
-            <img alt={snapshot.imageAlt} draggable="false" src={snapshot.image} />
-            <span aria-hidden="true" className="journal-polaroid-develop" />
-          </div>
-          <div className="journal-polaroid-caption">
-            <div>
-              <h4 id="polaroid-card-title">{snapshot.title}</h4>
-              <p>{snapshot.caption}</p>
-            </div>
-            <time dateTime={snapshot.dateTime}>{snapshot.date}</time>
-          </div>
-        </div>
-
-        <div className="journal-polaroid-face journal-polaroid-back" aria-hidden={!isFlipped}>
-          <span>MEMORY SNAPSHOT</span>
-          <p>{snapshot.excerpt}</p>
-          <dl>
-            <div>
-              <dt>地点</dt>
-              <dd>{snapshot.place}</dd>
-            </div>
-            <div>
-              <dt>色温</dt>
-              <dd>{snapshot.temperature}</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
-    </article>
-  )
-}
-
 function PolaroidExperience() {
   const [snapshotIndex, setSnapshotIndex] = useState(0)
   const [isFlipped, setIsFlipped] = useState(false)
@@ -476,226 +364,6 @@ function PolaroidExperience() {
         <p>Memory Snapshot · {snapshot.place}</p>
       </div>
     </div>
-  )
-}
-
-function MovieTicketCard({ ticket }: { ticket: typeof movieTicket }) {
-  return (
-    <article className="journal-movie-ticket" aria-labelledby="movie-ticket-title">
-      <div className="journal-movie-ticket-main">
-        <div className="journal-movie-ticket-topline">
-          <span>{ticket.cinema}</span>
-          <span>{ticket.badge}</span>
-        </div>
-
-        <div className="journal-movie-marquee">
-          <span>NOW SHOWING</span>
-          <h4 id="movie-ticket-title">{ticket.title}</h4>
-          <em>{ticket.subtitle}</em>
-          <p>{ticket.note}</p>
-        </div>
-
-        <dl className="journal-movie-ticket-grid">
-          <div>
-            <dt>DATE</dt>
-            <dd>
-              <time dateTime={ticket.dateTime}>{ticket.date}</time>
-            </dd>
-          </div>
-          <div>
-            <dt>TIME</dt>
-            <dd>{ticket.time}</dd>
-          </div>
-          <div>
-            <dt>THEATER</dt>
-            <dd>{ticket.hall}</dd>
-          </div>
-          <div>
-            <dt>MOOD</dt>
-            <dd>{ticket.mood}</dd>
-          </div>
-          <div>
-            <dt>GENRE</dt>
-            <dd>{ticket.genre}</dd>
-          </div>
-          <div>
-            <dt>RATING</dt>
-            <dd>{ticket.rating}</dd>
-          </div>
-        </dl>
-
-        <div className="journal-movie-cast">
-          <span>STARRING</span>
-          <p>{ticket.cast.join(' / ')}</p>
-        </div>
-      </div>
-
-      <div className="journal-movie-ticket-seam" aria-hidden="true" />
-
-      <aside className="journal-movie-ticket-stub" aria-label="电影票副券">
-        <span className="journal-movie-stub-kicker">KEEP STUB</span>
-        <div>
-          <span>ROW</span>
-          <strong>{ticket.row}</strong>
-        </div>
-        <div>
-          <span>SEAT</span>
-          <strong>{ticket.seat}</strong>
-        </div>
-        <div>
-          <span>SCREEN</span>
-          <strong>{ticket.screen}</strong>
-        </div>
-        <small>{ticket.ticketNo}</small>
-      </aside>
-    </article>
-  )
-}
-
-function LibraryBorrowCard({ card }: { card: typeof libraryCard }) {
-  return (
-    <article className="journal-library-card" aria-labelledby="library-card-title">
-      <div className="journal-library-card-header">
-        <div>
-          <span>回忆借阅卡</span>
-          <h4 id="library-card-title">{card.title}</h4>
-          <p>{card.author}</p>
-        </div>
-        <strong>{card.cardNo}</strong>
-      </div>
-
-      <div className="journal-library-card-meta">
-        <span>馆藏号 {card.archiveNo}</span>
-        <span>书架 {card.shelf}</span>
-      </div>
-
-      <div className="journal-library-ledger" role="table" aria-label="借阅记录">
-        <div className="journal-library-ledger-head" role="row">
-          <span role="columnheader">时间</span>
-          <span role="columnheader">片段</span>
-          <span role="columnheader">备注</span>
-        </div>
-        {card.rows.map((row) => (
-          <div className="journal-library-ledger-row" role="row" key={`${row.date}-${row.borrower}`}>
-            <time dateTime={row.dateTime} role="cell">
-              {row.date}
-            </time>
-            <span role="cell">{row.borrower}</span>
-            <span role="cell">{row.note}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="journal-library-card-footer">
-        <div className="journal-library-pocket" aria-hidden="true">
-          <span>回看提示</span>
-          <strong>{card.dueDate}</strong>
-        </div>
-        <div className="journal-library-stamp" aria-hidden="true">
-          <span>已收录</span>
-          <span>旧日可借</span>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function DailyReceiptCard({
-  receipt,
-  stamp,
-  isTorn,
-  printKey,
-}: {
-  receipt: ReceiptVariant
-  stamp: string
-  isTorn: boolean
-  printKey: number
-}) {
-  return (
-    <article
-      className={`journal-receipt ${isTorn ? 'is-torn' : ''}`}
-      aria-labelledby="daily-receipt-title"
-      data-print-key={printKey}
-    >
-      <div className="journal-receipt-tear" aria-hidden="true" />
-
-      <header className="journal-receipt-header">
-        <span>{receipt.shop}</span>
-        <h4 id="daily-receipt-title">{receipt.label}</h4>
-        <p>生活结算单 / day end close</p>
-      </header>
-
-      <dl className="journal-receipt-meta">
-        <div>
-          <dt>DATE</dt>
-          <dd>
-            <time dateTime={receipt.dateTime}>{receipt.date}</time>
-          </dd>
-        </div>
-        <div>
-          <dt>TIME</dt>
-          <dd>{receipt.time}</dd>
-        </div>
-        <div>
-          <dt>CASHIER</dt>
-          <dd>{receipt.cashier}</dd>
-        </div>
-        <div>
-          <dt>ORDER #</dt>
-          <dd>{receipt.orderNo}</dd>
-        </div>
-      </dl>
-
-      <div className="journal-receipt-rule" aria-hidden="true" />
-
-      <div className="journal-receipt-items" role="table" aria-label="今日小票条目">
-        <div className="journal-receipt-row is-head" role="row">
-          <span role="columnheader">ITEM</span>
-          <span role="columnheader">QTY</span>
-        </div>
-        {receipt.items.map((item) => (
-          <div className="journal-receipt-row" role="row" key={item.name}>
-            <span role="cell">{item.name}</span>
-            <span role="cell">{item.qty}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="journal-receipt-rule" aria-hidden="true" />
-
-      <dl className="journal-receipt-totals">
-        <div>
-          <dt>SUBTOTAL</dt>
-          <dd>{receipt.subtotal}</dd>
-        </div>
-        <div>
-          <dt>DISCOUNT</dt>
-          <dd>{receipt.discount}</dd>
-        </div>
-        <div>
-          <dt>TAX</dt>
-          <dd>{receipt.tax}</dd>
-        </div>
-        <div className="is-total">
-          <dt>TOTAL</dt>
-          <dd>{receipt.total}</dd>
-        </div>
-        <div>
-          <dt>PAYMENT</dt>
-          <dd>{receipt.payment}</dd>
-        </div>
-        <div>
-          <dt>CHANGE</dt>
-          <dd>{receipt.change}</dd>
-        </div>
-      </dl>
-
-      <p className="journal-receipt-footer">{receipt.footer}</p>
-      <span className="journal-receipt-stamp" aria-label={`当前盖章 ${stamp}`}>
-        {stamp}
-      </span>
-      <div className="journal-receipt-tear is-bottom" aria-hidden="true" />
-    </article>
   )
 }
 

@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Codex, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
-import type { DailyCuration, DailyCurationAiDraft } from '../../src/domain/dailyCuration'
+import type { DailyCuration, DailyCurationAiDraft, EchoObjectSlot } from '../../src/domain/dailyCuration'
 import type { JournalCodexSettingsFile } from '../codexSettings'
 
 export type CodexActivity = {
@@ -170,6 +170,42 @@ const dailyCurationDraftSchema = {
         additionalProperties: false,
       },
     },
+    objectDrafts: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 5,
+      items: {
+        type: 'object',
+        properties: {
+          slot: {
+            type: 'string',
+            enum: ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'],
+          },
+          enabled: { type: ['boolean', 'null'] },
+          title: { type: ['string', 'null'] },
+          body: { type: ['string', 'null'] },
+          meta: { type: ['string', 'null'] },
+          caption: { type: ['string', 'null'] },
+          connection: { type: ['string', 'null'] },
+          question: { type: ['string', 'null'] },
+          items: {
+            type: ['array', 'null'],
+            maxItems: 4,
+            items: {
+              type: 'object',
+              properties: {
+                label: { type: 'string', enum: ['今天', '回声', '天气', '找零'] },
+                value: { type: 'string' },
+              },
+              required: ['label', 'value'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['slot', 'enabled', 'title', 'body', 'meta', 'caption', 'connection', 'question', 'items'],
+        additionalProperties: false,
+      },
+    },
   },
   required: [
     'subtitle',
@@ -179,6 +215,7 @@ const dailyCurationDraftSchema = {
     'themeNoteBody',
     'parallelConnection',
     'receiptItems',
+    'objectDrafts',
   ],
   additionalProperties: false,
 } as const
@@ -521,7 +558,7 @@ function buildDailyCurationDraftPrompt(payload: CodexDailyCurationDraftPayload) 
   return `你是「且留」里的今日回声策展助手。请基于本地规则已经选出的旧页，为今日策展重写面向用户的展示文案。
 
 重要边界：
-- 本地规则已经完成“选择哪一页”，你不要重新选择旧页，不要质疑选择。
+- 本地规则已经完成“主旧页”和“候选物件”的选择，你不要重新选择旧页，不要质疑选择，也不要改变 source/image/action。
 - 你可以利用内部线索理解今天和旧页的关系，但最终文案不能暴露推理过程。
 - 禁止出现这些词或近似栏目名：为什么今天、主题线索、时间线索、旧页证据、召回、打分、候选、匹配、算法。
 - 不要让 AI、模型、系统、助手或 Codex 成为叙述主语；除非原文标题或正文正在讨论 AI，不要主动写“AI”。
@@ -529,16 +566,32 @@ function buildDailyCurationDraftPrompt(payload: CodexDailyCurationDraftPayload) 
 - 不做心理诊断，不替用户下结论，不要像文学评论、咨询师或产品说明。
 - 语气像一个安静的日记阅读同伴：具体、克制、有画面，允许留白。
 - 少用套话，不要连续依赖“旧日子 / 并排 / 余味 / 轻轻 / 慢慢”等词撑完整段。
+- 宁可少一点，也不要凑满。只保留真正有内容、有物件感、和今天/旧页关系清楚的物件。
+- 不要复述标题和摘要，不要把同一个意思分别写进主文、便签、小票、票根。
+- 每个物件都要像一个真实小物件上的短文案：便签有手边动作，明信片有一页旧场景，借阅卡有可借的片段，小票有日常结算，票根给一个继续写的入口。
 - 只返回结构化 JSON，不要写解释。
 
 字段要求：
 - subtitle：14-30 个中文字符，一句话，会跟页面上的“今日翻到”标签并列展示；不要以“今天先”“AI 先”“替今天”开头，不要解释选择逻辑。
-- curatorVoice：70-120 个中文字符，读出旧页和今天可以互相照见的感觉；可以引用标题，但不要复述 source.excerpt 或 today.journal.excerpt，不要把标题、摘要换一种说法再写一遍，不要写成段落总结。
+- curatorVoice：55-95 个中文字符，读出旧页和今天可以互相照见的感觉；可以引用一个具体物件/动作，但不要复述 source.excerpt 或 today.journal.excerpt，不要把标题、摘要换一种说法再写一遍，不要写成段落总结。
 - closingQuestion：一个具体、轻的问题，适合让用户继续写；直接问问题，不要带“AI 想问：”“想问你：”这样的前缀。
 - themeNoteTitle：4-12 个中文字符，便签标题，可以含“便签”。
-- themeNoteBody：40-80 个中文字符，像贴在旁边的短便签。
-- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头；不要重复主标题。
+- themeNoteBody：32-66 个中文字符，像贴在旁边的短便签；必须有一个具体动作/物件/场景，不要写“让今天不用解释自己”这类空话。
+- parallelConnection：10-24 个中文字符，旁证卡的小连接语，必须以“相近余味：”或“旁边也有：”开头；不要重复主标题，不要写泛泛的“另一种日常回声”。
 - receiptItems：固定 4 行，label 必须依次为“今天 / 回声 / 天气 / 找零”，value 不超过 12 个中文字符，像小票上的短条目；不要重复旧页标题或旧页日期。
+- objectDrafts：只返回你决定展示的物件，1-5 个，按你希望页面展示的顺序返回；通常 2-4 个最合适。不要为了凑数保留弱物件，没有必要展示的候选直接省略。每项必须包含 slot；enabled 可用 true/null，只有明确丢弃时才用 false；不要新增 slot，不要改变 source/image/action。
+- objectDrafts 每项按 schema 返回所有字段；不适用的字段填 null，不要编造。
+- objectDrafts.today-thread：便利贴。title 4-10 字，body 28-58 字，必须贴住今天和旧页之间的一个具体连接。
+- objectDrafts.nearby-memory：明信片/拍立得。title 可改得更像旧页标题，body 32-70 字，connection 必须以“相近余味：”或“旁边也有：”开头，指出两页之间的具体关系。
+- objectDrafts.archive-ledger：借阅卡。只有当 rows 里的片段有可看性时才保留；title 4-12 字，body 可省略或写一句“借阅理由”。
+- objectDrafts.daily-receipt：小票。只有当能把今天压成四个好看的短条目时才保留；items 必须使用“今天 / 回声 / 天气 / 找零”四个 label，value 不超过 12 个中文字符，避免抽象词。
+- objectDrafts.reply-ticket：票根。通常保留，除非 closingQuestion 很弱；question 是写在票根上的继续书写问题，必须具体到一个动作/画面/选择。
+
+示例风格，不要照抄：
+- 好：把“游了六百米”放进小票，找零写“一点松弛”。
+- 好：便签写“先把那本手账和今天的游泳放在一起，不急着变成计划。”
+- 坏：这页和今天形成呼应，说明你正在重新理解自己。
+- 坏：旧日子轻轻并排，余味慢慢回来。
 
 TODAY_CONTEXT:
 ${JSON.stringify(curation.today, null, 2)}
@@ -567,6 +620,7 @@ ${JSON.stringify({
     subtitle: curation.thesis.subtitle,
     curatorVoice: curation.thesis.curatorVoice,
     closingQuestion: curation.closingQuestion,
+    objects: curation.objects,
     supports: curation.supports.map((support) => ({
       role: support.role,
       title: support.title,
@@ -760,12 +814,52 @@ function parseDailyCurationDraftResponse(response: string): DailyCurationAiDraft
   return {
     closingQuestion: stringFromRecord(parsed, 'closingQuestion'),
     curatorVoice: stringFromRecord(parsed, 'curatorVoice'),
+    objectDrafts: normalizeDailyCurationObjectDrafts(parsed.objectDrafts),
     parallelConnection: stringFromRecord(parsed, 'parallelConnection'),
     receiptItems: normalizeDailyCurationReceiptItems(parsed.receiptItems),
     subtitle: stringFromRecord(parsed, 'subtitle'),
     themeNoteBody: stringFromRecord(parsed, 'themeNoteBody'),
     themeNoteTitle: stringFromRecord(parsed, 'themeNoteTitle'),
   }
+}
+
+function normalizeDailyCurationObjectDrafts(value: unknown): DailyCurationAiDraft['objectDrafts'] {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  return value.flatMap((item) => {
+    const record = asRecord(item)
+    const slot = stringFromRecord(record, 'slot')
+
+    if (!slot || !isEchoObjectSlot(slot)) {
+      return []
+    }
+
+    return [
+      {
+        body: stringFromRecord(record, 'body'),
+        caption: stringFromRecord(record, 'caption'),
+        connection: stringFromRecord(record, 'connection'),
+        enabled: booleanFromRecord(record, 'enabled'),
+        items: normalizeDailyCurationReceiptItems(record.items),
+        meta: stringFromRecord(record, 'meta'),
+        question: stringFromRecord(record, 'question'),
+        slot,
+        title: stringFromRecord(record, 'title'),
+      },
+    ]
+  }).slice(0, 5)
+}
+
+function booleanFromRecord(record: Record<string, unknown> | undefined, key: string) {
+  const value = record?.[key]
+
+  return typeof value === 'boolean' ? value : undefined
+}
+
+function isEchoObjectSlot(value: string): value is EchoObjectSlot {
+  return ['today-thread', 'nearby-memory', 'archive-ledger', 'daily-receipt', 'reply-ticket'].includes(value)
 }
 
 function normalizeDailyCurationReceiptItems(value: unknown): DailyCurationAiDraft['receiptItems'] {
