@@ -1,30 +1,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  createSketchCanvas,
-  SKETCH_DOCUMENT_SCHEMA_VERSION,
-  SketchSessionProvider,
-  type SketchDocumentSummary,
-  type StoredSketchDocument,
-} from '../domain/sketch'
 import AllPagesHomePage from './AllPagesHomePage'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
 
 function renderHomePage() {
   return render(
-    <SketchSessionProvider>
-      <MemoryRouter>
-        <AllPagesHomePage />
-      </MemoryRouter>
-    </SketchSessionProvider>,
+    <MemoryRouter>
+      <AllPagesHomePage />
+    </MemoryRouter>,
   )
 }
 
 afterEach(() => {
   vi.unstubAllGlobals()
   window.localStorage.clear()
-  window.sketchStore = undefined
 })
 
 const indexedMemories: JournalIndexEntry[] = [
@@ -67,109 +57,21 @@ const indexedMemories: JournalIndexEntry[] = [
 ]
 
 describe('AllPagesHomePage', () => {
-  it('shows the quiet homepage prompt without action shortcuts', async () => {
+  it('opens directly on the daily echo without homepage or sketch distractions', async () => {
     vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
 
     renderHomePage()
 
-    expect(screen.getByRole('heading', { name: '万物有迹，心事且留' })).toBeInTheDocument()
-    expect(await screen.findByText(/且留 · \d+月\d+日 · 星期. · 已安放 2 页/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '今日回声' })).toBeInTheDocument()
+    expect(await screen.findByText(/且留 · \d+月\d+日 · 星期. · 春天 · 已安放 2 页/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '万物有迹，心事且留' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '这一幅' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('快捷入口')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /写一页/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /留一句/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /收照片/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '这一幅' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '留一笔' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '看回放' })).not.toBeInTheDocument()
-  })
-
-  it('previews the newest sketch with drawing events instead of the newest blank sketch', async () => {
-    const blankDocument = createStoredSketchDocument({
-      id: 'sketch_20260506090000_blank',
-      updatedAt: '2026-05-06T09:00:00.000Z',
-    })
-    const drawnDocument = createStoredSketchDocument({
-      id: 'sketch_20260505190000_drawn',
-      updatedAt: '2026-05-05T19:00:00.000Z',
-      events: [
-        {
-          type: 'stroke:start',
-          id: 'event_1',
-          at: 0,
-          strokeId: 'stroke_1',
-          tool: 'pencil',
-          color: '#2f261f',
-          size: 8,
-          point: { x: 80, y: 90, t: 0 },
-        },
-        {
-          type: 'stroke:point',
-          id: 'event_2',
-          at: 120,
-          strokeId: 'stroke_1',
-          point: { x: 140, y: 130, t: 120 },
-        },
-        {
-          type: 'stroke:end',
-          id: 'event_3',
-          at: 160,
-          strokeId: 'stroke_1',
-        },
-      ],
-    })
-    const olderDrawnDocument = createStoredSketchDocument({
-      id: 'sketch_20260504190000_older',
-      updatedAt: '2026-05-04T19:00:00.000Z',
-      events: [
-        {
-          type: 'stroke:start',
-          id: 'event_old_1',
-          at: 0,
-          strokeId: 'stroke_old_1',
-          tool: 'pencil',
-          color: '#2f261f',
-          size: 8,
-          point: { x: 60, y: 70, t: 0 },
-        },
-        {
-          type: 'stroke:end',
-          id: 'event_old_2',
-          at: 80,
-          strokeId: 'stroke_old_1',
-        },
-      ],
-    })
-    const sketchDocuments = [blankDocument, drawnDocument, olderDrawnDocument]
-    window.sketchStore = {
-      list: vi.fn(async () => [
-        createSketchDocumentSummary(blankDocument),
-        createSketchDocumentSummary(drawnDocument),
-        createSketchDocumentSummary(olderDrawnDocument),
-      ]),
-      create: vi.fn(),
-      load: vi.fn(async (id: string) =>
-        sketchDocuments.find((document) => document.id === id) ?? blankDocument,
-      ),
-      save: vi.fn(),
-      import: vi.fn(),
-      delete: vi.fn(),
-    }
-
-    renderHomePage()
-
-    expect(await screen.findByText('一张旧画，正在这里慢慢浮出来。')).toBeInTheDocument()
-    expect(screen.getByText(/5月\d+日 \d{2}:00 留下/)).toBeInTheDocument()
-    expect(screen.queryByText(/个事件/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/原始/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/回放 \d/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '上一幅' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '下一幅' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '播放' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: '播放' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一幅' }))
-    expect(screen.getByRole('button', { name: '上一幅' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '下一幅' })).toBeDisabled()
-    expect(screen.queryByText('空白画纸')).not.toBeInTheDocument()
   })
 
   it('generates and saves one daily curation from the historical index', async () => {
@@ -177,14 +79,56 @@ describe('AllPagesHomePage', () => {
 
     renderHomePage()
 
-    expect(await screen.findByRole('heading', { name: /今天翻到：/ })).toBeInTheDocument()
-    expect(screen.getByText('今日策展 · 已保存')).toBeInTheDocument()
-    expect(screen.getByText('策展人旁白')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '为什么今天' })).toBeInTheDocument()
+    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(screen.getByText('今天先翻一页关于“春天”的旧日子。')).toBeInTheDocument()
+    expect(screen.getByText('为什么今天')).toBeInTheDocument()
+    expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
+    expect(screen.getByLabelText('辅助回声')).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(window.localStorage.getItem('journal:daily-curations:v1')).toContain('daily-curation')
+      expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('daily-curation')
     })
+  })
+
+  it('keeps today weather in the header without repeating it as a support card', async () => {
+    vi.stubGlobal('journalStore', {
+      listIndex: vi.fn().mockResolvedValue(indexedMemories),
+      loadToday: vi.fn().mockResolvedValue({
+        content: `---
+date: 2026-05-09
+weather:
+  text: 小雨
+  temperature: 18
+location:
+  name: 上海
+tags: [雨天, 散步]
+---
+今天空气有点湿。`,
+        date: '2026-05-09',
+        fileName: '2026-05-09.md',
+        filePath: '/Users/zilin/.journal/2026-05-09.md',
+        updatedAt: null,
+      }),
+    })
+
+    renderHomePage()
+
+    expect(await screen.findByText(/小雨 · 18° · 上海/)).toBeInTheDocument()
+    expect(screen.queryByText('今日天气书签')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('"text":"小雨"')
+    })
+  })
+
+  it('renders a paper artifact when the curated echo has no image', async () => {
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue([indexedMemories[1]]) })
+
+    renderHomePage()
+
+    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    expect(screen.getByText('ARCHIVE NOTE')).toBeInTheDocument()
+    expect(screen.queryByText('ECHO')).not.toBeInTheDocument()
   })
 
   it('lets the dev regenerate today curation while keeping it saved', async () => {
@@ -192,11 +136,10 @@ describe('AllPagesHomePage', () => {
 
     renderHomePage()
 
-    expect(await screen.findByRole('heading', { name: /今天翻到：/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '重新生成' }))
+    expect(await screen.findAllByRole('heading', { name: '2026.03.30 的一页' })).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '重新生成今日策展' }))
 
-    expect(screen.getByText('第 2 版')).toBeInTheDocument()
-    expect(window.localStorage.getItem('journal:daily-curations:v1')).toContain('"generation":1')
+    expect(window.localStorage.getItem('journal:daily-curations:v5')).toContain('"generation":1')
   })
 
   it('does not keep card style studies on the echo page', () => {
@@ -205,36 +148,3 @@ describe('AllPagesHomePage', () => {
     expect(screen.queryByRole('heading', { name: '先留几种手感' })).not.toBeInTheDocument()
   })
 })
-
-function createStoredSketchDocument(
-  overrides: Partial<StoredSketchDocument> = {},
-): StoredSketchDocument {
-  const createdAt = overrides.createdAt ?? '2026-05-05T10:00:00.000Z'
-  const id = overrides.id ?? 'sketch_20260505100000_test'
-
-  return {
-    schemaVersion: SKETCH_DOCUMENT_SCHEMA_VERSION,
-    id,
-    title: '未命名随画',
-    createdAt,
-    updatedAt: createdAt,
-    canvas: createSketchCanvas(),
-    events: [],
-    fileName: `${id}.json`,
-    filePath: `/Users/zilin/.journal/sketches/${id}.json`,
-    ...overrides,
-  }
-}
-
-function createSketchDocumentSummary(document: StoredSketchDocument): SketchDocumentSummary {
-  return {
-    id: document.id,
-    title: document.title,
-    createdAt: document.createdAt,
-    updatedAt: document.updatedAt,
-    canvas: document.canvas,
-    eventCount: document.events.length,
-    fileName: document.fileName,
-    filePath: document.filePath,
-  }
-}
