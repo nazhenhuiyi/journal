@@ -49,6 +49,7 @@ function AllPagesHomePage() {
   const hasSavedDraftRef = useRef(Boolean(savedDailyCuration))
   const aiEnhancementRequestsRef = useRef(new Set<string>())
   const [dailyCurationError, setDailyCurationError] = useState('')
+  const [isDailyCurationLoading, setIsDailyCurationLoading] = useState(false)
   const [curationGeneration, setCurationGeneration] = useState(() => savedDailyCuration?.generation ?? 0)
   const draftedDailyCuration = useMemo(
     () => createDailyCuration(journalIndex, new Date(`${todayDateKey}T12:00:00`), curationGeneration, todayContext),
@@ -200,10 +201,12 @@ function AllPagesHomePage() {
         setSavedDailyCuration(enhancedCuration)
         hasSavedDraftRef.current = true
         setDailyCurationError('')
+        setIsDailyCurationLoading(false)
         saveDailyCurationDraft(enhancedCuration)
       })
       .catch((error: unknown) => {
         if (!isCancelled) {
+          setIsDailyCurationLoading(false)
           setDailyCurationError(formatDailyCurationError(error))
         }
       })
@@ -228,13 +231,17 @@ function AllPagesHomePage() {
 
     if (nextCuration) {
       if (!codex?.generateDailyCurationDraft) {
+        setIsDailyCurationLoading(false)
         saveDailyCurationDraft(nextCuration)
         hasSavedDraftRef.current = true
       } else {
+        setIsDailyCurationLoading(true)
         hasSavedDraftRef.current = false
       }
 
       setSavedDailyCuration(nextCuration)
+    } else {
+      setIsDailyCurationLoading(false)
     }
   }
 
@@ -251,6 +258,7 @@ function AllPagesHomePage() {
         dailyCurationError={dailyCurationError}
         entryCount={journalIndex.length}
         indexLoadStatus={indexLoadStatus}
+        isDailyCurationLoading={isDailyCurationLoading}
         onRegenerate={regenerateDailyCuration}
       />
     </motion.div>
@@ -263,6 +271,7 @@ function DailyCurationSection({
   dailyCurationError,
   entryCount,
   indexLoadStatus,
+  isDailyCurationLoading,
   onRegenerate,
 }: {
   curation: DailyCuration | null
@@ -270,12 +279,17 @@ function DailyCurationSection({
   dailyCurationError: string
   entryCount: number
   indexLoadStatus: IndexLoadStatus
+  isDailyCurationLoading: boolean
   onRegenerate: () => void
 }) {
   const display = curation ? createDailyCurationDisplay(curation) : null
 
   return (
-    <section aria-labelledby="daily-curation-title" className="all-pages-daily-curation is-primary">
+    <section
+      aria-busy={isDailyCurationLoading}
+      aria-labelledby="daily-curation-title"
+      className="all-pages-daily-curation is-primary"
+    >
       <div className="all-pages-daily-curation-inner">
         <div className="all-pages-daily-curation-header">
           <div>
@@ -287,19 +301,23 @@ function DailyCurationSection({
               <h1 id="daily-curation-title">今日回声</h1>
               <button
                 aria-label="重新生成今日策展"
-                disabled={!curation}
+                disabled={!curation || isDailyCurationLoading}
                 onClick={onRegenerate}
                 title="重新生成今日策展"
                 type="button"
               >
                 <Redo aria-hidden="true" size={17} strokeWidth={2.2} />
-                <span>换一页</span>
+                <span>{isDailyCurationLoading ? '翻页中' : '换一页'}</span>
               </button>
             </div>
           </div>
         </div>
 
-        {dailyCurationError ? (
+        {isDailyCurationLoading ? (
+          <article aria-live="polite" className="all-pages-curation-empty is-loading" role="status">
+            <p>正在换一页...</p>
+          </article>
+        ) : dailyCurationError ? (
           <div className="all-pages-curation-empty is-error" role="alert">
             <p>{dailyCurationError}</p>
           </div>

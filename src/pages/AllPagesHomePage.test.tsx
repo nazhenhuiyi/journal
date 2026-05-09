@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AllPagesHomePage from './AllPagesHomePage'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
-import { getLocalDateKey, type DailyCuration } from '../domain/dailyCuration'
+import { getLocalDateKey, type DailyCuration, type DailyCurationAiDraft } from '../domain/dailyCuration'
 
 function renderHomePage() {
   return render(
@@ -293,6 +293,47 @@ tags: [雨天, 散步]
     expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('"generation":1')
   })
 
+  it('shows loading while Codex regenerates instead of rendering the rule draft', async () => {
+    type CodexDailyCurationResult = {
+      draft: DailyCurationAiDraft
+      threadId: string
+      usage: null
+    }
+    let resolveRegeneratedCuration: ((value: CodexDailyCurationResult) => void) | undefined
+    const generateDailyCurationDraft = vi.fn()
+      .mockResolvedValueOnce({
+        draft: createAiCurationDraft('第一版回声。'),
+        threadId: 'thread_daily_curation_initial',
+        usage: null,
+      })
+      .mockImplementationOnce(() => new Promise<CodexDailyCurationResult>((resolve) => {
+        resolveRegeneratedCuration = resolve
+      }))
+
+    vi.stubGlobal('journalStore', { listIndex: vi.fn().mockResolvedValue(indexedMemories) })
+    vi.stubGlobal('codex', { generateDailyCurationDraft })
+
+    renderHomePage()
+
+    expect(await screen.findByText('第一版回声。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新生成今日策展' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在换一页...')
+    expect(screen.getByRole('button', { name: '重新生成今日策展' })).toBeDisabled()
+    expect(screen.queryByText('一页旧日子，让它和此刻并排坐一会儿。')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveRegeneratedCuration?.({
+        draft: createAiCurationDraft('第二版回声。'),
+        threadId: 'thread_daily_curation_regenerated',
+        usage: null,
+      })
+    })
+
+    expect(await screen.findByText('第二版回声。')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('ignores saved curations from the previous local cache version', async () => {
     const todayDateKey = getLocalDateKey()
 
@@ -325,3 +366,20 @@ tags: [雨天, 散步]
     expect(screen.queryByRole('heading', { name: '先留几种手感' })).not.toBeInTheDocument()
   })
 })
+
+function createAiCurationDraft(subtitle: string): DailyCurationAiDraft {
+  return {
+    closingQuestion: '这页现在还留下些什么？',
+    curatorVoice: '这页旧日子暂时不解释什么，只把窗边的新叶和今天放在同一张桌上，让一点安静重新回来。',
+    parallelConnection: '相近余味：窗边的旁证',
+    receiptItems: [
+      { label: '今天', value: '今天' },
+      { label: '回声', value: '春天' },
+      { label: '天气', value: '春天' },
+      { label: '找零', value: '一点春天' },
+    ],
+    subtitle,
+    themeNoteBody: '这张旧页先放在旁边，让今天不用立刻解释自己。',
+    themeNoteTitle: '窗边便签',
+  }
+}

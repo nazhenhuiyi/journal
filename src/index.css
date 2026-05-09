@@ -1730,6 +1730,20 @@ body {
   font-family: var(--font-display);
 }
 
+.all-pages-curation-empty.is-loading {
+  border-style: solid;
+  border-color: rgba(36, 89, 188, 0.16);
+  background:
+    linear-gradient(90deg, rgba(255, 253, 244, 0.36), rgba(255, 255, 255, 0.68), rgba(255, 253, 244, 0.36)),
+    rgba(255, 253, 244, 0.52);
+  background-size: 220% 100%;
+  animation: curation-loading-sheen 1.35s ease-in-out infinite;
+}
+
+.all-pages-curation-empty.is-loading p {
+  color: rgba(36, 89, 188, 0.62);
+}
+
 .all-pages-curation-empty.is-error {
   border-color: rgba(194, 58, 58, 0.24);
   background: rgba(255, 248, 244, 0.62);
@@ -1737,6 +1751,16 @@ body {
 
 .all-pages-curation-empty.is-error p {
   color: rgba(143, 42, 42, 0.72);
+}
+
+@keyframes curation-loading-sheen {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 220% 50%;
+  }
 }
 
 .sketch-topbar {
