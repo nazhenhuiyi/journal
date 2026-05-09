@@ -91,6 +91,10 @@ describe('AllPagesHomePage', () => {
     expect(screen.getByLabelText('辅助回声')).toBeInTheDocument()
     expect(screen.getByText('便签')).toBeInTheDocument()
     expect(screen.getByText('小票')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '打开 2026-03-30 的日记' })).toHaveAttribute(
+      'href',
+      '/calendar?date=2026-03-30',
+    )
 
     await waitFor(() => {
       expect(window.localStorage.getItem('journal:daily-curations:v6')).toContain('daily-curation')

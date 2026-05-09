@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'motion/react'
+import { useSearchParams } from 'react-router'
 import { ArrowRight, BookOpen, CalendarDays } from '../components/HandDrawnIcons'
 import { JournalDayView } from './MarkdownPreviewPage'
 import type { JournalDayViewHandle } from './MarkdownPreviewPage'
@@ -76,10 +77,19 @@ function parseDateKeyParts(dateKey: string) {
   if (!match) {
     return null
   }
+  const year = Number(match[1])
+  const monthNumber = Number(match[2])
+  const dayNumber = Number(match[3])
+  const monthIndex = monthNumber - 1
+  const dayCount = new Date(year, monthNumber, 0).getDate()
+
+  if (monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > dayCount) {
+    return null
+  }
 
   return {
-    monthIndex: Number(match[2]) - 1,
-    year: Number(match[1]),
+    monthIndex,
+    year,
   }
 }
 
@@ -115,9 +125,12 @@ function buildMonthCells(
 function CalendarPage() {
   const todayDateKey = getLocalDateKey()
   const today = new Date()
-  const [year, setYear] = useState(() => today.getFullYear())
-  const [activeMonth, setActiveMonth] = useState(() => today.getMonth())
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateParam = searchParams.get('date')
+  const initialDateParts = dateParam ? parseDateKeyParts(dateParam) : null
+  const [year, setYear] = useState(() => initialDateParts?.year ?? today.getFullYear())
+  const [activeMonth, setActiveMonth] = useState(() => initialDateParts?.monthIndex ?? today.getMonth())
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => (initialDateParts ? dateParam : null))
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   const dayViewRef = useRef<JournalDayViewHandle>(null)
@@ -230,6 +243,25 @@ function CalendarPage() {
     }
   }, [loadEntries])
 
+  useEffect(() => {
+    if (!dateParam) {
+      setSelectedDate(null)
+      return
+    }
+
+    const dateParts = parseDateKeyParts(dateParam)
+
+    if (!dateParts) {
+      setSelectedDate(null)
+      setSearchParams({}, { replace: true })
+      return
+    }
+
+    setYear(dateParts.year)
+    setActiveMonth(dateParts.monthIndex)
+    setSelectedDate(dateParam)
+  }, [dateParam, setSearchParams])
+
   function handleOpenMonth(monthIndex: number) {
     const monthDates = entryDatesByMonth.get(monthIndex) ?? []
 
@@ -239,6 +271,7 @@ function CalendarPage() {
 
     setActiveMonth(monthIndex)
     setSelectedDate(null)
+    setSearchParams({}, { replace: true })
   }
 
   async function flushOpenDayBeforeLeaving() {
@@ -269,6 +302,7 @@ function CalendarPage() {
     setYear(dateParts.year)
     setActiveMonth(dateParts.monthIndex)
     setSelectedDate(dateKey)
+    setSearchParams({ date: dateKey })
   }
 
   async function handleReturnToCalendar() {
@@ -286,6 +320,7 @@ function CalendarPage() {
     }
 
     setSelectedDate(null)
+    setSearchParams({}, { replace: true })
     setLoadStatus('loading')
     void loadEntries()
   }

@@ -5,6 +5,7 @@ import {
 } from '../components/HandDrawnIcons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
+import { Link } from 'react-router'
 import {
   applyDailyCurationAiDraft,
   createDailyCuration,
@@ -332,9 +333,15 @@ function DailyCurationSection({
                       src={resolveJournalMemoryImageSrc(display.artifact.image.src)}
                     />
                   ) : (
-                    <div className="echo-curation-text-artifact" aria-hidden="true">
+                    <div className="echo-curation-text-artifact">
                       <span>{display.artifact.eyebrow}</span>
-                      <strong>{display.artifact.dateLabel}</strong>
+                      <Link
+                        aria-label={`打开 ${curation.source.date} 的日记`}
+                        className="echo-curation-date-link is-artifact"
+                        to={`/calendar?date=${encodeURIComponent(curation.source.date)}`}
+                      >
+                        <strong>{display.artifact.dateLabel}</strong>
+                      </Link>
                       <small>{display.artifact.badge}</small>
                     </div>
                   )}
@@ -343,7 +350,13 @@ function DailyCurationSection({
                   <figcaption>
                     <Sparkles aria-hidden="true" size={15} strokeWidth={2.15} />
                     <span>{display.artifact.caption.badge}</span>
-                    <time dateTime={curation.source.date}>{display.artifact.caption.date}</time>
+                    <Link
+                      aria-label={`打开 ${curation.source.date} 的日记`}
+                      className="echo-curation-date-link"
+                      to={`/calendar?date=${encodeURIComponent(curation.source.date)}`}
+                    >
+                      <time dateTime={curation.source.date}>{display.artifact.caption.date}</time>
+                    </Link>
                   </figcaption>
                 ) : null}
               </figure>

@@ -1437,6 +1437,24 @@ body {
   letter-spacing: 0;
 }
 
+.echo-curation-date-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.echo-curation-date-link:hover {
+  color: #2459bc;
+}
+
+.echo-curation-date-link:hover :is(strong, time) {
+  color: #2459bc;
+}
+
+.echo-curation-date-link.is-artifact {
+  display: block;
+  width: fit-content;
+}
+
 .echo-curation-text-artifact small {
   display: inline-flex;
   width: fit-content;
