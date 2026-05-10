@@ -90,6 +90,7 @@ interface Window {
         src: string
         fileName: string
         filePath: string
+        location?: import('../src/domain/markdown/types').ImageLocation
       }[]
     >
   }
@@ -153,6 +154,35 @@ interface Window {
     }): Promise<{
       curation: import('../src/domain/dailyCuration').DailyCuration
       filePath: string
+      threadId: string | null
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      } | null
+    }>
+    generateImageMetadataDraft(payload: {
+      date: string
+      journalMarkdown: string
+      murmur?: {
+        id: string
+        time: string
+        body: string
+      }
+      image: {
+        id: string
+        src: string
+        caption?: string
+        tags?: string[]
+        location?: import('../src/domain/markdown/types').ImageLocation
+      }
+      tagLibrary?: string[]
+    }): Promise<{
+      draft: {
+        caption?: string
+        locationName?: string
+        tags: string[]
+      }
       threadId: string | null
       usage: {
         input_tokens: number

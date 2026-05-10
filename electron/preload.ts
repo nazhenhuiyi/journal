@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('codex', {
   generateDailyCurationDraft(payload: unknown) {
     return ipcRenderer.invoke('codex:generateDailyCurationDraft', payload)
   },
+  generateImageMetadataDraft(payload: unknown) {
+    return ipcRenderer.invoke('codex:generateImageMetadataDraft', payload)
+  },
   chatWithAnnotation(payload: unknown) {
     return ipcRenderer.invoke('codex:chatWithAnnotation', payload)
   },

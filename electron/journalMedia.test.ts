@@ -49,6 +49,28 @@ describe('journal media import', () => {
     await expect(readFile(importedImages[0].filePath, 'utf8')).resolves.toBe('image-bytes')
   })
 
+  it('reads GPS coordinates from JPEG EXIF while importing', async () => {
+    const directory = await createTemporaryDirectory()
+    const sourceImage = path.join(directory, 'source.jpg')
+
+    await writeFile(sourceImage, createGpsExifJpeg())
+
+    const importedImages = await importJournalImagesForDate(
+      '2026-04-29',
+      directory,
+      [sourceImage],
+      new Date(2026, 3, 29, 21, 38, 0),
+    )
+
+    expect(importedImages[0]).toMatchObject({
+      location: {
+        latitude: 39.992,
+        longitude: 116.277,
+        source: 'exif',
+      },
+    })
+  })
+
   it('skips unsupported files and avoids existing file names', async () => {
     const directory = await createTemporaryDirectory()
     const mediaDirectory = path.join(directory, '2026-04-29.media')
@@ -82,3 +104,85 @@ describe('journal media import', () => {
     )
   })
 })
+
+function createGpsExifJpeg() {
+  const tiff = createGpsTiff()
+  const exif = Buffer.concat([Buffer.from('Exif\0\0', 'binary'), tiff])
+  const segmentLength = Buffer.alloc(2)
+
+  segmentLength.writeUInt16BE(exif.length + 2)
+
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
+    segmentLength,
+    exif,
+    Buffer.from([0xff, 0xd9]),
+  ])
+}
+
+function createGpsTiff() {
+  const headerLength = 8
+  const ifd0Offset = headerLength
+  const ifd0Length = 2 + 12 + 4
+  const gpsIfdOffset = ifd0Offset + ifd0Length
+  const gpsEntryCount = 4
+  const gpsIfdLength = 2 + gpsEntryCount * 12 + 4
+  const latitudeOffset = gpsIfdOffset + gpsIfdLength
+  const longitudeOffset = latitudeOffset + 24
+  const buffer = Buffer.alloc(longitudeOffset + 24)
+
+  buffer.write('II', 0, 'ascii')
+  buffer.writeUInt16LE(42, 2)
+  buffer.writeUInt32LE(ifd0Offset, 4)
+  buffer.writeUInt16LE(1, ifd0Offset)
+  writeIfdEntry(buffer, ifd0Offset + 2, 0x8825, 4, 1, gpsIfdOffset)
+  buffer.writeUInt32LE(0, ifd0Offset + 14)
+
+  buffer.writeUInt16LE(gpsEntryCount, gpsIfdOffset)
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 2, 0x0001, 'N')
+  writeIfdEntry(buffer, gpsIfdOffset + 14, 0x0002, 5, 3, latitudeOffset)
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 26, 0x0003, 'E')
+  writeIfdEntry(buffer, gpsIfdOffset + 38, 0x0004, 5, 3, longitudeOffset)
+  buffer.writeUInt32LE(0, gpsIfdOffset + 50)
+
+  writeRationalTriplet(buffer, latitudeOffset, [
+    [39, 1],
+    [59, 1],
+    [312, 10],
+  ])
+  writeRationalTriplet(buffer, longitudeOffset, [
+    [116, 1],
+    [16, 1],
+    [372, 10],
+  ])
+
+  return buffer
+}
+
+function writeIfdEntry(
+  buffer: Buffer,
+  offset: number,
+  tag: number,
+  fieldType: number,
+  count: number,
+  value: number,
+) {
+  buffer.writeUInt16LE(tag, offset)
+  buffer.writeUInt16LE(fieldType, offset + 2)
+  buffer.writeUInt32LE(count, offset + 4)
+  buffer.writeUInt32LE(value, offset + 8)
+}
+
+function writeAsciiIfdEntry(buffer: Buffer, offset: number, tag: number, value: string) {
+  buffer.writeUInt16LE(tag, offset)
+  buffer.writeUInt16LE(2, offset + 2)
+  buffer.writeUInt32LE(2, offset + 4)
+  buffer.write(value, offset + 8, 'ascii')
+}
+
+function writeRationalTriplet(buffer: Buffer, offset: number, values: [number, number][]) {
+  values.forEach(([numerator, denominator], index) => {
+    buffer.writeUInt32LE(numerator, offset + index * 8)
+    buffer.writeUInt32LE(denominator, offset + index * 8 + 4)
+  })
+}

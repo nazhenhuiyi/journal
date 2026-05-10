@@ -1,9 +1,10 @@
 import { type Dirent, promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Codex, type SandboxMode, type ThreadItem } from '@openai/codex-sdk'
+import { Codex, type Input, type SandboxMode, type ThreadItem } from '@openai/codex-sdk'
 import type { Annotation } from '../../src/domain/annotations/types'
 import type { DailyCuration } from '../../src/domain/dailyCuration'
+import type { ImageLocation } from '../../src/domain/markdown/types'
 import type { JournalCodexSettingsFile } from '../codexSettings'
 import { loadDailyCuration, saveDailyCuration } from '../dailyCurationStore'
 
@@ -67,6 +68,36 @@ export type CodexFrontMatterDraftPayload = {
 
 export type CodexFrontMatterDraftResult = {
   draft: CodexFrontMatterDraft
+  threadId: string | null
+  usage: CodexAskResult['usage']
+}
+
+export type CodexImageMetadataDraft = {
+  caption?: string
+  locationName?: string
+  tags: string[]
+}
+
+export type CodexImageMetadataDraftPayload = {
+  date: string
+  image: {
+    id: string
+    src: string
+    caption?: string
+    tags: string[]
+    location?: ImageLocation
+  }
+  journalMarkdown: string
+  murmur?: {
+    id: string
+    time: string
+    body: string
+  }
+  tagLibrary: string[]
+}
+
+export type CodexImageMetadataDraftResult = {
+  draft: CodexImageMetadataDraft
   threadId: string | null
   usage: CodexAskResult['usage']
 }
@@ -147,6 +178,21 @@ const frontMatterDraftSchema = {
     },
   },
   required: ['title', 'excerpt', 'tags', 'collections'],
+  additionalProperties: false,
+} as const
+
+const imageMetadataDraftSchema = {
+  type: 'object',
+  properties: {
+    caption: { type: ['string', 'null'] },
+    tags: {
+      type: 'array',
+      maxItems: 6,
+      items: { type: 'string' },
+    },
+    locationName: { type: ['string', 'null'] },
+  },
+  required: ['caption', 'tags', 'locationName'],
   additionalProperties: false,
 } as const
 
@@ -262,6 +308,36 @@ export async function generateFrontMatterDraft(
     outputSchema: frontMatterDraftSchema,
   })
   const draft = parseFrontMatterDraftResponse(turn.finalResponse)
+
+  return {
+    draft,
+    threadId: thread.id,
+    usage: turn.usage,
+  }
+}
+
+export async function generateImageMetadataDraft(
+  payload: unknown,
+  workingDirectory: string,
+  settings: JournalCodexSettingsFile,
+): Promise<CodexImageMetadataDraftResult> {
+  const normalizedPayload = normalizeImageMetadataDraftPayload(payload)
+  const imagePath = resolveJournalImagePath(workingDirectory, normalizedPayload.image.src)
+  const thread = createCodex(settings).startThread(createThreadOptions(workingDirectory, settings))
+  const input = [
+    {
+      type: 'text',
+      text: buildImageMetadataDraftPrompt(
+        normalizedPayload,
+        path.relative(workingDirectory, imagePath),
+      ),
+    },
+    { type: 'local_image', path: imagePath },
+  ] satisfies Input
+  const turn = await thread.run(input, {
+    outputSchema: imageMetadataDraftSchema,
+  })
+  const draft = parseImageMetadataDraftResponse(turn.finalResponse)
 
   return {
     draft,
@@ -454,6 +530,66 @@ function normalizeFrontMatterDraftPayload(payload: unknown): CodexFrontMatterDra
   }
 }
 
+function normalizeImageMetadataDraftPayload(payload: unknown): CodexImageMetadataDraftPayload {
+  if (!isRecord(payload)) {
+    throw new Error('图片整理请求格式不正确。')
+  }
+
+  const date = stringFromRecord(payload, 'date')
+  const journalMarkdown = stringFromRecord(payload, 'journalMarkdown')
+  const image = asRecord(payload.image)
+  const id = stringFromRecord(image, 'id')
+  const src = stringFromRecord(image, 'src')
+
+  if (!date || !journalMarkdown || !id || !src) {
+    throw new Error('图片整理需要日期、日记内容和图片信息。')
+  }
+
+  const murmur = asRecord(payload.murmur)
+  const murmurId = stringFromRecord(murmur, 'id')
+  const murmurTime = stringFromRecord(murmur, 'time')
+  const murmurBody = stringFromRecord(murmur, 'body')
+
+  return {
+    date,
+    image: {
+      caption: stringFromRecord(image, 'caption'),
+      id,
+      location: normalizeImageLocation(image.location),
+      src,
+      tags: stringArrayFromRecord(image, 'tags'),
+    },
+    journalMarkdown,
+    murmur: murmurId || murmurTime || murmurBody
+      ? {
+          body: murmurBody ?? '',
+          id: murmurId ?? '',
+          time: murmurTime ?? '',
+        }
+      : undefined,
+    tagLibrary: stringArrayFromRecord(payload, 'tagLibrary'),
+  }
+}
+
+function normalizeImageLocation(value: unknown): ImageLocation | undefined {
+  const location = asRecord(value)
+  const name = stringFromRecord(location, 'name')
+  const latitude = numberFromRecord(location, 'latitude')
+  const longitude = numberFromRecord(location, 'longitude')
+  const source = stringFromRecord(location, 'source')
+
+  if (!name && latitude === undefined && longitude === undefined && !source) {
+    return undefined
+  }
+
+  return {
+    latitude,
+    longitude,
+    name,
+    source: source === 'exif' || source === 'manual' || source === 'system' ? source : undefined,
+  }
+}
+
 function normalizeDailyCurationDraftPayload(payload: unknown): CodexDailyCurationDraftPayload {
   if (!isRecord(payload)) {
     throw new Error('今日回声请求格式不正确。')
@@ -487,6 +623,17 @@ function isDailyCurationRecord(value: unknown): value is Record<string, unknown>
 
 function getDailyCurationTargetFilePath(workingDirectory: string, date: string) {
   return path.join(workingDirectory, 'curations', 'daily', `${date}.json`)
+}
+
+function resolveJournalImagePath(workingDirectory: string, src: string) {
+  const root = path.resolve(workingDirectory)
+  const imagePath = path.isAbsolute(src) ? path.resolve(src) : path.resolve(root, src)
+
+  if (imagePath !== root && !imagePath.startsWith(`${root}${path.sep}`)) {
+    throw new Error('图片路径不在日记目录里。')
+  }
+
+  return imagePath
 }
 
 function buildAnnotationDraftsPrompt(payload: CodexAnnotationDraftsPayload) {
@@ -548,6 +695,37 @@ ${JSON.stringify(payload.collectionLibrary, null, 2)}
 
 CURRENT_FRONT_MATTER:
 ${JSON.stringify(payload.currentFrontMatter ?? {}, null, 2)}
+
+JOURNAL_MARKDOWN:
+${payload.journalMarkdown}`
+}
+
+function buildImageMetadataDraftPrompt(payload: CodexImageMetadataDraftPayload, relativeImagePath: string) {
+  return `你是「且留」里的照片整理助手。请观察随本次请求附上的本地图片，并结合这一天的日记上下文，为这一张图片补齐元数据草稿。
+
+要求：
+- 只返回结构化字段，不要写解释。
+- caption 使用中文，短一些，像照片说明，尽量落在 8-24 个字，不要夸张。
+- tags 返回 2-6 个中文短标签，适合照片墙检索；优先沿用 TAG_LIBRARY 中已有词。
+- locationName 只有在图片本身、碎碎念或日记上下文能明确支持一个地点名时才填写；否则返回 null。
+- 不要编造 GPS 坐标，不要把经纬度反向猜成地点名。已有 EXIF 坐标只作为“这张图已有定位”的事实。
+- 如果已有 caption、tags 或 locationName 仍然合适，可以沿用或轻微补充。
+- 不做心理诊断，不把 AI、模型、系统或 Codex 写成说明主语，除非图片或原文就在讨论 AI。
+
+DATE:
+${payload.date}
+
+IMAGE_PATH:
+${relativeImagePath}
+
+CURRENT_IMAGE_METADATA:
+${JSON.stringify(payload.image, null, 2)}
+
+CURRENT_MURMUR:
+${JSON.stringify(payload.murmur ?? null, null, 2)}
+
+TAG_LIBRARY:
+${JSON.stringify(payload.tagLibrary, null, 2)}
 
 JOURNAL_MARKDOWN:
 ${payload.journalMarkdown}`
@@ -667,7 +845,9 @@ function getDailyCurationPromptCandidates(payload: CodexDailyCurationDraftPayloa
 }
 
 function createDailyCurationAgentSkeleton(curation: DailyCuration): DailyCuration {
-  const { ai: _ai, ...curationWithoutAi } = curation
+  const curationWithoutAi = { ...curation }
+
+  delete curationWithoutAi.ai
 
   return {
     ...curationWithoutAi,
@@ -935,6 +1115,20 @@ function parseFrontMatterDraftResponse(response: string): CodexFrontMatterDraft 
   }
 }
 
+function parseImageMetadataDraftResponse(response: string): CodexImageMetadataDraft {
+  const parsed = JSON.parse(response) as unknown
+
+  if (!isRecord(parsed)) {
+    throw new Error('Codex 没有返回可用的图片元数据。')
+  }
+
+  return {
+    caption: stringFromRecord(parsed, 'caption'),
+    locationName: stringFromRecord(parsed, 'locationName'),
+    tags: stringArrayFromRecord(parsed, 'tags').slice(0, 6),
+  }
+}
+
 function parseDailyCurationWriteResponse(response: string) {
   const parsed = JSON.parse(response) as unknown
 
@@ -964,6 +1158,12 @@ function stringArrayFromRecord(record: Record<string, unknown>, key: string) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
     : []
+}
+
+function numberFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

@@ -1362,6 +1362,11 @@ time: 2026-04-29T21:38:00+08:00
         src: '2026-04-29.media/img_20260429_213801.jpg',
         fileName: 'img_20260429_213801.jpg',
         filePath: '/Users/zilin/.journal/2026-04-29.media/img_20260429_213801.jpg',
+        location: {
+          latitude: 39.992,
+          longitude: 116.277,
+          source: 'exif',
+        },
       },
     ])
 
@@ -1392,6 +1397,87 @@ time: 2026-04-29T21:38:00+08:00
         '2026-04-29',
         expect.stringContaining('src: 2026-04-29.media/img_20260429_213801.jpg'),
       )
+      expect(saveDate).toHaveBeenCalledWith('2026-04-29', expect.stringContaining('latitude: 39.992'))
+      expect(saveDate).toHaveBeenCalledWith('2026-04-29', expect.stringContaining('locationSource: exif'))
+    })
+  })
+
+  it('lets AI fill missing image metadata without dropping EXIF location', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: `---
+date: 2026-04-29
+---
+
+# 今天
+
+:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+青龙湖边的花开得很亮。
+
+::image
+id: img_20260429_213801
+src: 2026-04-29.media/img_20260429_213801.jpg
+latitude: 39.992
+longitude: 116.277
+locationSource: exif
+::
+:::`,
+      date: '2026-04-29',
+      fileName: '2026-04-29.md',
+      filePath: '/Users/zilin/.journal/2026-04-29.md',
+      updatedAt: '2026-04-29T13:38:00.000Z',
+    }
+    const loadToday = vi.fn().mockResolvedValue(storedJournal)
+    const saveDate = vi.fn((date: string, content: string) => Promise.resolve({ ...storedJournal, date, content }))
+    const generateImageMetadataDraft = vi.fn().mockResolvedValue({
+      draft: {
+        caption: '湖边开着黄花',
+        locationName: '青龙湖',
+        tags: ['花', '湖边'],
+      },
+      threadId: 'thread_image',
+      usage: null,
+    })
+
+    vi.stubGlobal('journalStore', { loadToday, saveDate, listIndex: vi.fn().mockResolvedValue([]) })
+    vi.stubGlobal('codex', { generateImageMetadataDraft })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('2026-04-29.media/img_20260429_213801.jpg')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI 补齐图片信息' }))
+
+    await waitFor(() => {
+      expect(generateImageMetadataDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          date: '2026-04-29',
+          image: expect.objectContaining({
+            id: 'img_20260429_213801',
+            location: expect.objectContaining({ source: 'exif' }),
+          }),
+        }),
+      )
+      expect(screen.getByDisplayValue('湖边开着黄花')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('花, 湖边')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('青龙湖')).toBeInTheDocument()
+    })
+
+    vi.advanceTimersByTime(800)
+
+    await waitFor(() => {
+      const savedContent = saveDate.mock.calls.at(-1)?.[1] ?? ''
+
+      expect(savedContent).toContain('caption: 湖边开着黄花')
+      expect(savedContent).toContain('location: 青龙湖')
+      expect(savedContent).toContain('latitude: 39.992')
+      expect(savedContent).toContain('tags: [花, 湖边]')
     })
   })
 

@@ -98,6 +98,7 @@ function createJournalIndexEntry({
     murmur.images.map((image) => ({
       caption: image.caption,
       id: image.id,
+      location: image.location,
       murmurId: murmur.id,
       src: image.src,
       tags: image.tags,
@@ -141,7 +142,7 @@ function buildSearchableText(
     longEntryMarkdown,
     ...murmurs.flatMap((murmur) => [
       murmur.body,
-      ...murmur.images.flatMap((image) => [image.caption, ...image.tags]),
+      ...murmur.images.flatMap((image) => [image.caption, image.location?.name, ...image.tags]),
     ]),
     frontMatter.title,
     ...normalizeStringArray(frontMatter.tags),

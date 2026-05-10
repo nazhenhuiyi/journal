@@ -94,6 +94,12 @@ unknown: 留着`)
             id: 'img_20260429_213801',
             src: '2026-04-29.media/img_20260429_213801.jpg',
             caption: '雨窗',
+            location: {
+              latitude: 39.992,
+              longitude: 116.277,
+              name: '青龙湖',
+              source: 'exif',
+            },
             tags: ['雨', '窗户'],
           },
         ],
@@ -104,9 +110,19 @@ unknown: 留着`)
     expect(markdown).toContain(':::murmur\nid: m_20260429_213800')
     expect(markdown).toContain('::image\nid: img_20260429_213801')
     expect(markdown).toContain('src: 2026-04-29.media/img_20260429_213801.jpg')
+    expect(markdown).toContain('location: 青龙湖')
+    expect(markdown).toContain('latitude: 39.992')
+    expect(markdown).toContain('longitude: 116.277')
+    expect(markdown).toContain('locationSource: exif')
     expect(markdown).toContain('tags: [雨, 窗户]')
     expect(parseJournalMarkdown(markdown).murmurs[0].images[0]).toMatchObject({
       caption: '雨窗',
+      location: {
+        latitude: 39.992,
+        longitude: 116.277,
+        name: '青龙湖',
+        source: 'exif',
+      },
       tags: ['雨', '窗户'],
     })
   })

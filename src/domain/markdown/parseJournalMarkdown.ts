@@ -1,6 +1,7 @@
 import type {
   DayFrontMatter,
   ImageBlock,
+  ImageLocation,
   MarkdownDiagnostic,
   MurmurBlock,
   ParsedJournalEntry,
@@ -282,12 +283,51 @@ function parseImageBlock(
     })
   }
 
-  return {
+  const image: ImageBlock = {
     id: metadata.id ?? '',
     src: metadata.src ?? '',
     caption: metadata.caption,
     tags: parseTags(metadata.tags),
   }
+  const location = parseImageLocation(metadata)
+
+  if (location) {
+    image.location = location
+  }
+
+  return image
+}
+
+function parseImageLocation(metadata: Record<string, string>): ImageLocation | undefined {
+  const name = metadata.location || metadata.locationName
+  const latitude = parseFiniteCoordinate(metadata.latitude)
+  const longitude = parseFiniteCoordinate(metadata.longitude)
+  const source = parseImageLocationSource(metadata.locationSource || metadata['location-source'])
+
+  if (!name && latitude === undefined && longitude === undefined && !source) {
+    return undefined
+  }
+
+  return {
+    latitude,
+    longitude,
+    name: name || undefined,
+    source,
+  }
+}
+
+function parseFiniteCoordinate(value: string | undefined) {
+  if (!value) {
+    return undefined
+  }
+
+  const coordinate = Number(value)
+
+  return Number.isFinite(coordinate) ? coordinate : undefined
+}
+
+function parseImageLocationSource(value: string | undefined) {
+  return value === 'exif' || value === 'manual' || value === 'system' ? value : undefined
 }
 
 function parseFlatMetadata(lines: string[]): Record<string, string> {

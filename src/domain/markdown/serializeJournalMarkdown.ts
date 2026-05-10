@@ -47,6 +47,22 @@ function serializeImageBlock(image: ImageBlock) {
     lines.push(`caption: ${sanitizeMetadataValue(image.caption)}`)
   }
 
+  if (image.location?.name?.trim()) {
+    lines.push(`location: ${sanitizeMetadataValue(image.location.name)}`)
+  }
+
+  if (typeof image.location?.latitude === 'number' && Number.isFinite(image.location.latitude)) {
+    lines.push(`latitude: ${formatCoordinate(image.location.latitude)}`)
+  }
+
+  if (typeof image.location?.longitude === 'number' && Number.isFinite(image.location.longitude)) {
+    lines.push(`longitude: ${formatCoordinate(image.location.longitude)}`)
+  }
+
+  if (image.location?.source) {
+    lines.push(`locationSource: ${sanitizeMetadataValue(image.location.source)}`)
+  }
+
   if (image.tags.length > 0) {
     lines.push(`tags: [${image.tags.map((tag) => sanitizeMetadataValue(tag)).join(', ')}]`)
   }
@@ -58,4 +74,8 @@ function serializeImageBlock(image: ImageBlock) {
 
 function sanitizeMetadataValue(value: string) {
   return value.replace(/\r?\n/g, ' ').trim()
+}
+
+function formatCoordinate(value: number) {
+  return `${Math.round(value * 1_000_000) / 1_000_000}`
 }

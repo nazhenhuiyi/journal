@@ -15,6 +15,7 @@ import {
   serializeJournalFrontMatter,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
+  type ImageBlock,
   type MurmurBlock,
 } from '../domain/markdown'
 import {
@@ -1105,6 +1106,36 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return journalStore.importImages(currentJournalDate)
   }
 
+  async function handleGenerateImageMetadata(image: ImageBlock, murmur: MurmurBlock) {
+    const codex = getCodexStore()
+
+    if (!codex?.generateImageMetadataDraft) {
+      throw new Error(`当前环境还没有接入${brand.assistantLabel}。`)
+    }
+
+    const libraryEntries = await loadCurationLibraryEntries().catch(() => journalIndexEntries)
+    const library = createCurationLibrary(libraryEntries, currentJournalDate)
+    const result = await codex.generateImageMetadataDraft({
+      date: currentJournalDate,
+      image: {
+        caption: image.caption,
+        id: image.id,
+        location: image.location,
+        src: image.src,
+        tags: image.tags,
+      },
+      journalMarkdown,
+      murmur: {
+        body: murmur.body,
+        id: murmur.id,
+        time: murmur.time,
+      },
+      tagLibrary: library.tags,
+    })
+
+    return result.draft
+  }
+
   async function handleGenerateAiAnnotations() {
     const codex = getCodexStore()
     const date = journalFile?.date ?? realTodayDate
@@ -1413,6 +1444,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
               date={currentJournalDate}
               murmurs={parsedJournalEntry.murmurs}
               onChange={handleJournalMurmursChange}
+              onGenerateImageMetadata={handleGenerateImageMetadata}
               onImportImages={handleImportMurmurImages}
             />
           </motion.article>

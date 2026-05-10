@@ -1,5 +1,7 @@
 import { copyFile, mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { ImageLocation } from '../src/domain/markdown/types'
+import { readImageExifLocation } from './imageExif'
 
 const supportedImageExtensions = new Set([
   '.bmp',
@@ -19,6 +21,7 @@ export type ImportedJournalImage = {
   src: string
   fileName: string
   filePath: string
+  location?: ImageLocation
 }
 
 export async function importJournalImagesForDate(
@@ -50,13 +53,22 @@ export async function importJournalImagesForDate(
     const filePath = path.join(mediaDirectory, fileName)
 
     await copyFile(sourcePath, filePath)
+    const location = await readImageExifLocation(filePath).catch(() => undefined)
+
     usedFileNames.add(fileName)
-    importedImages.push({
+
+    const importedImage: ImportedJournalImage = {
       id: path.basename(fileName, extension),
       src: `${mediaDirectoryName}/${fileName}`,
       fileName,
       filePath,
-    })
+    }
+
+    if (location) {
+      importedImage.location = location
+    }
+
+    importedImages.push(importedImage)
   }
 
   return importedImages

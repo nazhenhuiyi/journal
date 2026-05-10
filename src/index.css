@@ -5701,6 +5701,28 @@ body {
   white-space: nowrap;
 }
 
+.journal-murmur-panel .journal-murmur-image-ai-button {
+  width: 100%;
+  color: #174f3a;
+  background: rgba(236, 246, 232, 0.72);
+}
+
+.journal-murmur-image-location {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.38rem;
+  margin: -0.12rem 0 0;
+  color: rgba(47, 38, 31, 0.54);
+  font-size: 0.72rem;
+}
+
+.journal-murmur-image-location span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .markdown-preview {
   position: relative;
   font-size: 16px;

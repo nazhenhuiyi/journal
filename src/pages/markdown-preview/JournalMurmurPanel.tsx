@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, MessageSquareText, Trash } from '../../components/HandDrawnIcons'
+import { Camera, MapPin, MessageSquareText, Sparkles, Trash } from '../../components/HandDrawnIcons'
 import type { ImageBlock, MurmurBlock } from '../../domain/markdown'
 
 type ImportedJournalImage = Awaited<ReturnType<NonNullable<Window['journalStore']>['importImages']>>[number]
+type ImageMetadataDraft = Awaited<ReturnType<NonNullable<Window['codex']>['generateImageMetadataDraft']>>['draft']
 
 type JournalMurmurPanelProps = {
   date: string
   murmurs: MurmurBlock[]
   onChange: (murmurs: MurmurBlock[]) => void
+  onGenerateImageMetadata: (image: ImageBlock, murmur: MurmurBlock) => Promise<ImageMetadataDraft>
   onImportImages: () => Promise<ImportedJournalImage[]>
 }
 
-function JournalMurmurPanel({ date, murmurs, onChange, onImportImages }: JournalMurmurPanelProps) {
+function JournalMurmurPanel({
+  date,
+  murmurs,
+  onChange,
+  onGenerateImageMetadata,
+  onImportImages,
+}: JournalMurmurPanelProps) {
   const [preferredMurmurId, setPreferredMurmurId] = useState(murmurs[0]?.id ?? '')
   const [isImporting, setIsImporting] = useState(false)
   const [importError, setImportError] = useState('')
@@ -165,6 +173,7 @@ function JournalMurmurPanel({ date, murmurs, onChange, onImportImages }: Journal
                         ),
                       }))
                     }
+                    onGenerateMetadata={() => onGenerateImageMetadata(image, selectedMurmur)}
                   />
                 ))}
               </div>
@@ -184,12 +193,34 @@ function JournalMurmurPanel({ date, murmurs, onChange, onImportImages }: Journal
 function MurmurImageForm({
   image,
   onDelete,
+  onGenerateMetadata,
   onUpdate,
 }: {
   image: ImageBlock
   onDelete: () => void
+  onGenerateMetadata: () => Promise<ImageMetadataDraft>
   onUpdate: (image: ImageBlock) => void
 }) {
+  const [isGeneratingMetadata, setIsGeneratingMetadata] = useState(false)
+  const [metadataError, setMetadataError] = useState('')
+  const latitude = image.location?.latitude
+  const longitude = image.location?.longitude
+
+  async function handleGenerateMetadata() {
+    setIsGeneratingMetadata(true)
+    setMetadataError('')
+
+    try {
+      const draft = await onGenerateMetadata()
+
+      onUpdate(mergeImageMetadataDraft(image, draft))
+    } catch {
+      setMetadataError('图片信息暂时没有补上。')
+    } finally {
+      setIsGeneratingMetadata(false)
+    }
+  }
+
   return (
     <section className="journal-murmur-image-form">
       <div>
@@ -198,6 +229,15 @@ function MurmurImageForm({
           <Trash aria-hidden="true" size={16} strokeWidth={2.05} />
         </button>
       </div>
+      <button
+        className="journal-murmur-image-ai-button"
+        disabled={isGeneratingMetadata}
+        onClick={() => void handleGenerateMetadata()}
+        type="button"
+      >
+        <Sparkles aria-hidden="true" size={16} strokeWidth={2.05} />
+        {isGeneratingMetadata ? '补齐中' : 'AI 补齐图片信息'}
+      </button>
       <label>
         <span>说明</span>
         <input
@@ -216,6 +256,23 @@ function MurmurImageForm({
           value={image.tags.join(', ')}
         />
       </label>
+      <label>
+        <span>地点</span>
+        <input
+          aria-label="图片地点"
+          onChange={(event) => onUpdate(updateImageLocationName(image, event.target.value))}
+          placeholder="青龙湖、公园、家里..."
+          value={image.location?.name ?? ''}
+        />
+      </label>
+      {latitude !== undefined && longitude !== undefined ? (
+        <p className="journal-murmur-image-location">
+          <MapPin aria-hidden="true" size={14} strokeWidth={2.05} />
+          <span>{formatImageCoordinates(latitude, longitude)}</span>
+          {image.location?.source === 'exif' ? <span>EXIF</span> : null}
+        </p>
+      ) : null}
+      {metadataError ? <p className="journal-murmur-error">{metadataError}</p> : null}
     </section>
   )
 }
@@ -237,8 +294,43 @@ function createMurmur(date: string, existingMurmurs: MurmurBlock[]): MurmurBlock
 function importedImageToBlock(importedImage: ImportedJournalImage): ImageBlock {
   return {
     id: importedImage.id,
+    location: importedImage.location,
     src: importedImage.src,
     tags: [],
+  }
+}
+
+function mergeImageMetadataDraft(image: ImageBlock, draft: ImageMetadataDraft): ImageBlock {
+  const locationName = draft.locationName?.trim()
+
+  return {
+    ...image,
+    caption: image.caption?.trim() ? image.caption : draft.caption?.trim() || image.caption,
+    location: locationName && !image.location?.name
+      ? {
+          ...image.location,
+          name: locationName,
+          source: image.location?.source ?? 'system',
+        }
+      : image.location,
+    tags: normalizeTags([...image.tags, ...draft.tags]),
+  }
+}
+
+function updateImageLocationName(image: ImageBlock, value: string): ImageBlock {
+  const name = value.trim()
+  const location = image.location
+  const hasCoordinates = location?.latitude !== undefined || location?.longitude !== undefined
+
+  return {
+    ...image,
+    location: name || hasCoordinates
+      ? {
+          ...location,
+          name: name || undefined,
+          source: location?.source ?? 'manual',
+        }
+      : undefined,
   }
 }
 
@@ -291,10 +383,20 @@ function formatMurmurSummary(murmur: MurmurBlock) {
 }
 
 function parseTagsInput(value: string) {
-  return value
-    .split(/[,，]/)
-    .map((tag) => tag.trim())
-    .filter(Boolean)
+  return normalizeTags(
+    value
+      .split(/[,，]/)
+      .map((tag) => tag.trim())
+      .filter(Boolean),
+  )
+}
+
+function normalizeTags(tags: string[]) {
+  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)))
+}
+
+function formatImageCoordinates(latitude: number, longitude: number) {
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
 }
 
 export default JournalMurmurPanel

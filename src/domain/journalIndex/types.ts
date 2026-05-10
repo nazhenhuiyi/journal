@@ -1,3 +1,5 @@
+import type { ImageLocation } from '../markdown/types'
+
 export type JournalIndexEntry = {
   date: string
   fileName: string
@@ -25,6 +27,7 @@ export type JournalIndexEntry = {
     murmurId: string
     src: string
     caption?: string
+    location?: ImageLocation
     tags: string[]
   }[]
   searchableText: string

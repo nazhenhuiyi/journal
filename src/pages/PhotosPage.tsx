@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { CalendarDays, Camera, Image } from '../components/HandDrawnIcons'
 import { resolveJournalMediaSrc } from '../domain/journalMedia'
 import type { JournalIndexEntry } from '../domain/journalIndex/types'
+import type { ImageLocation } from '../domain/markdown'
 import { panelTransition } from './markdown-preview/constants'
 
 type PhotosLoadStatus = 'loading' | 'ready' | 'failed'
@@ -13,6 +14,7 @@ type JournalPhoto = {
   date: string
   entryTitle: string
   imageId: string
+  location?: ImageLocation
   monthKey: string
   murmurExcerpt: string
   murmurId: string
@@ -121,7 +123,7 @@ function PhotosPage() {
             <CalendarDays aria-hidden="true" className="text-[#14724f]" size={18} strokeWidth={2.1} />
             <h2 className="m-0 font-display text-[1.28rem] font-semibold tracking-[0] text-ink">月份</h2>
           </div>
-          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto pr-1">
+          <div className="-mt-1 flex min-h-0 flex-col gap-2 overflow-y-auto pb-1 pr-1 pt-1">
             <button
               aria-pressed={selectedMonth === 'all'}
               className={`photos-month-button ${selectedMonth === 'all' ? 'is-active' : ''}`}
@@ -163,7 +165,7 @@ function PhotosPage() {
             </div>
           </div>
 
-          <div aria-label="照片标签" className="flex gap-2 overflow-x-auto pb-1">
+          <div aria-label="照片标签" className="-mx-1 -mt-1.5 flex gap-2 overflow-x-auto px-1 pb-2 pt-1.5">
             <button
               aria-pressed={selectedTag === 'all'}
               className={`photos-chip ${selectedTag === 'all' ? 'is-active' : ''}`}
@@ -275,6 +277,7 @@ function createJournalPhotos(entries: JournalIndexEntry[]) {
           formatMonthLabel(entry.date.slice(0, 7)),
           title,
           image.caption,
+          image.location?.name,
           murmurExcerpt,
           ...tags,
         ]
@@ -286,6 +289,7 @@ function createJournalPhotos(entries: JournalIndexEntry[]) {
           date: entry.date,
           entryTitle: title,
           imageId: image.id,
+          location: image.location,
           monthKey: entry.date.slice(0, 7),
           murmurExcerpt,
           murmurId: image.murmurId,
