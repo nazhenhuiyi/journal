@@ -6,6 +6,7 @@ import AllPagesHomePage from './pages/AllPagesHomePage'
 import CalendarPage from './pages/CalendarPage'
 import ComponentGalleryPage from './pages/ComponentGalleryPage'
 import MarkdownPreviewPage from './pages/MarkdownPreviewPage'
+import PhotosPage from './pages/PhotosPage'
 import SettingsPage from './pages/SettingsPage'
 import SketchPage from './pages/sketch/SketchPage'
 
@@ -20,6 +21,7 @@ function App() {
               <Route element={<AllPagesHomePage />} path="/pages" />
               <Route element={<ComponentGalleryPage />} path="/components" />
               <Route element={<MarkdownPreviewPage />} path="/preview" />
+              <Route element={<PhotosPage />} path="/photos" />
               <Route element={<CalendarPage />} path="/calendar" />
               <Route element={<SketchPage />} path="/sketch" />
               <Route element={<SettingsPage />} path="/settings" />

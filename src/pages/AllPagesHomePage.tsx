@@ -17,6 +17,7 @@ import {
   type TodayContext,
 } from '../domain/dailyCuration'
 import { EchoObjectCardRenderer } from '../components/MemoryObjectCards'
+import { resolveJournalMediaSrc } from '../domain/journalMedia'
 import { parseJournalMarkdown } from '../domain/markdown/parseJournalMarkdown'
 import { panelTransition } from './markdown-preview/constants'
 import { brand } from '../brand'
@@ -553,17 +554,7 @@ function createTextExcerpt(text: string, maxLength: number) {
   return `${excerpt.slice(0, maxLength).trimEnd()}...`
 }
 
-function resolveJournalMemoryImageSrc(src: string) {
-  if (isAbsoluteUrl(src) || src.startsWith('/')) {
-    return src
-  }
-
-  return `journal-media://local/${src.split('/').map(encodeURIComponent).join('/')}`
-}
-
-function isAbsoluteUrl(src: string) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(src)
-}
+const resolveJournalMemoryImageSrc = resolveJournalMediaSrc
 
 function readFallbackDailyCuration(dateKey: string): DailyCuration | null {
   if (typeof window === 'undefined') {

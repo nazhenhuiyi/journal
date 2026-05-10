@@ -14,6 +14,7 @@ import { rehypeMurmurTimestamps } from './plugins/rehypeMurmurTimestamps'
 import { remarkJournalDirectives } from './plugins/remarkJournalDirectives'
 import type { ImageBlock, MurmurBlock } from './types'
 import type { RenderJournalMarkdownOptions } from './types'
+import { resolveJournalMediaSrc } from '../journalMedia'
 
 const sanitizeSchema = {
   ...defaultSchema,
@@ -156,15 +157,11 @@ function serializeRenderableImage(image: ImageBlock) {
 }
 
 function resolveJournalImageSrc(src: string, sourceFilePath: string | undefined) {
-  if (!sourceFilePath || isAbsoluteUrl(src) || src.startsWith('/')) {
+  if (!sourceFilePath) {
     return src
   }
 
-  return `journal-media://local/${src.split('/').map(encodeURIComponent).join('/')}`
-}
-
-function isAbsoluteUrl(src: string) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(src)
+  return resolveJournalMediaSrc(src)
 }
 
 function encodeImageUrl(src: string) {
