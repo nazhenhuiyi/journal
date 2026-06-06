@@ -1,19 +1,15 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
+import type { LucideIcon } from 'lucide-react'
+import { BookOpen, CalendarDays, PenLine } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
-import {
-  BookOpen,
-  CalendarDays,
-  PenLine,
-  type HandDrawnIcon,
-} from '../components/HandDrawnIcons'
 import { brand } from '../brand'
 import { panelTransition } from '../pages/markdown-preview/constants'
 
 const menuItems: Array<{
   label: string
   description: string
-  icon: HandDrawnIcon
+  icon: LucideIcon
   to?: string
   disabled?: boolean
 }> = [

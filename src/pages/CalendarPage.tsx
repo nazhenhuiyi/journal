@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'motion/react'
+import { ArrowRight, BookOpen, CalendarDays } from 'lucide-react'
 import { useSearchParams } from 'react-router'
-import { ArrowRight, BookOpen, CalendarDays } from '../components/HandDrawnIcons'
 import { JournalDayView } from './MarkdownPreviewPage'
 import type { JournalDayViewHandle } from './MarkdownPreviewPage'
 import { panelTransition } from './markdown-preview/constants'

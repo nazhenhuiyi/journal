@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, MapPin, MessageSquareText, Trash } from '../../components/HandDrawnIcons'
+import { Camera, MapPin, MessageSquareText, Trash } from 'lucide-react'
 import type { ImageBlock, ImageLocation, MurmurBlock } from '../../domain/markdown'
 
 type ImportedJournalImage = {

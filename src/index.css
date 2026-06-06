@@ -33,19 +33,6 @@ body {
   height: 100%;
 }
 
-.journal-doodle-icon {
-  display: block;
-  overflow: visible;
-  color: currentColor;
-  filter: drop-shadow(0 1px 0 rgba(255, 253, 244, 0.72));
-}
-
-.journal-doodle-icon path {
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
-}
-
 @keyframes float-in {
   from {
     opacity: 0;
