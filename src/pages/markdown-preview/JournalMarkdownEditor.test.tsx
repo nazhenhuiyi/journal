@@ -29,7 +29,6 @@ const mood = 'quiet'
     )
 
     expect(container.querySelector('.cm-md-heading-line')).toBeInTheDocument()
-    expect(container.querySelector('.tok-strikethrough')).toBeInTheDocument()
     expect(container.querySelector('.cm-md-quote-line')).toBeInTheDocument()
     expect(container.querySelectorAll('.cm-md-list-line')).toHaveLength(4)
     expect(container.querySelectorAll('.cm-md-code-line')).toHaveLength(3)

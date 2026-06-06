@@ -23,8 +23,9 @@ describe('AppLayout', () => {
     renderLayout()
 
     expect(screen.getByRole('link', { name: /今日/ })).toHaveTextContent('4月28日')
-    expect(screen.getByRole('link', { name: /照片/ })).toHaveAttribute('href', '/photos')
-    expect(screen.getByRole('link', { name: /设置/ })).toHaveAttribute('href', '/settings')
+    expect(screen.getByRole('link', { name: /日历/ })).toHaveAttribute('href', '/calendar')
+    expect(screen.queryByRole('link', { name: /回声/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /随画/ })).not.toBeInTheDocument()
   })
 
   it('refreshes the today menu date after midnight', () => {

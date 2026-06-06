@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, MapPin, MessageSquareText, Sparkles, Trash } from '../../components/HandDrawnIcons'
-import type { ImageBlock, MurmurBlock } from '../../domain/markdown'
+import { Camera, MapPin, MessageSquareText, Trash } from '../../components/HandDrawnIcons'
+import type { ImageBlock, ImageLocation, MurmurBlock } from '../../domain/markdown'
 
-type ImportedJournalImage = Awaited<ReturnType<NonNullable<Window['journalStore']>['importImages']>>[number]
-type ImageMetadataDraft = Awaited<ReturnType<NonNullable<Window['codex']>['generateImageMetadataDraft']>>['draft']
+type ImportedJournalImage = {
+  id: string
+  src: string
+  fileName: string
+  filePath: string
+  location?: ImageLocation
+}
 
 type JournalMurmurPanelProps = {
   date: string
   murmurs: MurmurBlock[]
   onChange: (murmurs: MurmurBlock[]) => void
-  onGenerateImageMetadata: (image: ImageBlock, murmur: MurmurBlock) => Promise<ImageMetadataDraft>
   onImportImages: () => Promise<ImportedJournalImage[]>
 }
 
@@ -17,7 +21,6 @@ function JournalMurmurPanel({
   date,
   murmurs,
   onChange,
-  onGenerateImageMetadata,
   onImportImages,
 }: JournalMurmurPanelProps) {
   const [preferredMurmurId, setPreferredMurmurId] = useState(murmurs[0]?.id ?? '')
@@ -173,7 +176,6 @@ function JournalMurmurPanel({
                         ),
                       }))
                     }
-                    onGenerateMetadata={() => onGenerateImageMetadata(image, selectedMurmur)}
                   />
                 ))}
               </div>
@@ -193,33 +195,14 @@ function JournalMurmurPanel({
 function MurmurImageForm({
   image,
   onDelete,
-  onGenerateMetadata,
   onUpdate,
 }: {
   image: ImageBlock
   onDelete: () => void
-  onGenerateMetadata: () => Promise<ImageMetadataDraft>
   onUpdate: (image: ImageBlock) => void
 }) {
-  const [isGeneratingMetadata, setIsGeneratingMetadata] = useState(false)
-  const [metadataError, setMetadataError] = useState('')
   const latitude = image.location?.latitude
   const longitude = image.location?.longitude
-
-  async function handleGenerateMetadata() {
-    setIsGeneratingMetadata(true)
-    setMetadataError('')
-
-    try {
-      const draft = await onGenerateMetadata()
-
-      onUpdate(mergeImageMetadataDraft(image, draft))
-    } catch {
-      setMetadataError('图片信息暂时没有补上。')
-    } finally {
-      setIsGeneratingMetadata(false)
-    }
-  }
 
   return (
     <section className="journal-murmur-image-form">
@@ -229,15 +212,6 @@ function MurmurImageForm({
           <Trash aria-hidden="true" size={16} strokeWidth={2.05} />
         </button>
       </div>
-      <button
-        className="journal-murmur-image-ai-button"
-        disabled={isGeneratingMetadata}
-        onClick={() => void handleGenerateMetadata()}
-        type="button"
-      >
-        <Sparkles aria-hidden="true" size={16} strokeWidth={2.05} />
-        {isGeneratingMetadata ? '补齐中' : 'AI 补齐图片信息'}
-      </button>
       <label>
         <span>说明</span>
         <input
@@ -272,7 +246,6 @@ function MurmurImageForm({
           {image.location?.source === 'exif' ? <span>EXIF</span> : null}
         </p>
       ) : null}
-      {metadataError ? <p className="journal-murmur-error">{metadataError}</p> : null}
     </section>
   )
 }
@@ -297,23 +270,6 @@ function importedImageToBlock(importedImage: ImportedJournalImage): ImageBlock {
     location: importedImage.location,
     src: importedImage.src,
     tags: [],
-  }
-}
-
-function mergeImageMetadataDraft(image: ImageBlock, draft: ImageMetadataDraft): ImageBlock {
-  const locationName = draft.locationName?.trim()
-
-  return {
-    ...image,
-    caption: image.caption?.trim() ? image.caption : draft.caption?.trim() || image.caption,
-    location: locationName && !image.location?.name
-      ? {
-          ...image.location,
-          name: locationName,
-          source: image.location?.source ?? 'system',
-        }
-      : image.location,
-    tags: normalizeTags([...image.tags, ...draft.tags]),
   }
 }
 

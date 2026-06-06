@@ -3,31 +3,8 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
-import {
-  askCodex,
-  chatWithAnnotation,
-  generateAnnotationDrafts,
-  generateDailyCurationDraft,
-  generateFrontMatterDraft,
-  generateImageMetadataDraft,
-  readAnnotationThread,
-} from './codex'
-import { loadJournalCodexSettings, saveJournalCodexSettings } from './codexSettings'
-import {
-  loadDailyCuration,
-  saveDailyCuration,
-} from './dailyCurationStore'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
-import { listJournalIndex } from './journalIndex'
 import { importJournalImagesForDate } from './journalMedia'
-import {
-  createSketchDocument,
-  deleteSketchDocument,
-  importSketchDocumentFromPath,
-  listSketchDocuments,
-  loadSketchDocument,
-  saveSketchDocument,
-} from './sketchStore'
 import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
   createJournalMarkdownWithFrontMatter,
@@ -81,41 +58,6 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-ipcMain.handle('codex:ask', async (_event, prompt: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return askCodex(prompt, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:generateAnnotationDrafts', async (_event, payload: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return generateAnnotationDrafts(payload, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:generateFrontMatterDraft', async (_event, payload: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return generateFrontMatterDraft(payload, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:generateDailyCurationDraft', async (_event, payload: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return generateDailyCurationDraft(payload, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:generateImageMetadataDraft', async (_event, payload: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return generateImageMetadataDraft(payload, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:chatWithAnnotation', async (_event, payload: unknown) => {
-  const runtime = await getCodexRuntime()
-
-  return chatWithAnnotation(payload, runtime.workingDirectory, runtime.settings)
-})
-ipcMain.handle('codex:readAnnotationThread', (_event, threadId: unknown) => readAnnotationThread(threadId))
-ipcMain.handle('codexSettings:load', () => loadJournalCodexSettings(getJournalDirectory()))
-ipcMain.handle('codexSettings:save', (_event, payload: unknown) =>
-  saveJournalCodexSettings(getJournalDirectory(), payload),
-)
 ipcMain.handle('journalSettings:load', () => loadJournalSettings(getJournalDirectory()))
 ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
   saveJournalSettings(getJournalDirectory(), payload),
@@ -123,13 +65,6 @@ ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:listEntries', () => listJournalEntries())
-ipcMain.handle('journal:listIndex', () => listJournalIndex(getJournalDirectory()))
-ipcMain.handle('journal:loadDailyCuration', (_event, date: unknown) =>
-  loadDailyCuration(getJournalDirectory(), date),
-)
-ipcMain.handle('journal:saveDailyCuration', (_event, payload: unknown) =>
-  saveDailyCuration(getJournalDirectory(), payload),
-)
 ipcMain.handle('journal:loadDate', (_event, date: unknown) => loadJournal(date))
 ipcMain.handle('journal:saveDate', (_event, date: unknown, content: unknown) => saveJournal(date, content))
 ipcMain.handle('journal:readAnnotations', (_event, date: unknown) => readJournalAnnotations(date))
@@ -138,14 +73,6 @@ ipcMain.handle('journal:saveAnnotations', (_event, date: unknown, annotations: u
 )
 ipcMain.handle('journal:refreshTodayWeather', (_event, location: unknown) => refreshTodayWeather(location))
 ipcMain.handle('journal:importImages', (_event, date: unknown) => importJournalImages(date))
-ipcMain.handle('sketch:list', () => listSketchDocuments(getJournalDirectory()))
-ipcMain.handle('sketch:create', (_event, payload: unknown) =>
-  createSketchDocument(getJournalDirectory(), payload),
-)
-ipcMain.handle('sketch:load', (_event, id: unknown) => loadSketchDocument(getJournalDirectory(), id))
-ipcMain.handle('sketch:save', (_event, payload: unknown) => saveSketchDocument(getJournalDirectory(), payload))
-ipcMain.handle('sketch:delete', (_event, id: unknown) => deleteSketchDocument(getJournalDirectory(), id))
-ipcMain.handle('sketch:import', () => importSketchDocument())
 
 type JournalFile = {
   content: string
@@ -186,24 +113,6 @@ function getTodayJournalPath() {
 
 function getJournalDirectory() {
   return path.join(app.getPath('home'), JOURNAL_DIR_NAME)
-}
-
-async function getCodexWorkingDirectory() {
-  const directory = getJournalDirectory()
-
-  await mkdir(directory, { recursive: true })
-
-  return directory
-}
-
-async function getCodexRuntime() {
-  const workingDirectory = await getCodexWorkingDirectory()
-  const settings = await loadJournalCodexSettings(workingDirectory)
-
-  return {
-    settings,
-    workingDirectory,
-  }
 }
 
 function getJournalPath(date: string) {
@@ -448,24 +357,6 @@ async function importJournalImages(date: unknown) {
   }
 
   return importJournalImagesForDate(date, getJournalDirectory(), result.filePaths)
-}
-
-async function importSketchDocument() {
-  const result = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [
-      {
-        name: '随画文件',
-        extensions: ['json'],
-      },
-    ],
-  })
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return null
-  }
-
-  return importSketchDocumentFromPath(getJournalDirectory(), result.filePaths[0])
 }
 
 function registerJournalMediaProtocol() {

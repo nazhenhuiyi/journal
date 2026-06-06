@@ -21,69 +21,31 @@ declare namespace NodeJS {
   }
 }
 
-// Used in Renderer process, expose in `preload.ts`
+type JournalFilePayload = {
+  content: string
+  date: string
+  fileName: string
+  filePath: string
+  updatedAt: string | null
+}
+
+type JournalEntryPayload = Omit<JournalFilePayload, 'content'>
+
+// Used in Renderer process, exposed in `preload.ts`.
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
   journalStore?: {
-    loadToday(): Promise<{
-      content: string
-      date: string
-      fileName: string
-      filePath: string
-      updatedAt: string | null
-    }>
-    saveToday(content: string): Promise<{
-      content: string
-      date: string
-      fileName: string
-      filePath: string
-      updatedAt: string | null
-    }>
-    listEntries?(): Promise<
-      {
-        date: string
-        fileName: string
-        filePath: string
-        updatedAt: string | null
-      }[]
-    >
-    listIndex?(): Promise<import('../src/domain/journalIndex/types').JournalIndexEntry[]>
-    loadDailyCuration?(date: string): Promise<{
-      curation: import('../src/domain/dailyCuration').DailyCuration
-      filePath: string
-    } | null>
-    saveDailyCuration?(
-      curation: import('../src/domain/dailyCuration').DailyCuration,
-    ): Promise<{
-      curation: import('../src/domain/dailyCuration').DailyCuration
-      filePath: string
-    }>
-    loadDate?(date: string): Promise<{
-      content: string
-      date: string
-      fileName: string
-      filePath: string
-      updatedAt: string | null
-    }>
-    saveDate?(date: string, content: string): Promise<{
-      content: string
-      date: string
-      fileName: string
-      filePath: string
-      updatedAt: string | null
-    }>
+    loadToday(): Promise<JournalFilePayload>
+    saveToday(content: string): Promise<JournalFilePayload>
+    listEntries?(): Promise<JournalEntryPayload[]>
+    loadDate?(date: string): Promise<JournalFilePayload>
+    saveDate?(date: string, content: string): Promise<JournalFilePayload>
     readAnnotations(date: string): Promise<import('../src/domain/annotations/types').AnnotationFile>
     saveAnnotations(
       date: string,
       annotations: import('../src/domain/annotations/types').Annotation[],
     ): Promise<import('../src/domain/annotations/types').AnnotationFile>
-    refreshTodayWeather(location?: { latitude?: number; longitude?: number }): Promise<{
-      content: string
-      date: string
-      fileName: string
-      filePath: string
-      updatedAt: string | null
-    }>
+    refreshTodayWeather(location?: { latitude?: number; longitude?: number }): Promise<JournalFilePayload>
     importImages(date: string): Promise<
       {
         id: string
@@ -93,151 +55,6 @@ interface Window {
         location?: import('../src/domain/markdown/types').ImageLocation
       }[]
     >
-  }
-  codex?: {
-    ask(prompt: string): Promise<{
-      finalResponse: string
-      items: {
-        id: string
-        type: string
-        summary: string
-        status?: string
-        exitCode?: number
-      }[]
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    generateAnnotationDrafts(payload: {
-      date: string
-      longEntryMarkdown: string
-    }): Promise<{
-      drafts: import('../src/domain/annotations/annotationDrafts').AiAnnotationDraft[]
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    generateFrontMatterDraft(payload: {
-      collectionLibrary?: string[]
-      date: string
-      journalMarkdown: string
-      tagLibrary?: string[]
-      currentFrontMatter?: {
-        title?: string
-        excerpt?: string
-        tags?: string[]
-        collections?: string[]
-      }
-    }): Promise<{
-      draft: {
-        title?: string
-        excerpt?: string
-        tags: string[]
-        collections: string[]
-      }
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    generateDailyCurationDraft(payload: {
-      curation: import('../src/domain/dailyCuration').DailyCuration
-      candidateCurations?: import('../src/domain/dailyCuration').DailyCuration[]
-    }): Promise<{
-      curation: import('../src/domain/dailyCuration').DailyCuration
-      filePath: string
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    generateImageMetadataDraft(payload: {
-      date: string
-      journalMarkdown: string
-      murmur?: {
-        id: string
-        time: string
-        body: string
-      }
-      image: {
-        id: string
-        src: string
-        caption?: string
-        tags?: string[]
-        location?: import('../src/domain/markdown/types').ImageLocation
-      }
-      tagLibrary?: string[]
-    }): Promise<{
-      draft: {
-        caption?: string
-        locationName?: string
-        tags: string[]
-      }
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    chatWithAnnotation(payload: {
-      date: string
-      journalMarkdown: string
-      annotation: import('../src/domain/annotations/types').Annotation
-      message: string
-      threadId?: string
-    }): Promise<{
-      response: string
-      threadId: string | null
-      usage: {
-        input_tokens: number
-        cached_input_tokens: number
-        output_tokens: number
-      } | null
-    }>
-    readAnnotationThread(threadId: string): Promise<{
-      messages: {
-        id: string
-        role: 'user' | 'assistant'
-        content: string
-      }[]
-    }>
-  }
-  codexSettings?: {
-    load(): Promise<{
-      version: 1
-      model: string
-      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-      systemPrompt: string
-      workingDirectory: string
-      directory: string
-      settingsPath: string
-      systemPromptPath: string
-    }>
-    save(payload: {
-      model: string
-      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-      systemPrompt: string
-    }): Promise<{
-      version: 1
-      model: string
-      modelReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-      systemPrompt: string
-      workingDirectory: string
-      directory: string
-      settingsPath: string
-      systemPromptPath: string
-    }>
   }
   journalSettings?: {
     load(): Promise<{
@@ -254,18 +71,5 @@ interface Window {
       workingDirectory: string
       settingsPath: string
     }>
-  }
-  sketchStore?: {
-    list(): Promise<import('../src/domain/sketch').SketchDocumentSummary[]>
-    create(payload?: {
-      title?: string
-      canvasPreset?: import('../src/domain/sketch').SketchCanvasPreset
-    }): Promise<import('../src/domain/sketch').StoredSketchDocument>
-    load(id: string): Promise<import('../src/domain/sketch').StoredSketchDocument>
-    save(
-      document: import('../src/domain/sketch').SketchDocument,
-    ): Promise<import('../src/domain/sketch').StoredSketchDocument>
-    import(): Promise<import('../src/domain/sketch').StoredSketchDocument | null>
-    delete(id: string): Promise<{ id: string }>
   }
 }

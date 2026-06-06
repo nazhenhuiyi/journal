@@ -4,11 +4,7 @@ import { NavLink, Outlet } from 'react-router'
 import {
   BookOpen,
   CalendarDays,
-  Image,
   PenLine,
-  Settings,
-  Sparkles,
-  StickyNote,
   type HandDrawnIcon,
 } from '../components/HandDrawnIcons'
 import { brand } from '../brand'
@@ -22,12 +18,7 @@ const menuItems: Array<{
   disabled?: boolean
 }> = [
   { label: '今日', description: '', icon: PenLine, to: '/preview' },
-  { label: '回声', description: '旧页轻轻翻起', icon: BookOpen, to: '/pages' },
-  { label: '组件', description: '开发样张', icon: Sparkles, to: '/components' },
-  { label: '随画', description: '落笔也留下', icon: StickyNote, to: '/sketch' },
-  { label: '照片', description: '画面待安放', icon: Image, to: '/photos' },
-  { label: '日历', description: '月份书架', icon: CalendarDays, to: '/calendar' },
-  { label: '设置', description: '页边与偏好', icon: Settings, to: '/settings' },
+  { label: '日历', description: '翻看旧日', icon: CalendarDays, to: '/calendar' },
 ]
 
 function formatMenuDate(date = new Date()) {
