@@ -76,7 +76,7 @@ export function getSyncStatusPresentation(
     return {
       detail: '本地日记和远端仓库保持一致。',
       icon: CheckCircle2,
-      label: syncSnapshot.lastSyncedAt ? `已同步 ${formatShortTime(syncSnapshot.lastSyncedAt)}` : '已同步',
+      label: '已同步',
       tone: 'success',
     }
   }
@@ -126,17 +126,4 @@ function getPendingReasonDetail(reason: SyncSnapshot['pendingReason']) {
   }
 
   return '本地改动会在下一次同步时上传。'
-}
-
-function formatShortTime(value: string) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

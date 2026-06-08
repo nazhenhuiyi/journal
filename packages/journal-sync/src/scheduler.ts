@@ -206,10 +206,12 @@ export class JournalSyncCoordinator {
       return this.activeRun.then(() => this.queuedRun ?? this.snapshot)
     }
 
-    this.updateSnapshot({
-      lastError: null,
-      status: 'syncing',
-    })
+    if (this.shouldSurfaceSyncing(operation, trigger)) {
+      this.updateSnapshot({
+        lastError: null,
+        status: 'syncing',
+      })
+    }
 
     this.activeRun = this.executeOperation(operation, trigger)
 
@@ -244,6 +246,8 @@ export class JournalSyncCoordinator {
   }
 
   private async executeOperation(operation: SyncOperation, trigger: SyncTrigger) {
+    const isBackgroundPull = operation === 'pull' && trigger !== 'manual'
+
     try {
       const result = await this.options.runOperation({ operation, trigger })
 
@@ -260,11 +264,15 @@ export class JournalSyncCoordinator {
           pendingReason: 'local-save',
           status: 'pending',
         })
+      } else if (result.skipped && operation === 'push') {
+        this.markLocalChangesPending()
       } else if (result.skipped && operation === 'pull') {
         this.updateSnapshot({
           pendingReason: null,
           status: this.snapshot.lastSyncedAt ? 'synced' : 'idle',
         })
+      } else if (isBackgroundPull && !result.changed) {
+        return this.snapshot
       } else {
         this.clearRetryTimer()
         this.updateSnapshot({
@@ -282,6 +290,10 @@ export class JournalSyncCoordinator {
           status: 'pending',
         })
 
+        return this.snapshot
+      }
+
+      if (isBackgroundPull) {
         return this.snapshot
       }
 
@@ -339,6 +351,10 @@ export class JournalSyncCoordinator {
       ...nextSnapshot,
     }
     this.options.onSnapshot?.(this.snapshot)
+  }
+
+  private shouldSurfaceSyncing(operation: SyncOperation, trigger: SyncTrigger) {
+    return operation !== 'pull' || trigger === 'manual'
   }
 
   private get leaveFlushTimeoutMs() {

@@ -326,4 +326,91 @@ describe('MarkdownPreviewPage', () => {
       expect(push).toHaveBeenCalledOnce()
     })
   })
+
+  it('defers automatic push instead of flushing dirty editor content mid-writing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-08\n---\n\n开头。',
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: null,
+    }
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...storedJournal,
+      content,
+      date,
+      didWrite: true,
+      updatedAt: '2026-06-08T14:16:05.000Z',
+    }))
+    const push = vi.fn(async () => ({
+      changed: true,
+      dirtyPaths: [],
+    }))
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveDate,
+      saveToday: vi.fn(),
+    })
+    vi.stubGlobal('journalSync', {
+      loadStatus: vi.fn().mockResolvedValue({
+        branch: 'main',
+        dirtyPaths: [],
+        hasCredentials: true,
+        hasRepository: true,
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+        worktreeDirectory: '/Users/zilin/.journal',
+      }),
+      pull: vi.fn().mockResolvedValue({
+        changed: false,
+        dirtyPaths: [],
+      }),
+      push,
+      syncNow: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    await screen.findByRole('textbox', { name: '日记正文' })
+    insertEditorText('\n第一段。')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(19_000)
+    })
+    insertEditorText('\n第二段。')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(saveDate).toHaveBeenCalledTimes(1)
+    expect(push).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledTimes(2)
+    })
+    expect(push).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000)
+    })
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledOnce()
+    })
+  })
 })

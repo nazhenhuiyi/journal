@@ -6,6 +6,7 @@ import {
   type SyncOperationRequest,
   type SyncOperationResult,
   type SyncSnapshot,
+  type SyncTrigger,
 } from '@journal/sync/scheduler'
 import SegmentedControl from '../components/SegmentedControl'
 import {
@@ -206,6 +207,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef('')
   const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
+  const lastJournalEditedAtRef = useRef(0)
   const saveRequestIdRef = useRef(0)
   const syncConfigRef = useRef({
     branch: 'main',
@@ -429,7 +431,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     [flushPendingSave],
   )
 
-  const runDesktopSyncOperation = useCallback(async ({ operation }: SyncOperationRequest) => {
+  const shouldDeferAutomaticPush = useCallback((trigger: SyncTrigger) => (
+    trigger === 'save-idle' &&
+      (isEditorComposingRef.current ||
+        Date.now() - lastJournalEditedAtRef.current < AUTOSAVE_DELAY_MS)
+  ), [])
+
+  const runDesktopSyncOperation = useCallback(async ({ operation, trigger }: SyncOperationRequest) => {
     const journalSync = getJournalSyncStore()
 
     if (!journalSync) {
@@ -473,7 +481,21 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     }
 
     if (isJournalDirtyRef.current) {
-      await flushPendingSave(true, { scheduleSync: false })
+      if (shouldDeferAutomaticPush(trigger)) {
+        return {
+          message: '正在编辑，稍后同步。',
+          skipped: true,
+        }
+      }
+
+      const didFlush = await flushPendingSave(true, { scheduleSync: false })
+
+      if (!didFlush) {
+        return {
+          message: '本地保存还没有完成，稍后同步。',
+          skipped: true,
+        }
+      }
     }
 
     const result = operation === 'full'
@@ -487,7 +509,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return {
       changed: result.changed,
     }
-  }, [flushPendingSave, loadJournalForDate])
+  }, [flushPendingSave, loadJournalForDate, shouldDeferAutomaticPush])
 
   useEffect(() => {
     runDesktopSyncOperationRef.current = runDesktopSyncOperation
@@ -618,8 +640,8 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }), [finalizeJournalBeforeLeaving])
 
   useEffect(() => () => {
-    void flushAndSyncBeforeLeaving()
-  }, [flushAndSyncBeforeLeaving])
+    void flushPendingSave(false, { scheduleSync: false })
+  }, [flushPendingSave])
 
   useEffect(() => {
     function finalizeOpenJournal() {
@@ -770,6 +792,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       return
     }
 
+    lastJournalEditedAtRef.current = Date.now()
     updateJournalMarkdownBody(nextMarkdown)
   }
 
@@ -787,11 +810,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     setIsEditorComposing(isComposing)
 
     if (!isComposing) {
+      lastJournalEditedAtRef.current = Date.now()
       updateJournalMarkdownBody(composedMarkdown)
     }
   }
 
   function handleJournalMurmursChange(nextMurmurs: MurmurBlock[]) {
+    lastJournalEditedAtRef.current = Date.now()
     setDaySwitchError('')
     setJournalMarkdown((currentMarkdown) => {
       const currentEntry = parseJournalMarkdown(currentMarkdown)

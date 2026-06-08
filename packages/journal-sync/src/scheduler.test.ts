@@ -92,6 +92,23 @@ describe('JournalSyncCoordinator', () => {
     })
   })
 
+  it('keeps background pull checks out of the visible status when nothing changed', async () => {
+    const snapshots: unknown[] = []
+    const runOperation = vi.fn(async () => ({
+      changed: false,
+    }))
+    const coordinator = new JournalSyncCoordinator({
+      onSnapshot: (snapshot) => snapshots.push(snapshot),
+      runOperation,
+    })
+
+    await coordinator.pullNow('app-open')
+
+    expect(runOperation).toHaveBeenCalledOnce()
+    expect(coordinator.getSnapshot().status).toBe('idle')
+    expect(snapshots).toEqual([])
+  })
+
   it('keeps git operations single-flight and queues a push after the active run', async () => {
     let resolveFirstRun: () => void = () => undefined
     const requests: SyncOperationRequest[] = []
@@ -205,6 +222,35 @@ describe('JournalSyncCoordinator', () => {
 
     await vi.advanceTimersByTimeAsync(20_000)
 
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+  })
+
+  it('reschedules the push window when an automatic push is skipped', async () => {
+    const runOperation = vi.fn(async () => ({
+      skipped: true,
+    }))
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({
+      pendingReason: 'local-save',
+      status: 'pending',
+    })
+
+    await vi.advanceTimersByTimeAsync(19_999)
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
     expect(runOperation).toHaveBeenCalledTimes(2)
     expect(runOperation).toHaveBeenLastCalledWith({
       operation: 'push',

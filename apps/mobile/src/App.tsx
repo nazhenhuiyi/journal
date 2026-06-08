@@ -432,7 +432,7 @@ export default function App() {
     setSaveState('idle')
   }, [])
 
-  const runMobileSyncOperation = useCallback(async ({ operation }: SyncOperationRequest) => {
+  const runMobileSyncOperation = useCallback(async ({ operation, trigger }: SyncOperationRequest) => {
     const branch = syncConfigRef.current.branch.trim() || 'main'
     const remoteUrl = syncConfigRef.current.remoteUrl.trim()
 
@@ -472,11 +472,32 @@ export default function App() {
       }
     }
 
+    if (saveStateRef.current === 'saving') {
+      return {
+        message: '本地保存还没有完成，稍后同步',
+        skipped: true,
+      }
+    }
+
     if (saveStateRef.current === 'dirty') {
-      await saveCurrentJournalRef.current?.({
+      if (trigger === 'save-idle' && isLongEntryInputUnstable()) {
+        return {
+          message: '正在编辑，稍后同步',
+          skipped: true,
+        }
+      }
+
+      const savedRecord = await saveCurrentJournalRef.current?.({
         scheduleSync: false,
         showAlert: operation === 'full',
       })
+
+      if (!savedRecord) {
+        return {
+          message: '本地保存还没有完成，稍后同步',
+          skipped: true,
+        }
+      }
     }
 
     if (operation === 'push') {
@@ -498,7 +519,7 @@ export default function App() {
     return {
       changed: Boolean(result.localCommitOid || result.mergeResult || result.retriedPush),
     }
-  }, [reloadTodayFromDisk])
+  }, [isLongEntryInputUnstable, reloadTodayFromDisk])
 
   useEffect(() => {
     const coordinator = new JournalSyncCoordinator({
