@@ -1,0 +1,135 @@
+import * as FileSystem from 'expo-file-system/legacy'
+import {
+  createJournalMarkdownWithFrontMatter,
+  parseJournalMarkdown,
+  serializeJournalMarkdownBody,
+  type DayFrontMatter,
+  type MurmurBlock,
+} from '@journal/core'
+
+export type MobileJournalRecord = {
+  date: string
+  longEntryMarkdown: string
+  murmurs: MurmurBlock[]
+  markdown: string
+  updatedAt: string | null
+}
+
+type SaveJournalInput = {
+  date: string
+  longEntryMarkdown: string
+  murmurs: MurmurBlock[]
+}
+
+const worktreeDirectoryName = 'journal-worktree'
+
+export function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+export function createMurmur(date: string, body: string, now = new Date()): MurmurBlock {
+  const timestamp = now.toISOString()
+
+  return {
+    id: createMurmurId(date, now),
+    time: timestamp,
+    body: body.trim(),
+    images: [],
+  }
+}
+
+export async function loadDailyJournal(date: string): Promise<MobileJournalRecord> {
+  const filePath = await getEntryFilePath(date)
+  const fileInfo = await FileSystem.getInfoAsync(filePath)
+
+  if (!fileInfo.exists) {
+    return {
+      date,
+      longEntryMarkdown: '',
+      murmurs: [],
+      markdown: '',
+      updatedAt: null,
+    }
+  }
+
+  const markdown = await FileSystem.readAsStringAsync(filePath)
+  const parsed = parseJournalMarkdown(markdown)
+
+  return {
+    date,
+    longEntryMarkdown: parsed.longEntryMarkdown,
+    murmurs: parsed.murmurs,
+    markdown,
+    updatedAt: parsed.frontMatter.updatedAt ?? null,
+  }
+}
+
+export async function saveDailyJournal(input: SaveJournalInput): Promise<MobileJournalRecord> {
+  const previous = await readExistingFrontMatter(input.date)
+  const updatedAt = new Date().toISOString()
+  const frontMatter: DayFrontMatter = {
+    ...previous,
+    date: input.date,
+    createdAt: previous.createdAt ?? updatedAt,
+    updatedAt,
+  }
+  const body = serializeJournalMarkdownBody(input.longEntryMarkdown, input.murmurs)
+  const markdown = createJournalMarkdownWithFrontMatter(body, frontMatter)
+  const filePath = await getEntryFilePath(input.date)
+
+  await FileSystem.writeAsStringAsync(filePath, markdown)
+
+  const parsed = parseJournalMarkdown(markdown)
+
+  return {
+    date: input.date,
+    longEntryMarkdown: parsed.longEntryMarkdown,
+    murmurs: parsed.murmurs,
+    markdown,
+    updatedAt,
+  }
+}
+
+async function readExistingFrontMatter(date: string): Promise<DayFrontMatter> {
+  const existing = await loadDailyJournal(date)
+
+  if (!existing.markdown) {
+    return {}
+  }
+
+  return parseJournalMarkdown(existing.markdown).frontMatter
+}
+
+async function getEntryFilePath(date: string) {
+  const [year, month] = date.split('-')
+  const entriesDirectory = `${getWorktreeDirectory()}entries/${year}/${month}/`
+
+  await FileSystem.makeDirectoryAsync(entriesDirectory, { intermediates: true })
+
+  return `${entriesDirectory}${date}.md`
+}
+
+function getWorktreeDirectory() {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('File system document directory is unavailable.')
+  }
+
+  return `${FileSystem.documentDirectory}${worktreeDirectoryName}/`
+}
+
+function createMurmurId(date: string, now: Date) {
+  const compactDate = date.replaceAll('-', '')
+  const time = [
+    `${now.getHours()}`.padStart(2, '0'),
+    `${now.getMinutes()}`.padStart(2, '0'),
+    `${now.getSeconds()}`.padStart(2, '0'),
+    `${now.getMilliseconds()}`.padStart(3, '0'),
+  ].join('')
+  const suffix = Math.random().toString(36).slice(2, 8)
+
+  return `m_${compactDate}_${time}_${suffix}`
+}

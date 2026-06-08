@@ -1,74 +1,71 @@
-# 移动端与 Monorepo 规划
+# 移动端与 Monorepo 实施计划
 
-这份文档是移动端 React Native 版本和 Monorepo 改造的讨论底稿。它不把方案过早写死，重点是先把产品边界、技术边界和迁移顺序梳理清楚，方便后续继续聊。
+这份文档用于指导桌面端到移动端的演进。目标不是一次性把项目搬成完整大仓库，而是先把跨端共享的数据格式和同步闭环做稳。
 
-## 背景
+## 1. 目标
 
-当前桌面端已经收敛为一个更轻的日记应用：
+当前桌面端已经收敛为轻量日记应用：
 
-- 保留写日记和看日记。
-- 保留碎碎念，因为它是高频使用入口。
+- 保留写日记、看日记和碎碎念。
 - 移除 AI、回声、涂鸦和批注界面。
-- 批注数据结构仍然保留，避免旧数据和未来能力被破坏。
+- 批注数据结构继续保留，避免破坏旧数据和未来扩展。
 - 图标系统改用主流图标库。
 
-移动端的价值不只是复刻桌面端，而是承担更贴近日常现场的记录动作：
+移动端第一版的核心价值是低摩擦记录：
 
-- 随手写一句话。
+- 随手写一句碎碎念。
+- 写当天长日记。
 - 拍照或导入图片。
-- 快速留下碎碎念。
-- 晚上或之后再整理成长日记。
+- 回看已有日记。
+- 与桌面端通过 GitHub 私有仓库同步。
 
-所以移动端应该围绕“低摩擦记录”设计，而不是一开始追求桌面端那种完整写作体验。
+第一版不追求把桌面端完整平移到手机上。
 
-## 核心判断
+## 2. 已定决策
 
-建议把项目改成 Monorepo，但不要一次性大搬家。
+| 主题 | 决策 |
+| --- | --- |
+| 仓库形态 | 采用 Monorepo，但分阶段改造 |
+| 当前重点 | 桌面端、移动端和共享 core 已拆入 workspace，下一步验证移动端同步 POC |
+| 包管理 | 继续使用 npm workspaces，不切 pnpm/yarn |
+| 共享范围 | 共享数据模型、解析、序列化和迁移工具，不共享桌面/移动 UI |
+| 移动端技术栈 | Expo SDK 54 + React Native + TypeScript，优先兼容 Play Store 版 Expo Go |
+| 移动端同步候选 | 第一候选是 `isomorphic-git`，先做 POC |
+| 同步远端 | GitHub 私有仓库，不自建后端服务 |
+| 冲突策略 | 第一版使用 last-write-wins，后写入的覆盖先写入的 |
+| 加密策略 | 第一版接受 GitHub 私有仓库权限和 HTTPS 传输加密，不做端到端加密 |
+| 批注 | 保留 schema，不做移动端批注界面 |
 
-原因是桌面端和移动端会共享同一种日记格式、碎碎念格式、图片元数据和批注 schema。如果两端各写一套解析和序列化逻辑，很容易出现：
+## 3. Monorepo 结构
 
-- 同一篇日记桌面端能读，移动端读不完整。
-- 碎碎念字段在两端不一致。
-- 图片路径或元数据被不同端写坏。
-- 批注数据结构虽然暂时不用，但被移动端无意丢失。
-
-Monorepo 的目标不是共享 UI，而是共享“日记文件格式 SDK”。
-
-## 推荐仓库结构
-
-长期结构可以是：
+当前仓库采用 workspace 结构：
 
 ```txt
 journal/
   apps/
     desktop/
-      # Electron + Vite 桌面端
+      electron/
+      src/
+      # Electron + Vite 桌面端配置
     mobile/
-      # Expo + React Native 移动端
+      src/
+      # Expo + React Native 移动端配置
   packages/
     journal-core/
-      # 纯 TypeScript：数据结构、解析、序列化、校验
+      # 纯 TypeScript：数据结构、解析、序列化、校验、迁移
+```
+
+长期可以继续按需要增加共享包：
+
+```txt
+packages/
     journal-storage/
       # 可选：跨端存储接口、导入导出协议
     design-tokens/
       # 可选：颜色、间距、字体等跨端设计 token
 ```
 
-但第一阶段不建议马上把桌面端整体搬到 `apps/desktop`。更稳的顺序是：
-
-```txt
-journal/
-  src/
-  electron/
-  packages/
-    journal-core/
-```
-
-先抽共享内核，等移动端壳子真正开始搭起来，再考虑把桌面端迁入 `apps/desktop`。
-
-## 包管理选择
-
-当前项目使用 `package-lock.json`，所以第一阶段建议继续使用 npm workspaces：
+根 `package.json` 只负责 workspace 编排和命令转发：
 
 ```json
 {
@@ -80,13 +77,17 @@ journal/
 }
 ```
 
-暂时不建议切到 pnpm 或 yarn。包管理器切换会带来额外变量，但它不是移动端成败的关键。
+应用自己的依赖和脚本分别放在：
 
-## 共享包边界
+- `apps/desktop/package.json`
+- `apps/mobile/package.json`
+- `packages/journal-core/package.json`
 
-`packages/journal-core` 应该只包含纯 TypeScript 能力，不依赖 React DOM、Electron、CodeMirror 或具体平台文件系统。
+## 4. `journal-core` 边界
 
-适合放入 `journal-core`：
+`packages/journal-core` 是跨端共享的日记格式 SDK。它必须是纯 TypeScript，不依赖 React DOM、Electron、CodeMirror 或移动端文件系统。
+
+应该放入 `journal-core`：
 
 - `DayFrontMatter`
 - `MurmurBlock`
@@ -99,70 +100,25 @@ journal/
 - 碎碎念 block 解析与序列化
 - 图片 block 解析与序列化
 - 数据格式版本与迁移工具
+- 兼容旧字段和未知字段的保留策略
 
-不适合放入 `journal-core`：
+不应该放入 `journal-core`：
 
 - Electron IPC。
 - 桌面端文件选择器。
 - CodeMirror 编辑器逻辑。
 - React DOM Markdown 渲染。
 - 桌面端 CSS。
-- 移动端 SQLite 实现。
+- Expo FileSystem 实现。
 - 移动端图片选择器实现。
 
-可以保留在桌面端的能力：
+移动端和桌面端都必须通过 `journal-core` 读写日记格式，避免两端各自实现一套解析逻辑。
 
-- `renderJournalMarkdown.tsx` 这类依赖 Web/React DOM 的渲染逻辑。
-- 桌面端 Markdown 编辑器。
-- 桌面端文件系统读写。
+## 5. 数据源原则
 
-未来如果移动端也需要 Markdown 渲染，可以单独做 `journal-render-mobile` 或直接在 mobile app 内实现，不要让 `journal-core` 变重。
+跨端共享的是日记文档模型，不是某一种本地存储实现。
 
-## 数据模型原则
-
-跨端共享的是“日记文档模型”，不是某一种存储方式。
-
-桌面端当前更适合继续以 Markdown 文件作为主要数据源：
-
-```txt
-entries/
-  2026-04-24.md
-media/
-  2026/
-    04/
-      window-rain.jpg
-```
-
-移动端可以使用 SQLite 或本地文件系统作为工作存储，但导入导出时必须保持同一种 Markdown 格式。
-
-一个比较稳的移动端方案是：
-
-- SQLite 保存按天的 journal record。
-- 每天保留一份 canonical markdown 文本。
-- 解析出的 front matter、murmurs、images 作为索引或缓存。
-- 图片文件放在 app 私有文件目录。
-- 导出时生成与桌面端兼容的 Markdown + media 目录。
-
-这样移动端可以获得 SQLite 的查询和稳定性，同时不丢掉 Markdown 的可迁移性。
-
-## 批注数据结构
-
-批注界面已经移除，但 schema 需要继续保留。
-
-原则：
-
-- 移动端第一版不显示批注。
-- 移动端读写日记时不能删除已有批注文件或批注字段。
-- `annotation.ai.threadId` 这类历史兼容字段可以保留在类型里。
-- 新功能不再创建 AI 批注。
-
-这让数据结构保持向后兼容，也给以后可能的“人工批注”或“阅读标记”留下余地。
-
-## GitHub 同步方案
-
-同步不自建后端服务。第一方向是把用户自己的 GitHub 私有仓库作为同步远端，让桌面端和移动端都围绕同一个普通 Git repo 工作。
-
-推荐的同步仓库结构：
+权威数据源采用 Markdown + media + annotations 文件结构：
 
 ```txt
 journal-sync/
@@ -181,36 +137,40 @@ journal-sync/
         2026-06-07.json
 ```
 
-这里的核心判断是：同步本质上应该是 Git 同步，而不是自己基于 GitHub REST API 重新实现一套同步协议。
+移动端第一版不使用 SQLite，直接读写本地 Git worktree 里的 Markdown 文件。
 
-### 第一候选：isomorphic-git 做 POC
+移动端写入流程：
 
-移动端第一候选方案是用 `isomorphic-git` 做 POC。
+1. 用户编辑日记或碎碎念。
+2. 使用 `journal-core` 生成 canonical Markdown。
+3. 写入本地 Git worktree 里的 `entries/`、`media/`、`annotations/`。
+4. 等待手动同步或自动延迟同步。
 
-原因：
+第一版先避免多一层缓存状态，减少 Markdown 和本地索引不一致的风险。等日记数量、全文搜索、标签筛选或图片检索真的需要性能优化时，再增加可重建的索引层。
 
-- 它是纯 JavaScript Git 实现，理论上适合 React Native 运行环境。
-- 它支持 clone、fetch、commit、push 等核心 Git 操作。
-- 官方 examples 里有 React Native 示例，使用 `react-native-fs` 包装文件系统 API。
-- Obsidian Git 移动端也采用过这个方向，说明笔记类应用里已经有人走过。
-- 我们的同步 repo 结构克制，不需要 submodules、复杂分支、大型源码仓库或频繁 rebase。
+## 6. 批注兼容
 
-POC 目标不是一次做完整同步，而是先验证最小闭环：
+批注界面已经移除，但 schema 继续保留。
 
-- 在移动端 app 私有目录初始化或 clone 一个 repo。
-- 写入一篇 Markdown 日记。
-- `add`、`commit`、`push` 到 GitHub 私有仓库。
-- 从远端 `fetch` 或 `pull` 回来。
-- 验证新增、修改、删除文件都能稳定工作。
-- 验证一两张图片文件能随日记一起同步。
+原则：
 
-POC 阶段优先支持 HTTPS + GitHub token 或 OAuth，不急着支持 SSH。
+- 移动端第一版不显示批注。
+- 移动端读写日记时不能删除已有批注文件或批注字段。
+- `annotation.ai.threadId` 这类历史兼容字段可以保留在类型里。
+- 新功能不再创建 AI 批注。
+- 序列化时尽量保留未知字段，减少旧数据被新版本写坏的风险。
 
-### 桌面端同步
+## 7. GitHub 同步计划
+
+同步方案不自建后端服务。桌面端和移动端都围绕同一个 GitHub 私有仓库工作。
+
+核心判断：同步应该是 Git 同步，不是基于 GitHub REST API 重新实现一套文件同步协议。
+
+### 7.1 桌面端
 
 桌面端可以直接使用系统 Git 客户端。
 
-流程可以保持接近普通 Git 工作流：
+基础流程：
 
 ```txt
 git pull
@@ -219,129 +179,169 @@ git commit -m "Sync journal"
 git push
 ```
 
-桌面端不需要走 `isomorphic-git`，除非未来为了跨端统一实现而觉得有必要。
+桌面端暂时不需要使用 `isomorphic-git`。
 
-### 移动端同步
+### 7.2 移动端
 
-移动端不能假设系统里有 `git` 命令，也不应该依赖 shell 调用。
+移动端不能假设系统里有 `git` 命令，也不依赖 shell 调用。
 
-移动端同步流程可以先设计成：
+移动端第一候选是 `isomorphic-git` POC：
+
+- 在 app 私有目录初始化或 clone 一个 repo。
+- 写入一篇 Markdown 日记。
+- `add`、`commit`、`push` 到 GitHub 私有仓库。
+- 从远端 `fetch` 或 `pull` 回来。
+- 验证新增、修改、删除文件都能稳定工作。
+- 验证少量图片文件能随日记一起同步。
+
+认证第一版优先支持 HTTPS + GitHub token 或 OAuth，不急着支持 SSH。token 或 OAuth 凭据需要放在系统安全存储里，例如 iOS Keychain / Android Keystore，对 Expo 来说可以先评估 Expo SecureStore。
+
+### 7.3 同步流程
+
+第一版同步以手动触发为主，自动同步为辅。
+
+推荐优先级：
+
+1. 手动同步按钮。
+2. 打开 app 时拉取。
+3. 保存后延迟推送。
+4. 网络恢复后重试。
+
+移动端同步流程：
 
 ```txt
 打开 app / 手动同步
-  -> 检查本地 dirty 文件
-  -> commit 本地改动
+  -> 把本地未提交改动写成 commit
   -> fetch 远端
-  -> 尝试 merge / fast-forward
+  -> 如果可以 fast-forward，则直接更新本地
+  -> 如果出现分叉或同文件冲突，则按 last-write-wins 生成结果
+  -> commit 合并后的结果
   -> push
+  -> 如果 push 被远端新提交拒绝，则 fetch 后重试一次
 ```
 
-如果同一天日记在多台设备离线编辑导致冲突，第一版可以采用保守策略：
+### 7.4 冲突策略
 
-- 长日记冲突：保留本地和远端两份，生成冲突副本，交给用户之后整理。
-- 碎碎念冲突：按 `id` 合并，新增内容尽量不丢。
-- 图片冲突：图片使用稳定 id 或 hash 命名，尽量只追加，不覆盖。
-- 批注冲突：第一版不主动编辑批注，优先保留远端和本地数据。
+第一版使用 last-write-wins，不做复杂冲突处理，也不做逐段合并 UI。
 
-### 备选方案
+规则：
 
-如果 `isomorphic-git` POC 证明在移动端不稳定，再考虑这些备选：
+- 以文件为单位处理冲突。
+- 后写入的版本覆盖先写入的版本。
+- 日记文件优先比较 front matter 里的 `updatedAt`。
+- 如果没有可靠 `updatedAt`，再使用本地编辑时间。
+- 如果本地编辑时间也不可用，最后退回使用同步 commit 时间。
+- 图片文件使用稳定 id 或 hash 命名，尽量避免同名冲突。
+- 如果图片或批注出现同路径冲突，也使用后写入版本。
 
-- 原生 Git 库：用 `libgit2` 或其他原生实现，通过 Expo native module 暴露给 React Native。这条路更稳也更重，需要 Development Build，并增加 iOS/Android 原生维护成本。
-- GitHub REST API / Git Data API：作为 fallback 或辅助能力，用于创建 repo、检查权限、读取远端信息，或在 Git 协议路线无法满足时做轻量同步。
-- 外部 Git 客户端：例如 iOS 的 Working Copy、跨平台 GitSync。这更适合高级用户手动配置，不适合作为产品主流程。
+这个策略可能覆盖较旧设备上的离线修改。这个风险第一版先接受，用来换取更低的实现复杂度和更顺滑的同步体验。
 
-### 同步边界
+### 7.5 第一版暂不做
 
-第一版同步不追求后台实时同步。
-
-优先级：
-
-- 手动同步按钮。
-- 打开 app 时拉取。
-- 保存后延迟推送。
-- 网络恢复后重试。
-
-暂时不做：
-
+- 后台实时同步。
 - 多人协作。
 - 多分支管理。
 - Git LFS。
 - 复杂 merge UI。
 - 端到端加密。
+- SSH 同步。
+- 依赖外部 Git 客户端作为产品主流程。
 
-当前对加密的判断是：先接受 GitHub 私有仓库的访问控制和 HTTPS 传输加密，不把端到端加密作为第一版要求。
+### 7.6 备选方案
 
-## 移动端第一版范围
+如果 `isomorphic-git` POC 在移动端不稳定，再考虑：
 
-第一版移动端不要做成桌面端完整平移。建议只做三个核心面：
+- 原生 Git 库：用 `libgit2` 或其他原生实现，通过 Expo native module 暴露给 React Native。这条路更稳也更重，需要 Development Build，并增加 iOS/Android 原生维护成本。
+- GitHub REST API / Git Data API：作为 fallback 或辅助能力，用于创建 repo、检查权限、读取远端信息，或在 Git 协议路线无法满足时做轻量同步。
+- 外部 Git 客户端：例如 iOS 的 Working Copy 或跨平台 GitSync。这更适合高级用户手动配置，不适合作为默认产品流程。
 
-### 今日
+## 8. 移动端第一版范围
+
+第一版只做三个核心页面。
+
+### 8.1 今日
 
 - 显示今天日期。
 - 长日记输入区。
 - 碎碎念快速输入。
 - 添加图片或拍照。
 - 自动保存。
-- 保存状态提示。
+- 保存状态。
+- 同步状态。
 
-### 回看
+### 8.2 回看
 
 - 日历或日期列表。
 - 有内容的日期高亮。
-- 打开某一天查看长日记和碎碎念。
-- 第一版可以先只读，编辑入口可以后置。
+- 打开某一天查看长日记、碎碎念和图片。
+- 第一版可以先只读，编辑历史日记后置。
 
-### 设置
+### 8.3 设置
 
+- GitHub 同步仓库配置。
+- 登录或填写 GitHub token。
 - 本地数据位置说明。
-- 导入桌面端导出的日记包。
+- 导入桌面端日记包。
 - 导出移动端日记包。
-- 未来再考虑 Face ID、iCloud、WebDAV 或其他同步。
 
-## React Native 技术栈建议
+第一版不做：
+
+- AI。
+- 回声。
+- 涂鸦。
+- 批注 UI。
+- 复杂富文本编辑器。
+- 密码锁和生物识别。
+- iCloud、WebDAV 或其他同步通道。
+
+## 9. React Native 技术栈
 
 建议使用：
 
-- Expo。
+- Expo SDK 54。
 - React Native。
 - TypeScript。
 - Expo Router 或 React Navigation。
-- Expo SQLite。
 - Expo FileSystem。
 - Expo ImagePicker。
-- `isomorphic-git`，用于移动端 Git 同步 POC。
-- 主流图标库，例如 `lucide-react-native` 或 Expo 生态图标。
+- `isomorphic-git`。
+- `lucide-react-native` 或 Expo 生态主流图标库。
 
-倾向先用 Expo，是因为移动端早期最重要的是快速真机验证和稳定打包。等遇到确实需要原生能力的地方，再通过 Development Build 或 config plugin 解决。
+倾向先用 Expo，因为早期最重要的是快速真机验证和稳定打包。等确实遇到原生能力缺口，再通过 Development Build 或 config plugin 解决。
 
-## 迁移路线
+## 10. 分阶段计划
 
-### 阶段 1：抽共享内核
+### 阶段 1：抽共享内核（已完成）
 
-目标是让桌面端继续工作，同时出现第一个可复用包。
+目标：让桌面端继续工作，同时出现第一个可复用包。
+
+任务：
 
 - 增加 npm workspaces。
-- 建 `packages/journal-core`。
+- 创建 `packages/journal-core`。
 - 移动纯类型和纯函数。
 - 桌面端改为从 `@journal/core` 引用。
+- 增加 `journal-core` 单元测试。
 - 跑桌面端测试和构建。
 
 完成标志：
 
 - 桌面端行为不变。
 - 测试通过。
-- `journal-core` 不依赖 React DOM、Electron、Vite、CodeMirror。
+- `journal-core` 不依赖 React DOM、Electron、Vite、CodeMirror 或平台文件系统。
 
-### 阶段 2：建立移动端壳
+### 阶段 2：建立移动端壳（已完成基础版）
 
-目标是让移动端可以跑起来，但不急着做完整功能。
+目标：让移动端可以跑起来，但不急着做完整功能。
 
-- 建 `apps/mobile`。
+任务：
+
+- 创建 `apps/mobile`。
 - 接入 `@journal/core`。
 - 做今日页面原型。
 - 实现本地保存一篇日记。
 - 实现碎碎念新增和解析。
+- 使用本地 Markdown 文件保存。
 
 完成标志：
 
@@ -350,31 +350,56 @@ git push
 - 能创建碎碎念。
 - 保存的数据能被 `@journal/core` 解析。
 
-### 阶段 3：isomorphic-git 同步 POC
+### 阶段 3：整理桌面端目录（已完成）
 
-目标是验证移动端能否稳定使用 GitHub 私有仓库同步。
+目标：把仓库整理成更标准的 Monorepo。
+
+任务：
+
+- 把桌面端迁入 `apps/desktop`。
+- 调整构建、测试和打包脚本。
+- 清理根目录只属于桌面端的配置。
+- 删除旧功能残留的空目录、生成目录和未引用资产。
+
+完成标志：
+
+- 桌面端测试、构建、Electron 启动都正常。
+- 移动端仍能引用 `@journal/core`。
+- 根目录脚本能清楚区分 desktop、mobile 和 packages。
+
+### 阶段 4：`isomorphic-git` 同步 POC
+
+目标：验证移动端能否稳定使用 GitHub 私有仓库同步。
+
+任务：
 
 - 在移动端接入 `isomorphic-git`。
 - 接入移动端文件系统适配层。
 - 支持 clone 或 init sync repo。
 - 支持 add、commit、fetch、push。
 - 支持 HTTPS + GitHub token 或 OAuth。
+- 验证安全存储凭据。
 - 用少量日记和图片做真机同步测试。
+- 验证 last-write-wins 冲突处理。
 
 完成标志：
 
 - 移动端能把一篇日记 commit 并 push 到 GitHub。
 - 桌面端能 pull 到这篇日记并正确解析。
 - 桌面端修改后 push，移动端能 fetch/pull 并正确解析。
-- 遇到简单冲突时不会覆盖或丢失用户数据。
+- 遇到非 fast-forward 或同文件冲突时，能按 last-write-wins 完成同步。
+- 同步失败时不会导致本地日记丢失。
 
-### 阶段 4：图片与导入导出
+### 阶段 5：图片与导入导出
 
-目标是让移动端记录真正有用。
+目标：让移动端记录真正有用。
+
+任务：
 
 - 接入图片选择或拍照。
 - 图片落盘到移动端本地目录。
 - 图片 metadata 写入 murmur image block。
+- 支持图片压缩或尺寸限制。
 - 支持导出 Markdown + media。
 - 支持导入桌面端导出的 Markdown + media。
 
@@ -382,41 +407,45 @@ git push
 
 - 移动端导出的日记可以被桌面端读取。
 - 桌面端导出的日记可以被移动端读取。
+- 少量图片能稳定随 GitHub repo 同步。
 
-### 阶段 5：再整理桌面端目录
+## 11. 风险与验证
 
-等移动端已经稳定起步后，再考虑把桌面端从根目录迁到 `apps/desktop`。
+| 风险 | 验证方式 |
+| --- | --- |
+| `isomorphic-git` 在 React Native 文件系统上不稳定 | 阶段 3 真机 POC，覆盖 clone、commit、fetch、push、冲突和图片 |
+| GitHub token 管理不安全 | 使用系统安全存储，避免明文落盘 |
+| 后续索引层与 Markdown 状态不一致 | 第一版不引入 SQLite；未来如果加索引，必须可从 Markdown 重新生成 |
+| 图片导致 repo 变重 | 第一版限制图片尺寸或压缩，不做视频和 Git LFS |
+| 两端序列化格式不一致 | 桌面端和移动端都只能通过 `journal-core` 读写 |
+| 批注旧数据被写坏 | `journal-core` 保留批注 schema 和未知字段 |
 
-这样可以减少第一阶段的变更量，也能避免 monorepo 改造和移动端开发互相干扰。
+## 12. 下一步执行清单
 
-## 需要继续讨论的问题
+下一步进入 `isomorphic-git` 同步 POC。
 
-这些问题会影响后续实现顺序：
+执行顺序：
 
-- 移动端第一版是只做 iOS，还是 iOS 和 Android 一起做？
-- 移动端是否先做手动同步按钮，还是打开 app 时自动同步？
-- 日记数据是否需要密码锁或生物识别？
-- 图片是否需要原图保存，还是允许压缩？
-- 移动端长日记编辑器要多强，是否第一版只做纯文本 Markdown？
-- 碎碎念是否在移动端作为首页主入口，而长日记作为次入口？
-- 批注 schema 保留到什么程度，是否需要移动端做只读兼容？
-- `isomorphic-git` POC 如果遇到性能或稳定性问题，什么时候切到原生 Git 库？
-- 未来如果恢复 AI 能力，是否只作为可选插件，而不是核心包能力？
+1. 在 `apps/mobile` 新增同步服务边界，不直接写进页面组件。
+2. 验证 `isomorphic-git` 在 Expo / React Native 文件系统上的最小 init、add、commit。
+3. 接入 GitHub 私有仓库 token，验证 fetch 和 push。
+4. 用一篇 Markdown 日记和一张图片做端到端同步。
+5. 按 last-write-wins 处理同文件冲突。
+6. 确认同步失败时本地 Markdown 不丢失。
 
-## 当前建议
+## 13. 仍需确认
 
-下一步最适合先做 `journal-core`。
+- 移动端第一版是先做 iOS，还是 iOS 和 Android 一起做。
+- 历史日记第一版是否允许编辑，还是只允许查看。
+- 图片默认保存原图，还是默认压缩。
+- 手动同步是否作为唯一入口，还是打开 app 时也自动拉取。
+- `isomorphic-git` POC 失败时，是否接受进入原生 Git 库路线。
 
-这个动作收益很高，风险相对可控。它不要求马上决定移动端所有交互，也不要求现在就把桌面端大迁移，但可以先把两端最关键的共同语言建立起来。
-
-一旦 `journal-core` 成型，移动端就不是从零开始，而是直接站在现有日记格式、碎碎念格式和批注 schema 上继续做。
-
-## 参考资料
+## 14. 参考资料
 
 - React Native 文档：https://reactnative.dev/docs/getting-started
 - Expo 工作流：https://docs.expo.dev/workflow/overview
 - Expo Router：https://docs.expo.dev/router/introduction
-- Expo SQLite 与数据库：https://docs.expo.dev/develop/database/
 - Expo ImagePicker：https://docs.expo.dev/versions/latest/sdk/imagepicker/
 - isomorphic-git：https://isomorphic-git.org/
 - isomorphic-git React Native 示例：https://github.com/isomorphic-git/examples/tree/master/ReactNativeGit

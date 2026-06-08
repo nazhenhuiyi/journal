@@ -2,9 +2,7 @@
 
 万物有迹，心事且留。
 
-把今天轻轻安放下来的桌面日记应用。
-
-写一页、留一句、放一张照片，都算数。AI 在这里不替人表达，只像页边的小字一样，阅读已经写下的内容，再留下克制的观察和追问。
+一个桌面优先、正在补移动端的个人日记应用。当前核心只保留写日记、看日记、碎碎念和图片记录。
 
 ## 开发
 
@@ -13,19 +11,26 @@ npm install
 npm run dev
 ```
 
+`npm run dev` 默认启动桌面端。移动端可以使用：
+
+```sh
+npm run dev:mobile
+```
+
 ## 常用命令
 
 ```sh
+npm run typecheck
+npm test
 npm run lint
-npx tsc && npx vite build
 npm run build
 ```
 
-`npm run build` 会在完成 TypeScript/Vite 构建后调用 `electron-builder` 生成桌面安装包。
+`npm run build` 当前转发到桌面端构建，会在完成 TypeScript/Vite 构建后调用 `electron-builder` 生成桌面安装包。
 
 ## 目录
 
-- `electron/`: Electron 主进程和 preload 脚本
-- `src/`: React 渲染进程代码
-- `src/index.css`: Tailwind 入口与基础主题样式
-- `vite.config.ts`: Vite、React、Tailwind、Electron 插件配置
+- `apps/desktop/`: Electron + Vite 桌面端。
+- `apps/mobile/`: Expo + React Native 移动端。
+- `packages/journal-core/`: 跨端共享的日记数据结构、Markdown 解析与序列化。
+- `docs/product/`: 产品与技术规划文档。
