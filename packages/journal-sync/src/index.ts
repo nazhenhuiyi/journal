@@ -36,3 +36,10 @@ export {
   type SyncTimerApi,
   type SyncTrigger,
 } from './scheduler'
+export {
+  getJournalSyncStatusPresentation,
+  type JournalSyncStatusKind,
+  type JournalSyncStatusPresentation,
+  type JournalSyncStatusPresentationOptions,
+  type JournalSyncStatusTone,
+} from './statusPresentation'

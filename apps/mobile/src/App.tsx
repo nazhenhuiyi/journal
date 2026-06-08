@@ -11,10 +11,12 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import type { MurmurBlock } from '@journal/core'
 import {
+  getJournalSyncStatusPresentation,
   JournalSyncCoordinator,
+  type JournalSyncStatusTone,
   type SyncOperationRequest,
   type SyncSnapshot,
-} from '@journal/sync/scheduler'
+} from '@journal/sync'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
@@ -50,7 +52,6 @@ type SaveCurrentJournalOptions = {
 }
 type HeaderStatusTone = 'blue' | 'green' | 'plain' | 'soil'
 type HeaderStatus = {
-  icon: IconName
   label: string
   tone: HeaderStatusTone
 }
@@ -61,7 +62,7 @@ type RootStackParamList = {
   Settings: undefined
 }
 
-const today = getLocalDateKey()
+const dateRolloverCheckMs = 60_000
 const localSaveDebounceMs = 5_000
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -73,6 +74,7 @@ const initialSyncSnapshot: SyncSnapshot = {
 }
 
 export default function App() {
+  const [today, setToday] = useState(() => getLocalDateKey())
   const [record, setRecord] = useState<MobileJournalRecord | null>(null)
   const [longEntryMarkdown, setLongEntryMarkdown] = useState('')
   const [murmurs, setMurmurs] = useState<MurmurBlock[]>([])
@@ -94,6 +96,7 @@ export default function App() {
   const lastLongEntryEditedAtRef = useRef(0)
   const saveCurrentJournalRef = useRef<((options?: SaveCurrentJournalOptions) => Promise<SaveDailyJournalResult | null>) | null>(null)
   const saveStateRef = useRef<SaveState>('loading')
+  const todayRef = useRef(today)
   const syncConfigRef = useRef({
     branch: 'main',
     hasStoredSyncToken: false,
@@ -102,6 +105,9 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true
+    const loadingVersion = journalVersionRef.current
+
+    setSaveState('loading')
 
     loadDailyJournal(today)
       .then((loadedRecord) => {
@@ -111,7 +117,7 @@ export default function App() {
 
         setRecord(loadedRecord)
 
-        if (journalVersionRef.current === 0) {
+        if (journalVersionRef.current === loadingVersion) {
           setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
           setMurmurs(loadedRecord.murmurs)
           setSaveState('idle')
@@ -130,7 +136,11 @@ export default function App() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [today])
+
+  useEffect(() => {
+    todayRef.current = today
+  }, [today])
 
   useEffect(() => {
     journalContentRef.current = {
@@ -302,7 +312,7 @@ export default function App() {
 
       return null
     }
-  }, [longEntryMarkdown, murmurs])
+  }, [longEntryMarkdown, murmurs, today])
 
   useEffect(() => {
     saveCurrentJournalRef.current = (options?: SaveCurrentJournalOptions) => {
@@ -315,6 +325,30 @@ export default function App() {
       )
     }
   }, [saveCurrentJournal])
+
+  const checkForDateRollover = useCallback(async () => {
+    const nextToday = getLocalDateKey()
+
+    if (nextToday === todayRef.current || saveStateRef.current === 'saving') {
+      return false
+    }
+
+    if (saveStateRef.current === 'dirty') {
+      const savedRecord = await saveCurrentJournalRef.current?.({
+        showAlert: false,
+      })
+
+      if (!savedRecord) {
+        return false
+      }
+    }
+
+    setSaveState('loading')
+    todayRef.current = nextToday
+    setToday(nextToday)
+
+    return true
+  }, [])
 
   useEffect(() => {
     if (saveState !== 'dirty') {
@@ -369,7 +403,7 @@ export default function App() {
       journalVersionRef.current += 1
       setMurmurs(previousMurmurs)
     }
-  }, [longEntryMarkdown, murmurDraft, murmurs, saveCurrentJournal])
+  }, [longEntryMarkdown, murmurDraft, murmurs, saveCurrentJournal, today])
 
   const saveSyncConfiguration = useCallback(async () => {
     const remoteUrl = syncRemoteUrl.trim()
@@ -430,7 +464,7 @@ export default function App() {
     setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
     setMurmurs(loadedRecord.murmurs)
     setSaveState('idle')
-  }, [])
+  }, [today])
 
   const runMobileSyncOperation = useCallback(async ({ operation, trigger }: SyncOperationRequest) => {
     const branch = syncConfigRef.current.branch.trim() || 'main'
@@ -591,16 +625,32 @@ export default function App() {
   }, [isLongEntryInputUnstable])
 
   useEffect(() => {
+    const intervalId = setInterval(() => {
+      void checkForDateRollover().catch((error) => {
+        console.error(error)
+      })
+    }, dateRolloverCheckMs)
+
+    return () => clearInterval(intervalId)
+  }, [checkForDateRollover])
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        void resumeConfiguredSync()
+        void checkForDateRollover()
+          .catch((error) => {
+            console.error(error)
+          })
+          .finally(() => {
+            void resumeConfiguredSync()
+          })
       } else if (nextState === 'background' || nextState === 'inactive') {
         void flushBeforeLeavingApp()
       }
     })
 
     return () => subscription.remove()
-  }, [flushBeforeLeavingApp, resumeConfiguredSync])
+  }, [checkForDateRollover, flushBeforeLeavingApp, resumeConfiguredSync])
 
   const handleSyncNow = useCallback(async () => {
     const remoteUrl = syncRemoteUrl.trim()
@@ -834,6 +884,7 @@ export default function App() {
               longEntryMarkdown={longEntryMarkdown}
               murmurCount={murmurs.length}
               onBack={navigation.goBack}
+              today={today}
             />
           )}
         </Stack.Screen>
@@ -987,10 +1038,12 @@ function JournalListPage({
   longEntryMarkdown,
   murmurCount,
   onBack,
+  today,
 }: {
   longEntryMarkdown: string
   murmurCount: number
   onBack: () => void
+  today: string
 }) {
   const trimmedEntry = longEntryMarkdown.trim()
 
@@ -1201,7 +1254,7 @@ function InlineStatusButton({
     <Pressable
       accessibilityRole="button"
       className={cn(
-        'min-h-8 shrink-0 flex-row items-center justify-center gap-1 rounded-full px-1.5',
+        'min-h-8 shrink-0 flex-row items-center justify-center rounded-full px-2',
         status.tone === 'soil' ? 'opacity-95' : 'opacity-90',
       )}
       onPress={onPress}
@@ -1209,7 +1262,6 @@ function InlineStatusButton({
         opacity: pressed ? 0.72 : 1,
       })}
     >
-      <Ionicons color={headerStatusIconColors[status.tone]} name={status.icon} size={14} />
       <Text className={cn('text-xs font-semibold', headerStatusTextClasses[status.tone])}>
         {status.label}
       </Text>
@@ -1305,93 +1357,23 @@ function getHeaderStatus(
   hasStoredToken: boolean,
   remoteUrl: string,
 ): HeaderStatus {
-  if (saveState === 'error') {
-    return {
-      icon: 'alert-circle-outline',
-      label: '保存失败',
-      tone: 'soil',
-    }
-  }
-
-  if (saveState === 'loading') {
-    return {
-      icon: 'hourglass-outline',
-      label: '打开中',
-      tone: 'plain',
-    }
-  }
-
-  if (saveState === 'saving') {
-    return {
-      icon: 'save-outline',
-      label: '保存中',
-      tone: 'blue',
-    }
-  }
-
-  if (saveState === 'dirty') {
-    return {
-      icon: 'create-outline',
-      label: '编辑中',
-      tone: 'blue',
-    }
-  }
-
-  if (!remoteUrl.trim() || !hasStoredToken || syncSnapshot.status === 'needs-auth') {
-    return {
-      icon: 'checkmark-circle-outline',
-      label: '已保存',
-      tone: 'green',
-    }
-  }
-
-  if (
-    syncSnapshot.status === 'syncing' &&
-    (syncSnapshot.pendingReason === 'local-save' || syncSnapshot.pendingReason === 'retry')
-  ) {
-    return {
-      icon: 'sync-outline',
-      label: '同步中',
-      tone: 'blue',
-    }
-  }
-
-  if (syncSnapshot.status === 'pending' && syncSnapshot.pendingReason === 'local-save') {
-    return {
-      icon: 'time-outline',
-      label: '待同步',
-      tone: 'blue',
-    }
-  }
-
-  if (syncSnapshot.status === 'synced') {
-    return {
-      icon: 'checkmark-circle-outline',
-      label: '已同步',
-      tone: 'green',
-    }
-  }
-
-  if (syncSnapshot.status === 'retrying') {
-    return {
-      icon: 'cloud-offline-outline',
-      label: '稍后同步',
-      tone: 'soil',
-    }
-  }
-
-  if (syncSnapshot.lastSyncedAt) {
-    return {
-      icon: 'checkmark-circle-outline',
-      label: '已同步',
-      tone: 'green',
-    }
-  }
+  const presentation = getJournalSyncStatusPresentation(
+    syncSnapshot,
+    '',
+    remoteUrl,
+    hasStoredToken,
+    {
+      hasLocalSaveError: saveState === 'error',
+      hasUnsavedLocalChanges: saveState === 'dirty',
+      isLocalContentLoading: saveState === 'loading',
+      isLocalSaveInProgress: saveState === 'saving',
+      showConfigurationState: false,
+    },
+  )
 
   return {
-    icon: 'checkmark-circle-outline',
-    label: '已保存',
-    tone: 'green',
+    label: presentation.label,
+    tone: getHeaderTone(presentation.tone),
   }
 }
 
@@ -1401,47 +1383,33 @@ function getSyncStatusLabel(
   hasStoredToken: boolean,
   remoteUrl: string,
 ) {
-  if (syncMessage) {
-    return syncMessage
-  }
-
-  if (!remoteUrl.trim()) {
-    return '未配置'
-  }
-
-  if (!hasStoredToken) {
-    return '需要连接'
-  }
-
-  if (syncSnapshot.status === 'pending') {
-    return '待同步'
-  }
-
-  if (syncSnapshot.status === 'syncing') {
-    return '同步中'
-  }
-
-  if (syncSnapshot.status === 'synced') {
-    return syncSnapshot.lastSyncedAt ? `已同步 ${formatTime(syncSnapshot.lastSyncedAt)}` : '已同步'
-  }
-
-  if (syncSnapshot.status === 'retrying' || syncSnapshot.status === 'error') {
-    return '稍后重试'
-  }
-
-  if (syncSnapshot.status === 'needs-auth') {
-    return '需要连接'
-  }
-
-  if (syncSnapshot.status === 'disabled') {
-    return '未开启'
-  }
-
-  return '已配置'
+  return getJournalSyncStatusPresentation(
+    syncSnapshot,
+    syncMessage,
+    remoteUrl,
+    hasStoredToken,
+    { showConfigurationState: true },
+  ).label
 }
 
 function canApplyRemoteUpdates(saveState: SaveState) {
   return saveState !== 'dirty' && saveState !== 'saving'
+}
+
+function getHeaderTone(tone: JournalSyncStatusTone): HeaderStatusTone {
+  if (tone === 'danger' || tone === 'warning') {
+    return 'soil'
+  }
+
+  if (tone === 'active' || tone === 'pending') {
+    return 'blue'
+  }
+
+  if (tone === 'success') {
+    return 'green'
+  }
+
+  return 'plain'
 }
 
 function getErrorMessage(error: unknown) {
@@ -1453,11 +1421,4 @@ const headerStatusTextClasses: Record<HeaderStatusTone, string> = {
   green: 'text-mossMuted',
   plain: 'text-mossMuted',
   soil: 'text-soil',
-}
-
-const headerStatusIconColors: Record<HeaderStatusTone, string> = {
-  blue: '#4f7469',
-  green: '#4f7469',
-  plain: '#4f7469',
-  soil: '#8b6656',
 }

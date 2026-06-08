@@ -45,6 +45,9 @@ function SettingsPage() {
     syncMessage,
     syncRemoteUrl,
     hasStoredSyncToken,
+    {
+      showConfigurationState: true,
+    },
   )
   const SyncStatusIcon = syncStatus.icon
   const tokenHint = hasStoredSyncToken

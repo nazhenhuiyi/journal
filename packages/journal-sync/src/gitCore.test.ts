@@ -33,6 +33,7 @@ const mockGit = {
   init: vi.fn(),
   merge: vi.fn(),
   push: vi.fn(),
+  readCommit: vi.fn(),
   remove: vi.fn(),
   resolveRef: vi.fn(),
   setConfig: vi.fn(),
@@ -87,6 +88,17 @@ describe('journal git sync core', () => {
         },
       },
     })
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => ({
+      commit: {
+        author: {},
+        committer: {},
+        message: '',
+        parent: [],
+        tree: `tree-${oid}`,
+      },
+      oid,
+      payload: '',
+    }))
     mockGit.remove.mockResolvedValue(undefined)
     mockGit.resolveRef.mockResolvedValue('local-head')
     mockGit.setConfig.mockResolvedValue(undefined)
@@ -261,6 +273,38 @@ describe('journal git sync core', () => {
     }))
     expect(mockGit.add).not.toHaveBeenCalled()
     expect(commitOid).toBe('commit-oid')
+  })
+
+  it('rolls back commits whose tree is unchanged from the parent commit', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 2, 1],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 2, 2],
+      ])
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => ({
+      commit: {
+        author: {},
+        committer: {},
+        message: '',
+        parent: [],
+        tree: oid === 'commit-oid' || oid === 'local-head' ? 'same-tree' : `tree-${oid}`,
+      },
+      oid,
+      payload: '',
+    }))
+
+    const commitOid = await commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(commitOid).toBeNull()
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'refs/heads/main',
+      value: 'local-head',
+    }))
   })
 
   it('fetches, merges, and retries once when push is rejected by remote updates', async () => {

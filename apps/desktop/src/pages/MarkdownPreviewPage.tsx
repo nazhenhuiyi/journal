@@ -233,6 +233,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     syncMessage,
     syncRemoteUrl,
     hasStoredSyncToken,
+    {
+      hasUnsavedLocalChanges: hasUnsavedJournalChanges || isEditorComposing,
+    },
   )
   const SyncStatusIcon = syncStatus.icon
   const renderedMarkdown = useMemo(

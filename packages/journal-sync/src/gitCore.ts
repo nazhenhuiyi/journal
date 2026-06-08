@@ -4,6 +4,7 @@ import type {
   HttpClient,
   MergeResult,
   PushResult,
+  ReadCommitResult,
   StatusRow,
 } from 'isomorphic-git'
 import * as defaultGit from 'isomorphic-git'
@@ -420,6 +421,7 @@ async function commitTrackedChanges(
     return null
   }
 
+  const parentCommitOid = await getLocalBranchCommitOid(runtime, branch)
   const commitOid = await git.commit({
     author: {
       email: config.authorEmail ?? defaultAuthorEmail,
@@ -431,9 +433,47 @@ async function commitTrackedChanges(
     ref: getLocalBranchRef(branch),
   })
 
+  if (parentCommitOid && await doCommitsHaveSameTree(runtime, commitOid, parentCommitOid)) {
+    await git.writeRef({
+      dir: runtime.dir,
+      force: true,
+      fs: runtime.fs,
+      ref: getLocalBranchRef(branch),
+      value: parentCommitOid,
+    })
+    await checkoutConfiguredBranchIfPossible(runtime, branch)
+
+    return null
+  }
+
   await checkoutConfiguredBranchIfPossible(runtime, branch)
 
   return commitOid
+}
+
+async function doCommitsHaveSameTree(
+  runtime: JournalGitRuntime,
+  commitOid: string,
+  parentCommitOid: string,
+) {
+  try {
+    const [commit, parentCommit] = await Promise.all([
+      readCommit(runtime, commitOid),
+      readCommit(runtime, parentCommitOid),
+    ])
+
+    return commit.commit.tree === parentCommit.commit.tree
+  } catch {
+    return false
+  }
+}
+
+async function readCommit(runtime: JournalGitRuntime, oid: string): Promise<ReadCommitResult> {
+  return getGit(runtime).readCommit({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    oid,
+  })
 }
 
 async function fetchRemote(
@@ -778,15 +818,18 @@ async function readCurrentBranch(runtime: JournalGitRuntime) {
 }
 
 async function hasLocalBranchCommit(runtime: JournalGitRuntime, branch: string) {
+  return (await getLocalBranchCommitOid(runtime, branch)) !== null
+}
+
+async function getLocalBranchCommitOid(runtime: JournalGitRuntime, branch: string) {
   try {
-    await getGit(runtime).resolveRef({
+    return await getGit(runtime).resolveRef({
       dir: runtime.dir,
       fs: runtime.fs,
       ref: getLocalBranchRef(branch),
     })
-    return true
   } catch {
-    return false
+    return null
   }
 }
 
