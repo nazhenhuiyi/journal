@@ -6,6 +6,7 @@ import {
   commitJournalChanges,
   createJournalGitAuthenticatedHttpClient,
   createJournalGitAuthHeaders,
+  getJournalGitSyncStatus,
   initJournalGitSyncRepository,
   pullJournalUpdates,
   pushJournalChanges,
@@ -255,6 +256,50 @@ describe('journal git sync core', () => {
     expect(mockGit.commit).not.toHaveBeenCalled()
   })
 
+  it('ignores temporary and non-journal files inside tracked directories', async () => {
+    mockGit.statusMatrix.mockResolvedValue([
+      ['entries/2026/06/2026-06-09.md', 1, 2, 1],
+      ['entries/2026/06/2026-06-09.md.91423.tmp', 0, 2, 0],
+      ['entries/2026/06/not-a-journal.txt', 0, 2, 0],
+      ['annotations/2026/06/2026-06-09.json.tmp', 0, 2, 0],
+      ['media/2026/06/photo.jpg.tmp', 0, 2, 0],
+      ['media/2026/06/photo.jpg', 1, 1, 1],
+    ])
+
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(status.dirtyPaths).toEqual([
+      'entries/2026/06/2026-06-09.md',
+    ])
+  })
+
+  it('does not stage temporary files left by atomic writes', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-09.md', 1, 2, 1],
+        ['entries/2026/06/2026-06-09.md.91423.tmp', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-09.md', 1, 2, 2],
+        ['entries/2026/06/2026-06-09.md.91423.tmp', 0, 2, 0],
+      ])
+
+    const commitOid = await commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(mockGit.add).toHaveBeenCalledTimes(1)
+    expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-09.md',
+    }))
+    expect(mockGit.add).not.toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-09.md.91423.tmp',
+    }))
+    expect(commitOid).toBe('commit-oid')
+  })
+
   it('stages deleted tracked journal files with git remove', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([
@@ -401,6 +446,69 @@ describe('journal git sync core', () => {
       force: true,
       ref: 'refs/heads/main',
     }))
+  })
+
+  it('does not commit stale worktree contents after a fast-forward pull', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    mockGit.merge.mockResolvedValueOnce({
+      fastForward: true,
+      oid: 'remote-head',
+    })
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.merge).toHaveBeenCalledTimes(1)
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'refs/heads/main',
+    }))
+    expect(mockGit.add).not.toHaveBeenCalled()
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(result.mergeCommitOid).toBeNull()
+    expect(result.updatedWorktree).toBe(true)
+  })
+
+  it('commits resolved journal changes after a non-fast-forward merge', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 2, 1],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 2, 2],
+      ])
+      .mockResolvedValueOnce([])
+    mockGit.merge.mockResolvedValueOnce({
+      fastForward: false,
+      oid: 'merge-head',
+    })
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-08.md',
+    }))
+    expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Resolve journal sync conflicts',
+      ref: 'refs/heads/main',
+    }))
+    expect(result.mergeCommitOid).toBe('commit-oid')
   })
 
   it('allows the first push when an empty remote cannot be fetched yet', async () => {

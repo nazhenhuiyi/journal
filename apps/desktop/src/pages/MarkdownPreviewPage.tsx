@@ -195,6 +195,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
   const [isEditorComposing, setIsEditorComposing] = useState(false)
   const [hasLoadedJournal, setHasLoadedJournal] = useState(false)
+  const [hasPendingJournalEdit, setHasPendingJournalEditState] = useState(false)
   const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
   const runDesktopSyncOperationRef = useRef<(request: SyncOperationRequest) => Promise<SyncOperationResult>>(
     async () => ({
@@ -204,6 +205,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   )
   const isEditorComposingRef = useRef(false)
   const isJournalDirtyRef = useRef(false)
+  const hasPendingJournalEditRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef('')
   const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
@@ -228,13 +230,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     journalMarkdown !== lastSavedMarkdownRef.current ||
     hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current)
   )
+  const hasPendingUnsavedJournalChanges = hasPendingJournalEdit && hasUnsavedJournalChanges
   const syncStatus = getSyncStatusPresentation(
     syncSnapshot,
     syncMessage,
     syncRemoteUrl,
     hasStoredSyncToken,
     {
-      hasUnsavedLocalChanges: hasUnsavedJournalChanges || isEditorComposing,
+      hasUnsavedLocalChanges: hasPendingUnsavedJournalChanges || isEditorComposing,
     },
   )
   const SyncStatusIcon = syncStatus.icon
@@ -246,6 +249,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       }),
     [journalFile?.filePath, journalMarkdown],
   )
+
+  const setHasPendingJournalEdit = useCallback((nextValue: boolean) => {
+    hasPendingJournalEditRef.current = nextValue
+    setHasPendingJournalEditState(nextValue)
+  }, [])
 
   const refreshTodayWeather = useCallback(async (loadedFile: JournalFile) => {
     const journalStore = getJournalStore()
@@ -288,13 +296,18 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       const refreshedFile = await journalStore.refreshTodayWeather(location)
       const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
 
-      if (journalFileRef.current?.date !== loadedFile.date || refreshedFile.date !== loadedFile.date) {
+      if (
+        journalFileRef.current?.date !== loadedFile.date ||
+        journalFileRef.current?.content !== loadedFile.content ||
+        refreshedFile.date !== loadedFile.date
+      ) {
         if (journalFileRef.current?.date === loadedFile.date) {
           setWeatherStatus(loadedFrontMatter.weather?.text ? 'ready' : 'failed')
         }
         return
       }
 
+      saveRequestIdRef.current += 1
       journalFileRef.current = refreshedFile
       lastSavedFrontMatterRef.current = refreshedFrontMatter
       setJournalFrontMatter(refreshedFrontMatter)
@@ -316,6 +329,8 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     const frontMatter = parsedFile.frontMatter
     const initialJournalMode = isBlankJournalMarkdown(editableMarkdown) ? 'write' : readStoredJournalMode()
 
+    saveRequestIdRef.current += 1
+    setHasPendingJournalEdit(false)
     setDaySwitchError('')
     setRealTodayDate(getLocalDateKey())
     journalFileRef.current = file
@@ -327,7 +342,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     setJournalMode(initialJournalMode)
     setHasLoadedJournal(true)
     void refreshTodayWeather(file)
-  }, [refreshTodayWeather])
+  }, [refreshTodayWeather, setHasPendingJournalEdit])
 
   const loadTodayJournal = useCallback(async (shouldApply: () => boolean = () => true) => {
     const journalStore = getJournalStore()
@@ -394,6 +409,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     if (
       !getJournalStore() ||
       !hasLoadedJournal ||
+      !hasPendingJournalEditRef.current ||
       (journalMarkdown === lastSavedMarkdownRef.current &&
         !hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
     ) {
@@ -423,11 +439,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         coordinatorRef.current?.markLocalSave()
       }
 
+      setHasPendingJournalEdit(false)
+
       return true
     } catch {
       return false
     }
-  }, [hasLoadedJournal, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
+  }, [hasLoadedJournal, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile, setHasPendingJournalEdit])
 
   const finalizeJournalBeforeLeaving = useCallback(
     async (shouldUpdateState = true) => flushPendingSave(shouldUpdateState),
@@ -683,8 +701,8 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }, [journalFile])
 
   useEffect(() => {
-    isJournalDirtyRef.current = Boolean(hasUnsavedJournalChanges)
-  }, [hasUnsavedJournalChanges])
+    isJournalDirtyRef.current = Boolean(hasPendingUnsavedJournalChanges)
+  }, [hasPendingUnsavedJournalChanges])
 
   useEffect(() => {
     syncConfigRef.current = {
@@ -737,6 +755,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     if (
       !journalStore ||
       !hasLoadedJournal ||
+      !hasPendingJournalEdit ||
       isEditorComposingRef.current ||
       isEditorComposing ||
       (journalMarkdown === lastSavedMarkdownRef.current &&
@@ -749,6 +768,10 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     saveRequestIdRef.current = requestId
 
     const timeoutId = window.setTimeout(() => {
+      if (saveRequestIdRef.current !== requestId) {
+        return
+      }
+
       const date = journalFile?.date ?? realTodayDate
 
       saveJournalFile(date, journalMarkdown, journalFrontMatter)
@@ -766,12 +789,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           if (didJournalFileWrite(file)) {
             coordinatorRef.current?.markLocalSave()
           }
+          setHasPendingJournalEdit(false)
         })
         .catch(() => undefined)
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timeoutId)
-  }, [hasLoadedJournal, isEditorComposing, journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
+  }, [hasLoadedJournal, hasPendingJournalEdit, isEditorComposing, journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile, setHasPendingJournalEdit])
 
   function handleModeChange(nextMode: JournalMode) {
     setJournalMode(nextMode)
@@ -796,6 +820,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     }
 
     lastJournalEditedAtRef.current = Date.now()
+    setHasPendingJournalEdit(true)
     updateJournalMarkdownBody(nextMarkdown)
   }
 
@@ -814,12 +839,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
     if (!isComposing) {
       lastJournalEditedAtRef.current = Date.now()
+      setHasPendingJournalEdit(true)
       updateJournalMarkdownBody(composedMarkdown)
     }
   }
 
   function handleJournalMurmursChange(nextMurmurs: MurmurBlock[]) {
     lastJournalEditedAtRef.current = Date.now()
+    setHasPendingJournalEdit(true)
     setDaySwitchError('')
     setJournalMarkdown((currentMarkdown) => {
       const currentEntry = parseJournalMarkdown(currentMarkdown)

@@ -327,6 +327,70 @@ describe('MarkdownPreviewPage', () => {
     })
   })
 
+  it('reloads the open journal after remote pull instead of autosaving stale content', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const staleJournal = {
+      content: '---\ndate: 2026-06-09\n---\n\n旧正文。',
+      date: '2026-06-09',
+      fileName: '2026-06-09.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-09.md',
+      updatedAt: '2026-06-09T01:00:00.000Z',
+    }
+    const pulledJournal = {
+      ...staleJournal,
+      content: '---\ndate: 2026-06-09\n---\n\n旧正文。\n\n移动端新正文。',
+      updatedAt: '2026-06-09T02:00:00.000Z',
+    }
+    const loadToday = vi.fn()
+      .mockResolvedValueOnce(staleJournal)
+      .mockResolvedValue(pulledJournal)
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...pulledJournal,
+      content,
+      date,
+      didWrite: true,
+    }))
+    const pull = vi.fn(async () => ({
+      changed: true,
+      dirtyPaths: [],
+    }))
+
+    vi.stubGlobal('journalStore', {
+      loadToday,
+      saveDate,
+      saveToday: vi.fn(),
+    })
+    vi.stubGlobal('journalSync', {
+      loadStatus: vi.fn().mockResolvedValue({
+        branch: 'main',
+        dirtyPaths: [],
+        hasCredentials: true,
+        hasRepository: true,
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+        worktreeDirectory: '/Users/zilin/.journal',
+      }),
+      pull,
+      push: vi.fn(),
+      syncNow: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(pull).toHaveBeenCalledOnce()
+      expect(loadToday).toHaveBeenCalledTimes(2)
+    })
+
+    expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('移动端新正文。')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+
+    expect(saveDate).not.toHaveBeenCalled()
+  })
+
   it('defers automatic push instead of flushing dirty editor content mid-writing', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
 

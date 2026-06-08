@@ -86,6 +86,8 @@ const trackedStatusFilepaths = [
   ...trackedPathPrefixes.map((pathPrefix) => pathPrefix.slice(0, -1)),
   ...trackedPathFiles,
 ]
+const journalEntryPathPattern = /^entries\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.md$/
+const journalAnnotationPathPattern = /^annotations\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/
 
 export function createJournalGitAuthenticatedHttpClient(
   http: HttpClient,
@@ -534,14 +536,11 @@ async function pullRemoteIntoWorktree(
   }
 
   if (hasLocalCommit) {
-    const mergeResult = await mergeRemoteBranch(runtime, config)
-    const mergeCommitOid = await commitTrackedChanges(
+    const { mergeCommitOid, mergeResult } = await mergeRemoteBranchAndCommitChanges(
       runtime,
       config,
       'Resolve journal sync conflicts',
     )
-
-    await checkoutLocalBranch(runtime, branch)
 
     return {
       fetchResult,
@@ -723,9 +722,11 @@ async function pushRemoteWithRetry(
   }
 
   await fetchRemote(runtime, input.config, input.credentials)
-  await mergeRemoteBranch(runtime, input.config)
-  await commitTrackedChanges(runtime, input.config, 'Retry journal sync after remote update')
-  await checkoutLocalBranch(runtime, input.branch)
+  await mergeRemoteBranchAndCommitChanges(
+    runtime,
+    input.config,
+    'Retry journal sync after remote update',
+  )
 
   const secondPushResult = await tryPushRemote(runtime, input)
 
@@ -737,6 +738,41 @@ async function pushRemoteWithRetry(
     pushResult: secondPushResult,
     retriedPush: true,
   }
+}
+
+async function mergeRemoteBranchAndCommitChanges(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  message: string,
+) {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const mergeResult = await mergeRemoteBranch(runtime, config)
+
+  if (isFastForwardMergeResult(mergeResult)) {
+    await checkoutLocalBranch(runtime, branch)
+
+    return {
+      mergeCommitOid: null,
+      mergeResult,
+    }
+  }
+
+  const mergeCommitOid = await commitTrackedChanges(
+    runtime,
+    config,
+    message,
+  )
+
+  await checkoutLocalBranch(runtime, branch)
+
+  return {
+    mergeCommitOid,
+    mergeResult,
+  }
+}
+
+function isFastForwardMergeResult(mergeResult: MergeResult | null) {
+  return Boolean(mergeResult && 'fastForward' in mergeResult && mergeResult.fastForward)
 }
 
 async function tryPushRemote(
@@ -962,7 +998,21 @@ function isStagedStatusRow([, headStatus, , stageStatus]: StatusRow) {
 
 function isTrackedJournalPath(filepath: string) {
   return trackedPathFiles.has(filepath) ||
-    trackedPathPrefixes.some((prefix) => filepath.startsWith(prefix))
+    journalEntryPathPattern.test(filepath) ||
+    journalAnnotationPathPattern.test(filepath) ||
+    isTrackedJournalMediaPath(filepath)
+}
+
+function isTrackedJournalMediaPath(filepath: string) {
+  return filepath.startsWith('media/') && !hasTemporaryOrHiddenPathSegment(filepath)
+}
+
+function hasTemporaryOrHiddenPathSegment(filepath: string) {
+  return filepath.split('/').some((segment) => {
+    return segment === '' ||
+      segment.startsWith('.') ||
+      segment.endsWith('.tmp')
+  })
 }
 
 function isEmptyRemoteError(error: unknown) {
