@@ -335,6 +335,9 @@ describe('journal git sync core', () => {
     expect(mockGit.fetch).toHaveBeenCalledTimes(2)
     expect(mockGit.merge).toHaveBeenCalledTimes(2)
     expect(mockGit.push).toHaveBeenCalledTimes(2)
+    expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      force: false,
+    }))
     expect(result.retriedPush).toBe(true)
   })
 

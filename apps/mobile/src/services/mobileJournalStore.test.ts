@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  listDailyJournals,
   loadDailyJournal,
   saveDailyJournal,
 } from './mobileJournalStore'
 
 const mockFileSystem = vi.hoisted(() => ({
+  directories: new Set<string>(),
   documentDirectory: 'file:///app/',
   files: new Map<string, string>(),
   getInfoAsync: vi.fn(),
   makeDirectoryAsync: vi.fn(),
   readAsStringAsync: vi.fn(),
+  readDirectoryAsync: vi.fn(),
   writeAsStringAsync: vi.fn(),
 }))
 
@@ -20,15 +23,24 @@ const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
 describe('mobileJournalStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockFileSystem.directories.clear()
     mockFileSystem.files.clear()
-    mockFileSystem.getInfoAsync.mockImplementation(async (path: string) => ({
-      exists: mockFileSystem.files.has(path),
-      isDirectory: false,
-      modificationTime: 0,
-      size: mockFileSystem.files.get(path)?.length ?? 0,
-      uri: path,
-    }))
-    mockFileSystem.makeDirectoryAsync.mockResolvedValue(undefined)
+    mockFileSystem.getInfoAsync.mockImplementation(async (path: string) => {
+      const directoryPath = normalizeDirectoryPath(path)
+      const isDirectory = mockFileSystem.directories.has(directoryPath)
+      const content = mockFileSystem.files.get(path)
+
+      return {
+        exists: isDirectory || content !== undefined,
+        isDirectory,
+        modificationTime: 0,
+        size: content?.length ?? 0,
+        uri: path,
+      }
+    })
+    mockFileSystem.makeDirectoryAsync.mockImplementation(async (path: string) => {
+      mockFileSystem.directories.add(normalizeDirectoryPath(path))
+    })
     mockFileSystem.readAsStringAsync.mockImplementation(async (path: string) => {
       const content = mockFileSystem.files.get(path)
 
@@ -37,6 +49,28 @@ describe('mobileJournalStore', () => {
       }
 
       return content
+    })
+    mockFileSystem.readDirectoryAsync.mockImplementation(async (path: string) => {
+      const directoryPath = normalizeDirectoryPath(path)
+      const names = new Set<string>()
+
+      for (const childPath of mockFileSystem.directories) {
+        const childName = getDirectChildName(directoryPath, childPath)
+
+        if (childName) {
+          names.add(childName)
+        }
+      }
+
+      for (const childPath of mockFileSystem.files.keys()) {
+        const childName = getDirectChildName(directoryPath, childPath)
+
+        if (childName) {
+          names.add(childName)
+        }
+      }
+
+      return [...names].sort()
     })
     mockFileSystem.writeAsStringAsync.mockImplementation(async (path: string, content: string) => {
       mockFileSystem.files.set(path, content)
@@ -93,4 +127,66 @@ updatedAt: 2026-06-08T08:00:00.000Z
       updatedAt: '2026-06-08T08:00:00.000Z',
     })
   })
+
+  it('lists saved journal files in reverse chronological order', async () => {
+    addDirectory('file:///app/journal-worktree/entries/')
+    addDirectory('file:///app/journal-worktree/entries/2026/')
+    addDirectory('file:///app/journal-worktree/entries/2026/05/')
+    addDirectory('file:///app/journal-worktree/entries/2026/06/')
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/entries/2026/05/2026-05-31.md',
+      `---
+date: 2026-05-31
+updatedAt: 2026-05-31T08:00:00.000Z
+---
+
+五月最后一天。`,
+    )
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/entries/2026/06/2026-06-09.md',
+      `---
+date: 2026-06-08
+updatedAt: 2026-06-09T08:00:00.000Z
+---
+
+六月九日。`,
+    )
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/entries/2026/06/not-a-journal.txt',
+      'ignored',
+    )
+
+    const records = await listDailyJournals()
+
+    expect(records.map((record) => record.date)).toEqual([
+      '2026-06-09',
+      '2026-05-31',
+    ])
+    expect(records[0]).toMatchObject({
+      longEntryMarkdown: '六月九日。',
+      updatedAt: '2026-06-09T08:00:00.000Z',
+    })
+  })
 })
+
+function addDirectory(path: string) {
+  mockFileSystem.directories.add(normalizeDirectoryPath(path))
+}
+
+function normalizeDirectoryPath(path: string) {
+  return path.endsWith('/') ? path : `${path}/`
+}
+
+function getDirectChildName(parentPath: string, childPath: string) {
+  if (childPath === parentPath || !childPath.startsWith(parentPath)) {
+    return null
+  }
+
+  const relativePath = childPath.slice(parentPath.length).replace(/\/$/, '')
+
+  if (!relativePath || relativePath.includes('/')) {
+    return null
+  }
+
+  return relativePath
+}

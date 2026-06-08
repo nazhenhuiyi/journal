@@ -752,6 +752,7 @@ async function tryPushRemote(
   try {
     return await getGit(runtime).push({
       dir: runtime.dir,
+      force: false,
       fs: runtime.fs,
       http: createJournalGitAuthenticatedHttpClient(runtime.http, input.credentials),
       ref: getLocalBranchRef(branch),

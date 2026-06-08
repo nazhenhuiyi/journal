@@ -22,6 +22,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
   createMurmur,
   getLocalDateKey,
+  listDailyJournals,
   loadDailyJournal,
   saveDailyJournal,
   type MobileJournalRecord,
@@ -54,6 +55,12 @@ type HeaderStatusTone = 'blue' | 'green' | 'plain' | 'soil'
 type HeaderStatus = {
   label: string
   tone: HeaderStatusTone
+}
+type JournalListRow = {
+  date: string
+  isToday: boolean
+  murmurCount: number
+  preview: string
 }
 type RootStackParamList = {
   Today: undefined
@@ -1045,23 +1052,115 @@ function JournalListPage({
   onBack: () => void
   today: string
 }) {
-  const trimmedEntry = longEntryMarkdown.trim()
+  const [records, setRecords] = useState<MobileJournalRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [didLoadFail, setDidLoadFail] = useState(false)
+  const rows = createJournalListRows({
+    currentLongEntryMarkdown: longEntryMarkdown,
+    currentMurmurCount: murmurCount,
+    records,
+    today,
+  })
+
+  useEffect(() => {
+    let isMounted = true
+
+    setIsLoading(true)
+    setDidLoadFail(false)
+
+    listDailyJournals()
+      .then((loadedRecords) => {
+        if (!isMounted) {
+          return
+        }
+
+        setRecords(loadedRecords)
+      })
+      .catch((error) => {
+        console.error(error)
+
+        if (isMounted) {
+          setDidLoadFail(true)
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [today])
 
   return (
     <PageShell icon="calendar-outline" onBack={onBack} title="日记列表">
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View className="rounded-lg border border-reed bg-paper px-4 py-4">
-          <View className="mb-3 flex-row items-center justify-between gap-3">
-            <Text className="text-base font-semibold text-ink">今天</Text>
-            <Text className="text-sm font-medium text-mossMuted">{formatPaperDateLine(today)}</Text>
-          </View>
-          <Text className="text-sm leading-5 text-mossMuted" numberOfLines={3}>
-            {trimmedEntry || (murmurCount > 0 ? `${murmurCount} 条碎碎念` : '还没有写下内容')}
-          </Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        <View className="gap-3">
+          {isLoading ? (
+            <Text className="px-1 text-sm font-medium text-mossMuted">正在打开日记列表</Text>
+          ) : null}
+
+          {didLoadFail ? (
+            <Text className="px-1 text-sm font-medium text-soil">日记列表读取失败</Text>
+          ) : null}
+
+          {!isLoading && !didLoadFail && rows.length === 0 ? (
+            <View className="rounded-lg border border-reed bg-paper px-4 py-4">
+              <Text className="text-sm leading-5 text-mossMuted">还没有写下内容</Text>
+            </View>
+          ) : null}
+
+          {rows.map((row) => (
+            <View key={row.date} className="rounded-lg border border-reed bg-paper px-4 py-4">
+              <View className="mb-3 flex-row items-center justify-between gap-3">
+                <Text className="text-base font-semibold text-ink">{row.isToday ? '今天' : formatCompactDate(row.date)}</Text>
+                <Text className="text-sm font-medium text-mossMuted">{formatPaperDateLine(row.date)}</Text>
+              </View>
+              <Text className="text-sm leading-5 text-mossMuted" numberOfLines={3}>
+                {row.preview || (row.murmurCount > 0 ? `${row.murmurCount} 条碎碎念` : '还没有写下内容')}
+              </Text>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </PageShell>
   )
+}
+
+function createJournalListRows({
+  currentLongEntryMarkdown,
+  currentMurmurCount,
+  records,
+  today,
+}: {
+  currentLongEntryMarkdown: string
+  currentMurmurCount: number
+  records: MobileJournalRecord[]
+  today: string
+}): JournalListRow[] {
+  const rows = records.map((record) => ({
+    date: record.date,
+    isToday: record.date === today,
+    murmurCount: record.murmurs.length,
+    preview: record.longEntryMarkdown.trim(),
+  }))
+  const todayRow = rows.find((row) => row.date === today)
+
+  if (todayRow) {
+    todayRow.murmurCount = currentMurmurCount
+    todayRow.preview = currentLongEntryMarkdown.trim()
+  } else if (currentLongEntryMarkdown.trim() || currentMurmurCount > 0) {
+    rows.unshift({
+      date: today,
+      isToday: true,
+      murmurCount: currentMurmurCount,
+      preview: currentLongEntryMarkdown.trim(),
+    })
+  }
+
+  return rows.sort((first, second) => second.date.localeCompare(first.date))
 }
 
 function ReviewPage({
@@ -1299,6 +1398,16 @@ function MurmurItem({ murmur }: { murmur: MurmurBlock }) {
       <Text className="text-base leading-6 text-ink">{murmur.body}</Text>
     </View>
   )
+}
+
+function formatCompactDate(dateKey: string) {
+  const [, month, day] = dateKey.split('-')
+
+  if (!month || !day) {
+    return dateKey
+  }
+
+  return `${Number(month)}月${Number(day)}日`
 }
 
 function formatPaperDateLine(dateKey: string) {

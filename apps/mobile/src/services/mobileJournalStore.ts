@@ -73,6 +73,39 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
   }
 }
 
+export async function listDailyJournals(): Promise<MobileJournalRecord[]> {
+  const entriesDirectory = `${getJournalWorktreeDirectory()}entries/`
+  const years = await readDirectoryIfExists(entriesDirectory)
+  const records: MobileJournalRecord[] = []
+
+  for (const year of years.filter(isYearDirectoryName)) {
+    const yearDirectory = `${entriesDirectory}${year}/`
+    const months = await readDirectoryIfExists(yearDirectory)
+
+    for (const month of months.filter(isMonthDirectoryName)) {
+      const monthDirectory = `${yearDirectory}${month}/`
+      const fileNames = await readDirectoryIfExists(monthDirectory)
+
+      for (const fileName of fileNames.filter(isDailyJournalFileName)) {
+        const filePath = `${monthDirectory}${fileName}`
+        const markdown = await FileSystem.readAsStringAsync(filePath)
+        const parsed = parseJournalMarkdown(markdown)
+        const date = fileName.slice(0, -'.md'.length)
+
+        records.push({
+          date,
+          longEntryMarkdown: parsed.longEntryMarkdown,
+          markdown,
+          murmurs: parsed.murmurs,
+          updatedAt: parsed.frontMatter.updatedAt ?? null,
+        })
+      }
+    }
+  }
+
+  return records.sort((first, second) => second.date.localeCompare(first.date))
+}
+
 export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDailyJournalResult> {
   const existingRecord = await loadDailyJournal(input.date)
   const previous = existingRecord.markdown
@@ -134,6 +167,28 @@ export function getJournalWorktreeDirectory() {
   }
 
   return `${FileSystem.documentDirectory}${worktreeDirectoryName}/`
+}
+
+async function readDirectoryIfExists(path: string) {
+  const info = await FileSystem.getInfoAsync(path)
+
+  if (!info.exists || !info.isDirectory) {
+    return []
+  }
+
+  return FileSystem.readDirectoryAsync(path)
+}
+
+function isYearDirectoryName(value: string) {
+  return /^\d{4}$/.test(value)
+}
+
+function isMonthDirectoryName(value: string) {
+  return /^\d{2}$/.test(value)
+}
+
+function isDailyJournalFileName(value: string) {
+  return /^\d{4}-\d{2}-\d{2}\.md$/.test(value)
 }
 
 function createMurmurId(date: string, now: Date) {
