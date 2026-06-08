@@ -4,6 +4,11 @@ export {
   stripManagedFrontMatter,
 } from './frontMatter'
 export {
+  createMeaningfulJournalSignature,
+  hasJournalUserContent,
+  hasMeaningfulJournalChange,
+} from './meaningfulChange'
+export {
   parseJournalMarkdown,
   stripJournalFrontMatter,
 } from './parseJournalMarkdown'

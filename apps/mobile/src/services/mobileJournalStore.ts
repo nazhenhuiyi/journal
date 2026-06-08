@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import {
   createJournalMarkdownWithFrontMatter,
+  hasMeaningfulJournalChange,
   parseJournalMarkdown,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
@@ -13,6 +14,10 @@ export type MobileJournalRecord = {
   murmurs: MurmurBlock[]
   markdown: string
   updatedAt: string | null
+}
+
+export type SaveDailyJournalResult = MobileJournalRecord & {
+  didWrite: boolean
 }
 
 type SaveJournalInput = {
@@ -68,8 +73,11 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
   }
 }
 
-export async function saveDailyJournal(input: SaveJournalInput): Promise<MobileJournalRecord> {
-  const previous = await readExistingFrontMatter(input.date)
+export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDailyJournalResult> {
+  const existingRecord = await loadDailyJournal(input.date)
+  const previous = existingRecord.markdown
+    ? parseJournalMarkdown(existingRecord.markdown).frontMatter
+    : {}
   const updatedAt = new Date().toISOString()
   const frontMatter: DayFrontMatter = {
     ...previous,
@@ -79,6 +87,14 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<MobileJ
   }
   const body = serializeJournalMarkdownBody(input.longEntryMarkdown, input.murmurs)
   const markdown = createJournalMarkdownWithFrontMatter(body, frontMatter)
+
+  if (!hasMeaningfulJournalChange(existingRecord.markdown, markdown)) {
+    return {
+      ...existingRecord,
+      didWrite: false,
+    }
+  }
+
   const filePath = await getEntryFilePath(input.date)
 
   await FileSystem.writeAsStringAsync(filePath, markdown)
@@ -91,17 +107,8 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<MobileJ
     murmurs: parsed.murmurs,
     markdown,
     updatedAt,
+    didWrite: true,
   }
-}
-
-async function readExistingFrontMatter(date: string): Promise<DayFrontMatter> {
-  const existing = await loadDailyJournal(date)
-
-  if (!existing.markdown) {
-    return {}
-  }
-
-  return parseJournalMarkdown(existing.markdown).frontMatter
 }
 
 async function getEntryFilePath(date: string) {

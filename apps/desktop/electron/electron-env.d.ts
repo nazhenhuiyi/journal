@@ -24,6 +24,7 @@ declare namespace NodeJS {
 type JournalFilePayload = {
   content: string
   date: string
+  didWrite: boolean
   fileName: string
   filePath: string
   updatedAt: string | null

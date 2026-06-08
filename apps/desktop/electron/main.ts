@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
-import { createHash } from 'node:crypto'
-import { cp, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
@@ -14,8 +14,9 @@ import {
 import { importJournalImagesForDate } from './journalMedia'
 import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
-  parseJournalMarkdown,
   createJournalMarkdownWithFrontMatter,
+  hasMeaningfulJournalChange,
+  parseJournalMarkdown,
   stripManagedFrontMatter,
 } from '@journal/core'
 import type {
@@ -91,6 +92,7 @@ ipcMain.handle('journal:importImages', (_event, date: unknown) => importJournalI
 type JournalFile = {
   content: string
   date: string
+  didWrite: boolean
   fileName: string
   filePath: string
   updatedAt: string | null
@@ -144,20 +146,6 @@ function getJournalPath(date: string) {
   }
 }
 
-function getLegacyJournalPath(date: string) {
-  assertDateKey(date)
-
-  const fileName = `${date}.md`
-  const directory = getJournalDirectory()
-
-  return {
-    date,
-    directory,
-    fileName,
-    filePath: path.join(directory, fileName),
-  }
-}
-
 function getJournalAnnotationsPath(date: string) {
   assertDateKey(date)
 
@@ -175,35 +163,24 @@ function getJournalAnnotationsPath(date: string) {
   }
 }
 
-function getLegacyJournalAnnotationsPath(date: string) {
-  assertDateKey(date)
-
-  const directory = getJournalDirectory()
-  const annotationsDirectory = path.join(directory, 'annotations')
-  const fileName = `${date}.json`
-
-  return {
-    date,
-    directory: annotationsDirectory,
-    fileName,
-    filePath: path.join(annotationsDirectory, fileName),
-    sourcePath: getLegacyJournalPath(date).filePath,
-  }
-}
-
 function assertDateKey(date: unknown): asserts date is string {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new TypeError('Journal date must use YYYY-MM-DD format.')
   }
 }
 
-async function journalFilePayload(content: string, date = getTodayDateKey()): Promise<JournalFile> {
+async function journalFilePayload(
+  content: string,
+  date = getTodayDateKey(),
+  didWrite = false,
+): Promise<JournalFile> {
   const { fileName, filePath } = getJournalPath(date)
   const fileStat = await stat(filePath).catch(() => null)
 
   return {
     content,
     date,
+    didWrite,
     fileName,
     filePath,
     updatedAt: fileStat?.mtime.toISOString() ?? null,
@@ -251,43 +228,9 @@ function hasJournalContent(content: string) {
 }
 
 async function collectJournalMarkdownFiles(journalDirectory: string) {
-  const byDate = new Map<string, {
-    date: string
-    fileName: string
-    filePath: string
-  }>()
   const entriesDirectory = path.join(journalDirectory, 'entries')
-  const nestedFiles = await collectNestedJournalMarkdownFiles(entriesDirectory, journalDirectory)
 
-  for (const file of nestedFiles) {
-    byDate.set(file.date, file)
-  }
-
-  const legacyFileNames = await readdir(journalDirectory).catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      return []
-    }
-
-    throw error
-  })
-
-  for (const fileName of legacyFileNames) {
-    if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(fileName)) {
-      continue
-    }
-
-    const date = fileName.slice(0, -3)
-
-    if (!byDate.has(date)) {
-      byDate.set(date, {
-        date,
-        fileName,
-        filePath: path.join(journalDirectory, fileName),
-      })
-    }
-  }
-
-  return [...byDate.values()]
+  return collectNestedJournalMarkdownFiles(entriesDirectory, journalDirectory)
 }
 
 async function collectNestedJournalMarkdownFiles(directory: string, journalDirectory: string) {
@@ -332,7 +275,6 @@ async function loadJournal(date: unknown) {
   }
 
   const { date: dateKey, directory, filePath } = getJournalPath(date)
-  const legacyPath = getLegacyJournalPath(dateKey)
 
   await mkdir(directory, { recursive: true })
 
@@ -348,52 +290,9 @@ async function loadJournal(date: unknown) {
     return journalFilePayload(existingContent, dateKey)
   }
 
-  const legacyContent = await readFile(legacyPath.filePath, 'utf8').catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      return null
-    }
-
-    throw error
-  })
-
-  if (legacyContent !== null) {
-    const migratedContent = await migrateLegacyJournalContent(dateKey, legacyContent)
-
-    await writeJournalFile(filePath, migratedContent)
-
-    return journalFilePayload(migratedContent, dateKey)
-  }
-
   const content = createDefaultJournalMarkdown(dateKey)
 
-  await writeFile(filePath, content, 'utf8')
-
   return journalFilePayload(content, dateKey)
-}
-
-async function migrateLegacyJournalContent(date: string, content: string) {
-  const [year, month] = date.split('-')
-  const legacyMediaDirectoryName = `${date}.media`
-  const nextMediaDirectoryName = `media/${year}/${month}`
-
-  if (!content.includes(`${legacyMediaDirectoryName}/`)) {
-    return content
-  }
-
-  const journalDirectory = getJournalDirectory()
-  const legacyMediaDirectory = path.join(journalDirectory, legacyMediaDirectoryName)
-  const nextMediaDirectory = path.join(journalDirectory, nextMediaDirectoryName)
-  const legacyMediaStat = await stat(legacyMediaDirectory).catch(() => null)
-
-  if (legacyMediaStat?.isDirectory()) {
-    await mkdir(nextMediaDirectory, { recursive: true })
-    await cp(legacyMediaDirectory, nextMediaDirectory, {
-      force: false,
-      recursive: true,
-    })
-  }
-
-  return content.split(`${legacyMediaDirectoryName}/`).join(`${nextMediaDirectoryName}/`)
 }
 
 async function saveTodayJournal(content: unknown) {
@@ -424,11 +323,22 @@ async function saveJournal(date: unknown, content: unknown) {
     stripManagedFrontMatter(content),
     nextFrontMatter,
   )
+  const existingContent = await readFile(filePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  })
+
+  if (!hasMeaningfulJournalChange(existingContent ?? '', todayContent)) {
+    return journalFilePayload(existingContent ?? todayContent, dateKey)
+  }
 
   await mkdir(directory, { recursive: true })
   await writeJournalFile(filePath, todayContent)
 
-  return journalFilePayload(todayContent, dateKey)
+  return journalFilePayload(todayContent, dateKey, true)
 }
 
 async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {
@@ -437,24 +347,13 @@ async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {
   }
 
   const { filePath, sourcePath } = getJournalAnnotationsPath(date)
-  const legacyPath = getLegacyJournalAnnotationsPath(date)
-  let content = await readFile(filePath, 'utf8').catch((error: unknown) => {
+  const content = await readFile(filePath, 'utf8').catch((error: unknown) => {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null
     }
 
     throw error
   })
-
-  if (content === null) {
-    content = await readFile(legacyPath.filePath, 'utf8').catch((error: unknown) => {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-        return null
-      }
-
-      throw error
-    })
-  }
 
   if (content === null) {
     return {
@@ -776,13 +675,17 @@ async function refreshTodayWeather(location: unknown) {
     nextFrontMatter,
   )
 
+  if (!hasMeaningfulJournalChange(latestContent, nextContent)) {
+    return journalFilePayload(latestContent, date)
+  }
+
   await writeJournalFile(filePath, nextContent)
 
-  return journalFilePayload(nextContent)
+  return journalFilePayload(nextContent, date, true)
 }
 
 async function writeJournalFile(filePath: string, content: string) {
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
 
   await writeFile(temporaryPath, content, 'utf8')
   await rename(temporaryPath, filePath)

@@ -63,9 +63,11 @@ export type JournalGitPullResult = {
   updatedWorktree: boolean
 }
 
-type PromiseStatFileSystem = {
+type PromiseGitFileSystem = {
   promises: {
+    readFile?: (path: string, options?: unknown) => Promise<string | Uint8Array>
     stat: (path: string) => Promise<unknown>
+    unlink?: (path: string) => Promise<void>
   }
 }
 
@@ -79,6 +81,10 @@ const trackedPathPrefixes = [
   'media/',
 ]
 const trackedPathFiles = new Set(['manifest.json'])
+const trackedStatusFilepaths = [
+  ...trackedPathPrefixes.map((pathPrefix) => pathPrefix.slice(0, -1)),
+  ...trackedPathFiles,
+]
 
 export function createJournalGitAuthenticatedHttpClient(
   http: HttpClient,
@@ -117,10 +123,11 @@ export async function getJournalGitSyncStatus(
   config: JournalGitSyncConfig = {},
   credentials: JournalGitCredentials | null = null,
 ): Promise<JournalGitSyncStatus> {
+  const configuredBranch = getBranchName(config.branch ?? defaultBranch)
   const hasRepository = await hasGitRepository(runtime)
   const branch = hasRepository
-    ? await getCurrentBranch(runtime, config.branch ?? defaultBranch)
-    : config.branch ?? defaultBranch
+    ? await getCurrentBranch(runtime, configuredBranch)
+    : configuredBranch
   const remoteUrl = hasRepository
     ? await getRemoteUrl(runtime, config.remote ?? defaultRemote)
     : config.remoteUrl ?? null
@@ -162,7 +169,7 @@ export async function cloneJournalGitSyncRepository(
     dir: runtime.dir,
     fs: runtime.fs,
     http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
-    ref: config.branch ?? defaultBranch,
+    ref: getBranchName(config.branch ?? defaultBranch),
     singleBranch: true,
     url: config.remoteUrl,
   })
@@ -189,7 +196,7 @@ export async function pushJournalChanges(
     throw new Error('GitHub repository URL is required before pushing sync data.')
   }
 
-  const branch = config.branch ?? defaultBranch
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
 
   await ensureRepository(runtime, config)
@@ -271,7 +278,7 @@ export async function syncJournalNow(
     throw new Error('GitHub repository URL is required before syncing.')
   }
 
-  const branch = config.branch ?? defaultBranch
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
 
   await ensureRepository(runtime, config)
@@ -331,7 +338,7 @@ export async function syncJournalNow(
 }
 
 async function ensureRepository(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
-  const branch = config.branch ?? defaultBranch
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
   const git = getGit(runtime)
 
@@ -344,6 +351,8 @@ async function ensureRepository(runtime: JournalGitRuntime, config: JournalGitSy
   }
 
   await configureAuthor(runtime, config)
+  await removeStaleShortBranchRef(runtime, branch)
+  await attachHeadToLocalBranchIfSameCommit(runtime, branch)
 
   if (config.remoteUrl) {
     assertSafeRemoteUrl(config.remoteUrl)
@@ -381,6 +390,7 @@ async function commitTrackedChanges(
   message: string,
 ) {
   const git = getGit(runtime)
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const rows = await getTrackedStatusRows(runtime)
   const changedRows = rows.filter(isDirtyStatusRow)
 
@@ -410,7 +420,7 @@ async function commitTrackedChanges(
     return null
   }
 
-  return git.commit({
+  const commitOid = await git.commit({
     author: {
       email: config.authorEmail ?? defaultAuthorEmail,
       name: config.authorName ?? defaultAuthorName,
@@ -418,8 +428,12 @@ async function commitTrackedChanges(
     dir: runtime.dir,
     fs: runtime.fs,
     message,
-    ref: config.branch ?? defaultBranch,
+    ref: getLocalBranchRef(branch),
   })
+
+  await checkoutConfiguredBranchIfPossible(runtime, branch)
+
+  return commitOid
 }
 
 async function fetchRemote(
@@ -431,14 +445,14 @@ async function fetchRemote(
     dir: runtime.dir,
     fs: runtime.fs,
     http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
-    ref: config.branch ?? defaultBranch,
+    ref: getBranchName(config.branch ?? defaultBranch),
     remote: config.remote ?? defaultRemote,
     singleBranch: true,
   })
 }
 
 async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
-  const branch = config.branch ?? defaultBranch
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
 
   return getGit(runtime).merge({
@@ -451,8 +465,8 @@ async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitS
     dir: runtime.dir,
     fs: runtime.fs,
     mergeDriver: createLastWriteWinsMergeDriver('theirs'),
-    ours: branch,
-    theirs: `remotes/${remote}/${branch}`,
+    ours: getLocalBranchRef(branch),
+    theirs: getRemoteTrackingBranchRef(remote, branch),
   })
 }
 
@@ -466,7 +480,7 @@ async function pullRemoteIntoWorktree(
   mergeResult: MergeResult | null
   updatedWorktree: boolean
 }> {
-  const branch = config.branch ?? defaultBranch
+  const branch = getBranchName(config.branch ?? defaultBranch)
   const hasLocalCommit = await hasLocalBranchCommit(runtime, branch)
   const fetchResult = await fetchRemote(runtime, config, credentials)
 
@@ -508,23 +522,132 @@ async function pullRemoteIntoWorktree(
 }
 
 async function checkoutRemoteBranch(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
-  await getGit(runtime).checkout({
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+  const git = getGit(runtime)
+
+  await git.branch({
+    checkout: true,
     dir: runtime.dir,
     force: true,
     fs: runtime.fs,
-    ref: config.branch ?? defaultBranch,
-    remote: config.remote ?? defaultRemote,
-    track: true,
+    object: getRemoteTrackingBranchRef(remote, branch),
+    ref: branch,
   })
+  await git.setConfig({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    path: `branch.${branch}.remote`,
+    value: remote,
+  })
+  await git.setConfig({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    path: `branch.${branch}.merge`,
+    value: getRemoteBranchRef(branch),
+  })
+  await checkoutLocalBranch(runtime, branch)
 }
 
 async function checkoutLocalBranch(runtime: JournalGitRuntime, branch: string) {
+  await removeStaleShortBranchRef(runtime, branch)
   await getGit(runtime).checkout({
     dir: runtime.dir,
     force: true,
     fs: runtime.fs,
-    ref: branch,
+    ref: getLocalBranchRef(branch),
   })
+}
+
+async function attachHeadToLocalBranchIfSameCommit(
+  runtime: JournalGitRuntime,
+  branch: string,
+) {
+  if (await readCurrentBranch(runtime) === branch) {
+    return true
+  }
+
+  const localBranchRef = getLocalBranchRef(branch)
+  const git = getGit(runtime)
+
+  try {
+    const [headOid, branchOid] = await Promise.all([
+      git.resolveRef({
+        dir: runtime.dir,
+        fs: runtime.fs,
+        ref: 'HEAD',
+      }),
+      git.resolveRef({
+        dir: runtime.dir,
+        fs: runtime.fs,
+        ref: localBranchRef,
+      }),
+    ])
+
+    if (headOid !== branchOid) {
+      return false
+    }
+
+    await git.writeRef({
+      dir: runtime.dir,
+      force: true,
+      fs: runtime.fs,
+      ref: 'HEAD',
+      symbolic: true,
+      value: localBranchRef,
+    })
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function removeStaleShortBranchRef(runtime: JournalGitRuntime, branch: string) {
+  if (!isSafeShortRefFileName(branch)) {
+    return
+  }
+
+  const fs = runtime.fs as unknown as PromiseGitFileSystem
+  const shortRefPath = joinRuntimePath(joinRuntimePath(runtime.dir, '.git'), branch)
+  const readFile = fs.promises.readFile
+  const unlink = fs.promises.unlink
+
+  if (!readFile || !unlink) {
+    return
+  }
+
+  try {
+    const shortRefContents = await readFile(shortRefPath, { encoding: 'utf8' })
+    const branchOid = await getGit(runtime).resolveRef({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      ref: getLocalBranchRef(branch),
+    })
+    const shortRefOid = String(shortRefContents).trim()
+
+    if (shortRefOid === branchOid) {
+      await unlink(shortRefPath)
+    }
+  } catch {
+    // Old versions accidentally wrote `.git/main`. Ignore missing or unrelated refs.
+  }
+}
+
+async function checkoutConfiguredBranchIfPossible(runtime: JournalGitRuntime, branch: string) {
+  if (await attachHeadToLocalBranchIfSameCommit(runtime, branch)) {
+    return
+  }
+
+  try {
+    await getGit(runtime).checkout({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      ref: getLocalBranchRef(branch),
+    })
+  } catch {
+    // Keep the current worktree if checkout would risk disturbing local edits.
+  }
 }
 
 async function pushRemoteWithRetry(
@@ -562,6 +685,7 @@ async function pushRemoteWithRetry(
   await fetchRemote(runtime, input.config, input.credentials)
   await mergeRemoteBranch(runtime, input.config)
   await commitTrackedChanges(runtime, input.config, 'Retry journal sync after remote update')
+  await checkoutLocalBranch(runtime, input.branch)
 
   const secondPushResult = await tryPushRemote(runtime, input)
 
@@ -583,19 +707,32 @@ async function tryPushRemote(
     remote: string
   },
 ) {
-  return getGit(runtime).push({
-    dir: runtime.dir,
-    fs: runtime.fs,
-    http: createJournalGitAuthenticatedHttpClient(runtime.http, input.credentials),
-    ref: input.branch,
-    remote: input.remote,
-    remoteRef: input.branch,
-  })
+  const branch = getBranchName(input.branch)
+
+  try {
+    return await getGit(runtime).push({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      http: createJournalGitAuthenticatedHttpClient(runtime.http, input.credentials),
+      ref: getLocalBranchRef(branch),
+      remote: input.remote,
+      remoteRef: getRemoteBranchRef(branch),
+    })
+  } catch (error) {
+    const pushResult = getPushResultFromError(error)
+
+    if (pushResult?.ok) {
+      return pushResult
+    }
+
+    throw error
+  }
 }
 
 async function getTrackedStatusRows(runtime: JournalGitRuntime) {
   const rows = await getGit(runtime).statusMatrix({
     dir: runtime.dir,
+    filepaths: trackedStatusFilepaths,
     fs: runtime.fs,
   })
 
@@ -625,14 +762,18 @@ async function getRemoteUrl(runtime: JournalGitRuntime, remote: string) {
 }
 
 async function getCurrentBranch(runtime: JournalGitRuntime, fallback: string) {
+  return await readCurrentBranch(runtime) ?? fallback
+}
+
+async function readCurrentBranch(runtime: JournalGitRuntime) {
   try {
     return await getGit(runtime).currentBranch({
       dir: runtime.dir,
       fs: runtime.fs,
       test: true,
-    }) ?? fallback
+    }) ?? null
   } catch {
-    return fallback
+    return null
   }
 }
 
@@ -641,7 +782,7 @@ async function hasLocalBranchCommit(runtime: JournalGitRuntime, branch: string) 
     await getGit(runtime).resolveRef({
       dir: runtime.dir,
       fs: runtime.fs,
-      ref: branch,
+      ref: getLocalBranchRef(branch),
     })
     return true
   } catch {
@@ -651,15 +792,59 @@ async function hasLocalBranchCommit(runtime: JournalGitRuntime, branch: string) 
 
 async function fileExists(runtime: JournalGitRuntime, path: string) {
   try {
-    await (runtime.fs as unknown as PromiseStatFileSystem).promises.stat(path)
+    await (runtime.fs as unknown as PromiseGitFileSystem).promises.stat(path)
     return true
   } catch {
     return false
   }
 }
 
+function getBranchName(branch: string) {
+  return branch.startsWith('refs/heads/') ? branch.slice('refs/heads/'.length) : branch
+}
+
+function getLocalBranchRef(branch: string) {
+  return `refs/heads/${getBranchName(branch)}`
+}
+
+function getRemoteBranchRef(branch: string) {
+  return `refs/heads/${getBranchName(branch)}`
+}
+
+function getRemoteTrackingBranchRef(remote: string, branch: string) {
+  return `refs/remotes/${remote}/${getBranchName(branch)}`
+}
+
+function isSafeShortRefFileName(branch: string) {
+  return /^[A-Za-z0-9._-]+$/.test(branch)
+}
+
 function getJournalGitAuthUsername(credentials: JournalGitCredentials) {
   return credentials.username ?? 'x-access-token'
+}
+
+function getPushResultFromError(error: unknown): PushResult | null {
+  if (!isRecord(error) || !isRecord(error.data)) {
+    return null
+  }
+
+  return normalizePushResult(error.data.result)
+}
+
+function normalizePushResult(value: unknown): PushResult | null {
+  if (!isRecord(value) || typeof value.ok !== 'boolean') {
+    return null
+  }
+
+  return {
+    ...value,
+    error: typeof value.error === 'string' ? value.error : null,
+    refs: isRecord(value.refs) ? value.refs : {},
+  } as PushResult
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function hasAuthorizationHeader(headers: Record<string, string>) {
@@ -727,13 +912,13 @@ function isDirtyStatusRow([, headStatus, workdirStatus, stageStatus]: StatusRow)
   return headStatus !== workdirStatus || workdirStatus !== stageStatus
 }
 
-function isStagedStatusRow([, headStatus,, stageStatus]: StatusRow) {
+function isStagedStatusRow([, headStatus, , stageStatus]: StatusRow) {
   return headStatus !== stageStatus
 }
 
 function isTrackedJournalPath(filepath: string) {
-  return trackedPathFiles.has(filepath)
-    || trackedPathPrefixes.some((prefix) => filepath.startsWith(prefix))
+  return trackedPathFiles.has(filepath) ||
+    trackedPathPrefixes.some((prefix) => filepath.startsWith(prefix))
 }
 
 function isEmptyRemoteError(error: unknown) {
@@ -750,8 +935,14 @@ function isEmptyRemoteError(error: unknown) {
 
 function isRetryablePushError(error: unknown) {
   const code = getErrorCode(error)
+  const message = getErrorMessage(error).toLowerCase()
 
-  return code === 'PushRejectedError' || code === 'GitPushError'
+  return code === 'PushRejectedError' ||
+    code === 'GitPushError' ||
+    message.includes('failed to push') ||
+    message.includes('non-fast-forward') ||
+    message.includes('cannot lock ref') ||
+    message.includes('stale info')
 }
 
 function getErrorCode(error: unknown) {
@@ -765,7 +956,11 @@ function getErrorCode(error: unknown) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Git push failed.'
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Git push failed.'
 }
 
 function getGit(runtime: JournalGitRuntime) {
@@ -773,7 +968,7 @@ function getGit(runtime: JournalGitRuntime) {
 }
 
 function joinRuntimePath(parent: string, child: string) {
-  return parent.endsWith('/') ? `${parent}${child}` : `${parent}/${child}`
+  return `${parent.replace(/\/$/, '')}/${child.replace(/^\//, '')}`
 }
 
 export function assertSafeRemoteUrl(remoteUrl: string) {

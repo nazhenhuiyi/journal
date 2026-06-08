@@ -18,6 +18,7 @@ import { quoteMultilinePasteInActiveQuote } from './markdownQuotePaste'
 type JournalMarkdownEditorProps = {
   value: string
   onChange: (value: string) => void
+  onCompositionChange?: (isComposing: boolean, value: string) => void
 }
 
 const journalHighlightStyle = HighlightStyle.define([
@@ -262,15 +263,20 @@ const journalEditorTheme = EditorView.theme({
   },
 })
 
-function JournalMarkdownEditor({ value, onChange }: JournalMarkdownEditorProps) {
+function JournalMarkdownEditor({ value, onChange, onCompositionChange }: JournalMarkdownEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const initialValueRef = useRef(value)
   const onChangeRef = useRef(onChange)
+  const onCompositionChangeRef = useRef(onCompositionChange)
   const viewRef = useRef<EditorView | null>(null)
 
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
+
+  useEffect(() => {
+    onCompositionChangeRef.current = onCompositionChange
+  }, [onCompositionChange])
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -290,6 +296,14 @@ function JournalMarkdownEditor({ value, onChange }: JournalMarkdownEditorProps) 
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ 'aria-label': '日记正文' }),
         EditorView.domEventHandlers({
+          compositionstart(_event, view) {
+            onCompositionChangeRef.current?.(true, view.state.doc.toString())
+            return false
+          },
+          compositionend(_event, view) {
+            onCompositionChangeRef.current?.(false, view.state.doc.toString())
+            return false
+          },
           paste(event, view) {
             const text = event.clipboardData?.getData('text/plain') ?? ''
 

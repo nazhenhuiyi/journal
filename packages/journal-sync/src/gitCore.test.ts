@@ -15,12 +15,15 @@ import {
 
 const mockFs = {
   promises: {
+    readFile: vi.fn(),
     stat: vi.fn(),
+    unlink: vi.fn(),
   },
 }
 const mockGit = {
   add: vi.fn(),
   addRemote: vi.fn(),
+  branch: vi.fn(),
   checkout: vi.fn(),
   clone: vi.fn(),
   commit: vi.fn(),
@@ -34,6 +37,7 @@ const mockGit = {
   resolveRef: vi.fn(),
   setConfig: vi.fn(),
   statusMatrix: vi.fn(),
+  writeRef: vi.fn(),
 }
 const credentials = {
   token: 'github-token',
@@ -53,8 +57,13 @@ describe('journal git sync core', () => {
     vi.clearAllMocks()
 
     mockFs.promises.stat.mockResolvedValue({})
+    mockFs.promises.readFile.mockRejectedValue(Object.assign(new Error('missing'), {
+      code: 'ENOENT',
+    }))
+    mockFs.promises.unlink.mockResolvedValue(undefined)
     mockGit.add.mockResolvedValue(undefined)
     mockGit.addRemote.mockResolvedValue(undefined)
+    mockGit.branch.mockResolvedValue(undefined)
     mockGit.checkout.mockResolvedValue(undefined)
     mockGit.clone.mockResolvedValue(undefined)
     mockGit.commit.mockResolvedValue('commit-oid')
@@ -82,6 +91,7 @@ describe('journal git sync core', () => {
     mockGit.resolveRef.mockResolvedValue('local-head')
     mockGit.setConfig.mockResolvedValue(undefined)
     mockGit.statusMatrix.mockResolvedValue([])
+    mockGit.writeRef.mockResolvedValue(undefined)
   })
 
   it('initializes a repository and configures author and remote', async () => {
@@ -284,6 +294,48 @@ describe('journal git sync core', () => {
     expect(result.retriedPush).toBe(true)
   })
 
+  it('treats a successful push result carried by GitPushError as success', async () => {
+    const pushResult = {
+      error: null,
+      ok: true,
+      refs: {
+        main: {
+          error: '',
+          ok: true,
+        },
+      },
+    }
+
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 2],
+      ])
+      .mockResolvedValue([])
+    mockGit.push.mockRejectedValueOnce(Object.assign(new Error('cannot lock ref'), {
+      code: 'GitPushError',
+      data: {
+        result: pushResult,
+      },
+    }))
+
+    const result = await pushJournalChanges(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.push).toHaveBeenCalledTimes(1)
+    expect(result.pushResult).toEqual(pushResult)
+    expect(result.retriedPush).toBe(false)
+  })
+
   it('refreshes the worktree after merging remote updates', async () => {
     await pullJournalUpdates(
       createRuntime(),
@@ -295,11 +347,12 @@ describe('journal git sync core', () => {
     )
 
     expect(mockGit.merge).toHaveBeenCalledWith(expect.objectContaining({
-      theirs: 'remotes/origin/main',
+      ours: 'refs/heads/main',
+      theirs: 'refs/remotes/origin/main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
       force: true,
-      ref: 'main',
+      ref: 'refs/heads/main',
     }))
   })
 
@@ -331,7 +384,7 @@ describe('journal git sync core', () => {
     expect(result.mergeResult).toBeNull()
   })
 
-  it('checks out the remote branch when the local repository has no commits yet', async () => {
+  it('creates and checks out the local branch from remote when the local repository has no commits yet', async () => {
     mockGit.resolveRef.mockRejectedValueOnce(Object.assign(new Error('no local branch'), {
       code: 'NotFoundError',
     }))
@@ -345,13 +398,42 @@ describe('journal git sync core', () => {
       credentials,
     )
 
+    expect(mockGit.branch).toHaveBeenCalledWith(expect.objectContaining({
+      checkout: true,
+      object: 'refs/remotes/origin/main',
+      ref: 'main',
+    }))
+    expect(mockGit.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      path: 'branch.main.remote',
+      value: 'origin',
+    }))
+    expect(mockGit.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      path: 'branch.main.merge',
+      value: 'refs/heads/main',
+    }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
       force: true,
-      ref: 'main',
-      remote: 'origin',
-      track: true,
+      ref: 'refs/heads/main',
     }))
     expect(result.updatedWorktree).toBe(true)
+  })
+
+  it('removes stale short branch refs and reattaches detached HEAD at the same commit', async () => {
+    mockGit.currentBranch.mockResolvedValue(null)
+    mockFs.promises.readFile.mockResolvedValue('local-head\n')
+
+    await initJournalGitSyncRepository(createRuntime(), {
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+
+    expect(mockFs.promises.unlink).toHaveBeenCalledWith('/journal/.git/main')
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'HEAD',
+      symbolic: true,
+      value: 'refs/heads/main',
+    }))
   })
 
   it('does not force checkout remote files over uncommitted local journal content', async () => {
@@ -427,8 +509,8 @@ describe('journal git sync core', () => {
     expect(mockGit.fetch).not.toHaveBeenCalled()
     expect(mockGit.push).toHaveBeenCalledTimes(1)
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
-      ref: 'main',
-      remoteRef: 'main',
+      ref: 'refs/heads/main',
+      remoteRef: 'refs/heads/main',
     }))
     expect(result.localCommitOid).toBe('commit-oid')
   })

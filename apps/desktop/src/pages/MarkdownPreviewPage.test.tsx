@@ -5,14 +5,24 @@ import MarkdownPreviewPage from './MarkdownPreviewPage'
 vi.mock('./markdown-preview/JournalMarkdownEditor', () => ({
   default: ({
     onChange,
+    onCompositionChange,
     value,
   }: {
     onChange: (value: string) => void
+    onCompositionChange?: (isComposing: boolean, value: string) => void
     value: string
   }) => (
     <textarea
       aria-label="日记正文"
       onChange={(event) => onChange(event.currentTarget.value)}
+      onCompositionEnd={(event) => {
+        const target = event.target as HTMLTextAreaElement
+        onCompositionChange?.(false, target.value)
+      }}
+      onCompositionStart={(event) => {
+        const target = event.target as HTMLTextAreaElement
+        onCompositionChange?.(true, target.value)
+      }}
       value={value}
     />
   ),
@@ -130,7 +140,7 @@ describe('MarkdownPreviewPage', () => {
     })
 
     act(() => {
-      vi.advanceTimersByTime(800)
+      vi.advanceTimersByTime(5_100)
     })
 
     await waitFor(() => {
@@ -191,7 +201,7 @@ describe('MarkdownPreviewPage', () => {
     insertEditorText('\n新写的一句。')
 
     act(() => {
-      vi.advanceTimersByTime(800)
+      vi.advanceTimersByTime(5_100)
     })
 
     await waitFor(() => {
@@ -206,5 +216,114 @@ describe('MarkdownPreviewPage', () => {
 
     expect(savedEditCall?.[1]).toContain(':::murmur')
     expect(savedEditCall?.[1]).toContain('旧碎碎念。')
+  })
+
+  it('waits for IME composition to finish before autosaving journal edits', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 5, 8, 22, 16, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-08\n---\n\n',
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: null,
+    }
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...storedJournal,
+      content,
+      date,
+      updatedAt: '2026-06-08T14:16:05.000Z',
+    }))
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveDate,
+      saveToday: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    const textbox = await screen.findByRole('textbox', { name: '日记正文' })
+
+    fireEvent.compositionStart(textbox)
+    fireEvent.change(textbox, {
+      target: { value: '最近在想一个问题ne' },
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(5_100)
+    })
+
+    expect(saveDate).not.toHaveBeenCalled()
+
+    fireEvent.compositionEnd(textbox, {
+      target: { value: '最近在想一个问题呢' },
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-06-08',
+        expect.stringContaining('最近在想一个问题呢'),
+      )
+    })
+    expect(saveDate.mock.calls.some(([, content]) =>
+      content.includes('最近在想一个问题ne'),
+    )).toBe(false)
+  })
+
+  it('continues pending sync when tracked git files are dirty on startup', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-08\n---\n\n已经保存但还没同步。',
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: '2026-06-08T14:10:00.000Z',
+    }
+    const push = vi.fn(async () => ({
+      changed: true,
+      dirtyPaths: [],
+    }))
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveToday: vi.fn(),
+    })
+    vi.stubGlobal('journalSync', {
+      loadStatus: vi.fn().mockResolvedValue({
+        branch: 'main',
+        dirtyPaths: ['entries/2026/06/2026-06-08.md'],
+        hasCredentials: true,
+        hasRepository: true,
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+        worktreeDirectory: '/Users/zilin/.journal',
+      }),
+      pull: vi.fn().mockResolvedValue({
+        changed: false,
+        dirtyPaths: ['entries/2026/06/2026-06-08.md'],
+      }),
+      push,
+      syncNow: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    await waitFor(() => {
+      expect(window.journalSync?.loadStatus).toHaveBeenCalledOnce()
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000)
+    })
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledOnce()
+    })
   })
 })

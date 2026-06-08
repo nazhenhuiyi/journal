@@ -4,6 +4,7 @@ import { Settings2 } from 'lucide-react'
 import {
   JournalSyncCoordinator,
   type SyncOperationRequest,
+  type SyncOperationResult,
   type SyncSnapshot,
 } from '@journal/sync/scheduler'
 import SegmentedControl from '../components/SegmentedControl'
@@ -41,7 +42,7 @@ export type JournalDayViewHandle = {
   flushPendingSave: () => Promise<boolean>
 }
 
-const AUTOSAVE_DELAY_MS = 700
+const AUTOSAVE_DELAY_MS = 5_000
 const JOURNAL_MODE_STORAGE_KEY = 'journal.preview.mode'
 const initialSyncSnapshot: SyncSnapshot = {
   lastError: null,
@@ -190,8 +191,16 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
   const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot>(initialSyncSnapshot)
   const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
-  const hasLoadedJournalRef = useRef(false)
+  const [isEditorComposing, setIsEditorComposing] = useState(false)
+  const [hasLoadedJournal, setHasLoadedJournal] = useState(false)
   const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
+  const runDesktopSyncOperationRef = useRef<(request: SyncOperationRequest) => Promise<SyncOperationResult>>(
+    async () => ({
+      message: '同步还没准备好。',
+      skipped: true,
+    }),
+  )
+  const isEditorComposingRef = useRef(false)
   const isJournalDirtyRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef('')
@@ -212,7 +221,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     currentJournalDate,
     journalFrontMatter.weather?.text,
   )
-  const hasUnsavedJournalChanges = hasLoadedJournalRef.current && (
+  const hasUnsavedJournalChanges = hasLoadedJournal && (
     journalMarkdown !== lastSavedMarkdownRef.current ||
     hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current)
   )
@@ -285,7 +294,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       setJournalFrontMatter(refreshedFrontMatter)
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
-      coordinatorRef.current?.markLocalSave()
+      if (didJournalFileWrite(refreshedFile)) {
+        coordinatorRef.current?.markLocalSave()
+      }
     } catch {
       if (journalFileRef.current?.date === loadedFile.date) {
         setWeatherStatus('failed')
@@ -304,11 +315,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     journalFileRef.current = file
     lastSavedMarkdownRef.current = editableMarkdown
     lastSavedFrontMatterRef.current = frontMatter
-    hasLoadedJournalRef.current = true
     setJournalFrontMatter(frontMatter)
     setJournalFile(file)
     setJournalMarkdown(editableMarkdown)
     setJournalMode(initialJournalMode)
+    setHasLoadedJournal(true)
     void refreshTodayWeather(file)
   }, [refreshTodayWeather])
 
@@ -316,7 +327,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     const journalStore = getJournalStore()
 
     if (!journalStore) {
-      hasLoadedJournalRef.current = true
+      setHasLoadedJournal(true)
       return
     }
 
@@ -376,7 +387,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
     if (
       !getJournalStore() ||
-      !hasLoadedJournalRef.current ||
+      !hasLoadedJournal ||
       (journalMarkdown === lastSavedMarkdownRef.current &&
         !hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
     ) {
@@ -402,7 +413,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         setJournalFile(savedFile)
       }
 
-      if (options.scheduleSync ?? true) {
+      if ((options.scheduleSync ?? true) && didJournalFileWrite(savedFile)) {
         coordinatorRef.current?.markLocalSave()
       }
 
@@ -410,7 +421,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     } catch {
       return false
     }
-  }, [journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
+  }, [hasLoadedJournal, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
 
   const finalizeJournalBeforeLeaving = useCallback(
     async (shouldUpdateState = true) => flushPendingSave(shouldUpdateState),
@@ -478,6 +489,39 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }, [flushPendingSave, loadJournalForDate])
 
   useEffect(() => {
+    runDesktopSyncOperationRef.current = runDesktopSyncOperation
+  }, [runDesktopSyncOperation])
+
+  const markDirtyWorktreeForSync = useCallback(async () => {
+    const journalSync = getJournalSyncStore()
+
+    if (
+      !journalSync ||
+      !syncConfigRef.current.remoteUrl.trim() ||
+      !syncConfigRef.current.hasCredentials
+    ) {
+      return
+    }
+
+    try {
+      const status = await journalSync.loadStatus()
+
+      coordinatorRef.current?.markDirtyWorktree(status.dirtyPaths)
+    } catch (error) {
+      console.error(error)
+    }
+  }, [])
+
+  const resumeConfiguredSync = useCallback(async () => {
+    if (!syncConfigRef.current.remoteUrl.trim() || !syncConfigRef.current.hasCredentials) {
+      return
+    }
+
+    await markDirtyWorktreeForSync()
+    await coordinatorRef.current?.notifyForeground()
+  }, [markDirtyWorktreeForSync])
+
+  useEffect(() => {
     const coordinator = new JournalSyncCoordinator({
       onSnapshot: (snapshot) => {
         setSyncSnapshot(snapshot)
@@ -486,7 +530,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           setSyncMessage('')
         }
       },
-      runOperation: runDesktopSyncOperation,
+      runOperation: (request) => runDesktopSyncOperationRef.current(request),
     })
 
     coordinatorRef.current = coordinator
@@ -498,7 +542,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         coordinatorRef.current = null
       }
     }
-  }, [runDesktopSyncOperation])
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -518,7 +562,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         setSyncRemoteUrl(status.remoteUrl)
 
         if (status.remoteUrl && status.hasCredentials) {
-          coordinatorRef.current?.startPulling()
+          coordinatorRef.current?.markDirtyWorktree(status.dirtyPaths)
         }
       })
       .catch((error) => {
@@ -600,7 +644,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           return
         }
 
-        hasLoadedJournalRef.current = true
+        setHasLoadedJournal(true)
       })
 
     return () => {
@@ -641,13 +685,13 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     function handleVisibilityChange() {
       if (!document.hidden) {
         updateRealTodayDate()
-        void coordinatorRef.current?.notifyForeground()
+        void resumeConfiguredSync()
       }
     }
 
     function handleWindowFocus() {
       updateRealTodayDate()
-      void coordinatorRef.current?.notifyForeground()
+      void resumeConfiguredSync()
     }
 
     scheduleNextDayCheck()
@@ -659,14 +703,16 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       window.removeEventListener('focus', handleWindowFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [resumeConfiguredSync])
 
   useEffect(() => {
     const journalStore = getJournalStore()
 
     if (
       !journalStore ||
-      !hasLoadedJournalRef.current ||
+      !hasLoadedJournal ||
+      isEditorComposingRef.current ||
+      isEditorComposing ||
       (journalMarkdown === lastSavedMarkdownRef.current &&
         !hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current))
     ) {
@@ -691,13 +737,15 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           lastSavedFrontMatterRef.current = savedEntry.frontMatter
           journalFileRef.current = file
           setJournalFile(file)
-          coordinatorRef.current?.markLocalSave()
+          if (didJournalFileWrite(file)) {
+            coordinatorRef.current?.markLocalSave()
+          }
         })
         .catch(() => undefined)
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timeoutId)
-  }, [journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
+  }, [hasLoadedJournal, isEditorComposing, journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile])
 
   function handleModeChange(nextMode: JournalMode) {
     setJournalMode(nextMode)
@@ -717,12 +765,29 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }
 
   function handleJournalMarkdownChange(nextMarkdown: string) {
+    if (isEditorComposingRef.current) {
+      return
+    }
+
+    updateJournalMarkdownBody(nextMarkdown)
+  }
+
+  function updateJournalMarkdownBody(nextMarkdown: string) {
     setDaySwitchError('')
     setJournalMarkdown((currentMarkdown) => {
       const currentEntry = parseJournalMarkdown(currentMarkdown)
 
       return serializeJournalMarkdownBody(nextMarkdown, currentEntry.murmurs)
     })
+  }
+
+  function handleEditorCompositionChange(isComposing: boolean, composedMarkdown: string) {
+    isEditorComposingRef.current = isComposing
+    setIsEditorComposing(isComposing)
+
+    if (!isComposing) {
+      updateJournalMarkdownBody(composedMarkdown)
+    }
   }
 
   function handleJournalMurmursChange(nextMurmurs: MurmurBlock[]) {
@@ -803,6 +868,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
               </div>
               <JournalMarkdownEditor
                 onChange={handleJournalMarkdownChange}
+                onCompositionChange={handleEditorCompositionChange}
                 value={parsedJournalEntry.longEntryMarkdown}
               />
             </div>
@@ -880,6 +946,10 @@ function isBlankJournalMarkdown(markdown: string) {
 
 function hasFrontMatterChanged(currentFrontMatter: DayFrontMatter, savedFrontMatter: DayFrontMatter) {
   return serializeJournalFrontMatter(currentFrontMatter) !== serializeJournalFrontMatter(savedFrontMatter)
+}
+
+function didJournalFileWrite(file: JournalFile) {
+  return file.didWrite === true
 }
 
 function getErrorMessage(error: unknown) {

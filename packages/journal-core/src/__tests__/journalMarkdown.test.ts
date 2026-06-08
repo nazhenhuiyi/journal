@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hasMeaningfulJournalChange,
   parseJournalMarkdown,
   serializeJournalFrontMatter,
   serializeJournalMarkdownBody,
@@ -94,5 +95,79 @@ customNote: 保留`)
       },
       tags: ['雨', '窗户'],
     })
+  })
+
+  it('ignores managed timestamps when detecting meaningful changes', () => {
+    const previous = `---
+date: 2026-06-08
+createdAt: 2026-06-08T08:00:00.000Z
+updatedAt: 2026-06-08T08:00:00.000Z
+weather:
+  text: 晴
+  temperature: 24
+  updatedAt: 2026-06-08T08:00:00.000Z
+---
+
+今天。`
+    const next = `---
+date: 2026-06-08
+createdAt: 2026-06-08T08:00:00.000Z
+updatedAt: 2026-06-08T09:00:00.000Z
+weather:
+  text: 晴
+  temperature: 24
+  updatedAt: 2026-06-08T09:00:00.000Z
+---
+
+今天。`
+
+    expect(hasMeaningfulJournalChange(previous, next)).toBe(false)
+  })
+
+  it('detects content and non-managed front matter changes', () => {
+    expect(hasMeaningfulJournalChange(
+      `---
+date: 2026-06-08
+updatedAt: 2026-06-08T08:00:00.000Z
+weather:
+  text: 晴
+---
+
+今天。`,
+      `---
+date: 2026-06-08
+updatedAt: 2026-06-08T09:00:00.000Z
+weather:
+  text: 小雨
+---
+
+今天。`,
+    )).toBe(true)
+
+    expect(hasMeaningfulJournalChange(
+      '今天。',
+      '今天。\n\n:::murmur\nid: m_1\ntime: 2026-06-08T09:00:00.000Z\n---\n一句碎碎念。\n:::',
+    )).toBe(true)
+  })
+
+  it('ignores metadata-only changes while the day has no user content', () => {
+    const emptyDay = `---
+date: 2026-06-09
+---
+`
+    const withLocationAndWeather = `---
+date: 2026-06-09
+location:
+  name: 成都
+  region: Sichuan
+  country: China
+weather:
+  text: 晴
+  temperature: 24
+---
+`
+
+    expect(hasMeaningfulJournalChange('', emptyDay)).toBe(false)
+    expect(hasMeaningfulJournalChange(emptyDay, withLocationAndWeather)).toBe(false)
   })
 })

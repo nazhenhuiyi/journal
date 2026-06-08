@@ -92,7 +92,7 @@ unknown: 留着`)
         images: [
           {
             id: 'img_20260429_213801',
-            src: '2026-04-29.media/img_20260429_213801.jpg',
+            src: 'media/2026/04/img_20260429_213801.jpg',
             caption: '雨窗',
             location: {
               latitude: 39.992,
@@ -109,7 +109,7 @@ unknown: 留着`)
     expect(markdown).toContain('# 今天\n长日记。')
     expect(markdown).toContain(':::murmur\nid: m_20260429_213800')
     expect(markdown).toContain('::image\nid: img_20260429_213801')
-    expect(markdown).toContain('src: 2026-04-29.media/img_20260429_213801.jpg')
+    expect(markdown).toContain('src: media/2026/04/img_20260429_213801.jpg')
     expect(markdown).toContain('location: 青龙湖')
     expect(markdown).toContain('latitude: 39.992')
     expect(markdown).toContain('longitude: 116.277')

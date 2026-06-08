@@ -23,8 +23,11 @@ import {
   loadDailyJournal,
   saveDailyJournal,
   type MobileJournalRecord,
+  type SaveDailyJournalResult,
 } from './services/mobileJournalStore'
+import { shouldDeferBackgroundSyncForInput } from './services/inputStability'
 import {
+  getMobileGitSyncStatus,
   loadGitHubSyncCredentials,
   loadGitHubSyncSettings,
   pullMobileJournalUpdatesFromGitHub,
@@ -59,7 +62,7 @@ type RootStackParamList = {
 }
 
 const today = getLocalDateKey()
-const localSaveDebounceMs = 700
+const localSaveDebounceMs = 5_000
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const initialSyncSnapshot: SyncSnapshot = {
@@ -86,8 +89,10 @@ export default function App() {
   const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
   const journalVersionRef = useRef(0)
   const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
+  const isLongEntryFocusedRef = useRef(false)
   const journalContentRef = useRef({ longEntryMarkdown: '', murmurs: [] as MurmurBlock[] })
-  const saveCurrentJournalRef = useRef<((options?: SaveCurrentJournalOptions) => Promise<MobileJournalRecord | null>) | null>(null)
+  const lastLongEntryEditedAtRef = useRef(0)
+  const saveCurrentJournalRef = useRef<((options?: SaveCurrentJournalOptions) => Promise<SaveDailyJournalResult | null>) | null>(null)
   const saveStateRef = useRef<SaveState>('loading')
   const syncConfigRef = useRef({
     branch: 'main',
@@ -145,6 +150,40 @@ export default function App() {
       remoteUrl: syncRemoteUrl,
     }
   }, [hasStoredSyncToken, syncBranch, syncRemoteUrl])
+
+  const markDirtyWorktreeForSync = useCallback(async (input?: {
+    branch?: string
+    hasStoredSyncToken?: boolean
+    remoteUrl?: string
+  }) => {
+    const branch = input?.branch ?? syncConfigRef.current.branch
+    const hasToken = input?.hasStoredSyncToken ?? syncConfigRef.current.hasStoredSyncToken
+    const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
+
+    if (!remoteUrl.trim() || !hasToken) {
+      return
+    }
+
+    try {
+      const status = await getMobileGitSyncStatus({
+        branch: branch.trim() || 'main',
+        remoteUrl: remoteUrl.trim(),
+      })
+
+      coordinatorRef.current?.markDirtyWorktree(status.dirtyPaths)
+    } catch (error) {
+      console.error(error)
+    }
+  }, [])
+
+  const resumeConfiguredSync = useCallback(async () => {
+    if (!syncConfigRef.current.remoteUrl.trim() || !syncConfigRef.current.hasStoredSyncToken) {
+      return
+    }
+
+    await markDirtyWorktreeForSync()
+    await coordinatorRef.current?.notifyForeground()
+  }, [markDirtyWorktreeForSync])
 
   useEffect(() => {
     let isMounted = true
@@ -209,6 +248,7 @@ export default function App() {
   }, [])
 
   const handleLongEntryChange = useCallback((value: string) => {
+    lastLongEntryEditedAtRef.current = Date.now()
     markJournalDirty()
     setLongEntryMarkdown(value)
   }, [markJournalDirty])
@@ -247,7 +287,7 @@ export default function App() {
         setSaveState('dirty')
       }
 
-      if (shouldScheduleSync) {
+      if (shouldScheduleSync && savedRecord.didWrite) {
         coordinatorRef.current?.markLocalSave()
       }
 
@@ -287,6 +327,15 @@ export default function App() {
 
     return () => clearTimeout(timeoutId)
   }, [saveCurrentJournal, saveState])
+
+  const isLongEntryInputUnstable = useCallback(() => (
+    shouldDeferBackgroundSyncForInput({
+      isFocused: isLongEntryFocusedRef.current,
+      lastEditedAt: lastLongEntryEditedAtRef.current,
+      now: Date.now(),
+      stableWindowMs: localSaveDebounceMs,
+    })
+  ), [])
 
   const openMurmurPanel = useCallback(() => {
     setIsMurmurPanelVisible(true)
@@ -356,7 +405,7 @@ export default function App() {
         lastError: null,
         status: 'idle',
       }))
-      coordinatorRef.current?.notifyForeground()
+      void resumeConfiguredSync()
       return true
     } catch (error) {
       console.error(error)
@@ -371,7 +420,7 @@ export default function App() {
     } finally {
       setIsSavingSyncConfiguration(false)
     }
-  }, [hasStoredSyncToken, syncBranch, syncRemoteUrl, syncTokenDraft])
+  }, [hasStoredSyncToken, resumeConfiguredSync, syncBranch, syncRemoteUrl, syncTokenDraft])
 
   const reloadTodayFromDisk = useCallback(async () => {
     const loadedRecord = await loadDailyJournal(today)
@@ -482,15 +531,24 @@ export default function App() {
     }
 
     if (syncRemoteUrl.trim() && hasStoredSyncToken) {
-      coordinator.startPulling()
+      let isCancelled = false
 
-      return () => coordinator.stopPulling()
+      void markDirtyWorktreeForSync().then(() => {
+        if (!isCancelled) {
+          coordinator.startPulling()
+        }
+      })
+
+      return () => {
+        isCancelled = true
+        coordinator.stopPulling()
+      }
     }
 
     coordinator.stopPulling()
 
     return undefined
-  }, [hasLoadedSyncConfiguration, hasStoredSyncToken, syncRemoteUrl])
+  }, [hasLoadedSyncConfiguration, hasStoredSyncToken, markDirtyWorktreeForSync, syncRemoteUrl])
 
   const flushBeforeLeavingApp = useCallback(async () => {
     if (saveStateRef.current === 'dirty') {
@@ -499,25 +557,29 @@ export default function App() {
         showAlert: false,
       })
 
-      if (savedRecord) {
+      if (savedRecord?.didWrite) {
         coordinatorRef.current?.markLocalSave()
       }
     }
 
+    if (isLongEntryInputUnstable()) {
+      return
+    }
+
     await coordinatorRef.current?.flushBeforeLeave()
-  }, [])
+  }, [isLongEntryInputUnstable])
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        void coordinatorRef.current?.notifyForeground()
+        void resumeConfiguredSync()
       } else if (nextState === 'background' || nextState === 'inactive') {
         void flushBeforeLeavingApp()
       }
     })
 
     return () => subscription.remove()
-  }, [flushBeforeLeavingApp])
+  }, [flushBeforeLeavingApp, resumeConfiguredSync])
 
   const handleSyncNow = useCallback(async () => {
     const remoteUrl = syncRemoteUrl.trim()
@@ -651,7 +713,13 @@ export default function App() {
                     importantForAutofill="no"
                     keyboardType="default"
                     multiline
+                    onBlur={() => {
+                      isLongEntryFocusedRef.current = false
+                    }}
                     onChangeText={handleLongEntryChange}
+                    onFocus={() => {
+                      isLongEntryFocusedRef.current = true
+                    }}
                     placeholder="写一点今天真正留下来的东西。"
                     placeholderTextColor="#9aa69f"
                     scrollEnabled

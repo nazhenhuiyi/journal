@@ -185,4 +185,100 @@ describe('JournalSyncCoordinator', () => {
     await expect(flush).resolves.toBe(true)
     expect(didFlush).toBe(true)
   })
+
+  it('keeps pending local changes visible when a pull finishes before the debounced push', async () => {
+    const runOperation = vi.fn(async (request: SyncOperationRequest) => ({
+      skipped: request.operation === 'pull',
+    }))
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave()
+    await coordinator.pullNow('app-open')
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      pendingReason: 'local-save',
+      status: 'pending',
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+  })
+
+  it('marks tracked dirty worktree paths as pending local changes', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    expect(coordinator.markDirtyWorktree([])).toBe(false)
+    expect(coordinator.getSnapshot().status).toBe('idle')
+
+    expect(coordinator.markDirtyWorktree(['entries/2026/06/2026-06-08.md'])).toBe(true)
+    expect(coordinator.getSnapshot()).toMatchObject({
+      pendingReason: 'local-save',
+      status: 'pending',
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledWith({
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+  })
+
+  it('waits for the retry delay after a failed push', async () => {
+    const runOperation = vi.fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({})
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      retryDelayMs: 300_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(coordinator.getSnapshot().status).toBe('retrying')
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(299_999)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'push',
+      trigger: 'retry-timer',
+    })
+  })
+
+  it('does not retry immediately when leaving with only a failed push pending', async () => {
+    const runOperation = vi.fn().mockRejectedValue(new Error('network down'))
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      retryDelayMs: 300_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    await expect(coordinator.flushBeforeLeave()).resolves.toBe(true)
+
+    expect(coordinator.getSnapshot().status).toBe('retrying')
+    expect(runOperation).toHaveBeenCalledTimes(1)
+  })
 })

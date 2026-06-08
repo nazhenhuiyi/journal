@@ -14,6 +14,7 @@ export type SyncTrigger =
   | 'manual'
   | 'network-online'
   | 'pull-interval'
+  | 'retry-timer'
   | 'save-idle'
 
 export type SyncOperation = 'full' | 'pull' | 'push'
@@ -51,6 +52,7 @@ export type JournalSyncCoordinatorOptions = {
   onSnapshot?: (snapshot: SyncSnapshot) => void
   pullIntervalMs?: number
   pushDebounceMs?: number
+  retryDelayMs?: number
   runOperation: (request: SyncOperationRequest) => Promise<SyncOperationResult>
   timers?: SyncTimerApi
 }
@@ -58,6 +60,7 @@ export type JournalSyncCoordinatorOptions = {
 const defaultPushDebounceMs = 20_000
 const defaultPullIntervalMs = 180_000
 const defaultLeaveFlushTimeoutMs = 5_000
+const defaultRetryDelayMs = 300_000
 
 const defaultTimers: SyncTimerApi = {
   clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
@@ -74,6 +77,7 @@ export class JournalSyncCoordinator {
   private pullIntervalHandle: unknown | null = null
   private pushTimeoutHandle: unknown | null = null
   private queuedRun: Promise<SyncSnapshot> | null = null
+  private retryTimeoutHandle: unknown | null = null
   private snapshot: SyncSnapshot = {
     lastError: null,
     lastSyncedAt: null,
@@ -88,7 +92,21 @@ export class JournalSyncCoordinator {
   }
 
   markLocalSave() {
+    this.markLocalChangesPending()
+  }
+
+  markDirtyWorktree(dirtyPaths: readonly string[]) {
+    if (dirtyPaths.length === 0) {
+      return false
+    }
+
+    this.markLocalChangesPending()
+    return true
+  }
+
+  private markLocalChangesPending() {
     this.clearPushTimer()
+    this.clearRetryTimer()
     this.updateSnapshot({
       lastError: null,
       pendingReason: 'local-save',
@@ -120,8 +138,9 @@ export class JournalSyncCoordinator {
   }
 
   notifyNetworkOnline() {
-    if (this.snapshot.status === 'retrying' || this.snapshot.status === 'error') {
-      return this.runSingleFlight('push', 'network-online')
+    if (this.snapshot.status === 'retrying') {
+      this.scheduleRetry()
+      return Promise.resolve(this.snapshot)
     }
 
     return this.pullNow('network-online')
@@ -133,15 +152,12 @@ export class JournalSyncCoordinator {
 
   syncNow() {
     this.clearPushTimer()
+    this.clearRetryTimer()
     return this.runSingleFlight('full', 'manual')
   }
 
   async flushBeforeLeave() {
-    if (
-      this.snapshot.status !== 'pending' &&
-      this.snapshot.status !== 'retrying' &&
-      this.snapshot.status !== 'error'
-    ) {
+    if (this.snapshot.status !== 'pending' || this.snapshot.pendingReason !== 'local-save') {
       return true
     }
 
@@ -170,6 +186,7 @@ export class JournalSyncCoordinator {
 
   dispose() {
     this.clearPushTimer()
+    this.clearRetryTimer()
     this.stopPulling()
 
     if (this.leaveFlushTimeoutHandle !== null) {
@@ -231,10 +248,17 @@ export class JournalSyncCoordinator {
       const result = await this.options.runOperation({ operation, trigger })
 
       if (result.needsAuth) {
+        this.clearRetryTimer()
         this.updateSnapshot({
           lastError: result.message ?? null,
           pendingReason: null,
           status: 'needs-auth',
+        })
+      } else if (operation === 'pull' && this.pushTimeoutHandle !== null) {
+        this.updateSnapshot({
+          lastError: null,
+          pendingReason: 'local-save',
+          status: 'pending',
         })
       } else if (result.skipped && operation === 'pull') {
         this.updateSnapshot({
@@ -242,6 +266,7 @@ export class JournalSyncCoordinator {
           status: this.snapshot.lastSyncedAt ? 'synced' : 'idle',
         })
       } else {
+        this.clearRetryTimer()
         this.updateSnapshot({
           lastError: null,
           lastSyncedAt: this.now().toISOString(),
@@ -250,11 +275,25 @@ export class JournalSyncCoordinator {
         })
       }
     } catch (error) {
+      if (operation === 'pull' && this.pushTimeoutHandle !== null) {
+        this.updateSnapshot({
+          lastError: null,
+          pendingReason: 'local-save',
+          status: 'pending',
+        })
+
+        return this.snapshot
+      }
+
       this.updateSnapshot({
         lastError: getErrorMessage(error),
         pendingReason: operation === 'pull' ? 'remote-check' : 'retry',
         status: operation === 'pull' ? 'error' : 'retrying',
       })
+
+      if (operation !== 'pull') {
+        this.scheduleRetry()
+      }
     }
 
     return this.snapshot
@@ -274,6 +313,24 @@ export class JournalSyncCoordinator {
       this.timers.clearTimeout(this.pushTimeoutHandle)
       this.pushTimeoutHandle = null
     }
+  }
+
+  private clearRetryTimer() {
+    if (this.retryTimeoutHandle !== null) {
+      this.timers.clearTimeout(this.retryTimeoutHandle)
+      this.retryTimeoutHandle = null
+    }
+  }
+
+  private scheduleRetry() {
+    if (this.retryTimeoutHandle !== null) {
+      return
+    }
+
+    this.retryTimeoutHandle = this.timers.setTimeout(() => {
+      this.retryTimeoutHandle = null
+      void this.runSingleFlight('push', 'retry-timer')
+    }, this.retryDelayMs)
   }
 
   private updateSnapshot(nextSnapshot: Partial<SyncSnapshot>) {
@@ -298,6 +355,10 @@ export class JournalSyncCoordinator {
 
   private get pushDebounceMs() {
     return this.options.pushDebounceMs ?? defaultPushDebounceMs
+  }
+
+  private get retryDelayMs() {
+    return this.options.retryDelayMs ?? defaultRetryDelayMs
   }
 
   private get timers() {

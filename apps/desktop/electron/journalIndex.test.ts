@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -21,13 +21,15 @@ afterEach(async () => {
 describe('journal index', () => {
   it('lists non-empty journal files newest first with searchable curation metadata', async () => {
     const directory = await createTemporaryJournalDirectory()
+    const entriesDirectory = path.join(directory, 'entries', '2026', '04')
 
-    await writeFile(path.join(directory, '2026-04-23.md'), `---
+    await mkdir(entriesDirectory, { recursive: true })
+    await writeFile(path.join(entriesDirectory, '2026-04-23.md'), `---
 date: 2026-04-23
 ---
 
 `, 'utf8')
-    await writeFile(path.join(directory, '2026-04-24.md'), `---
+    await writeFile(path.join(entriesDirectory, '2026-04-24.md'), `---
 date: 2026-04-24
 title: 雨夜和台灯
 excerpt: 窗外下雨，桌面很安静。
@@ -49,18 +51,24 @@ time: 2026-04-24T21:38:00+08:00
 
 ::image
 id: img_20260424_213801
-src: 2026-04-24.media/rain.jpg
+src: media/2026/04/rain.jpg
 caption: 雨打在窗户上
 tags: [窗户, 夜晚]
 ::
 :::
 `, 'utf8')
-    await writeFile(path.join(directory, '2026-04-25.md'), `---
+    await writeFile(path.join(entriesDirectory, '2026-04-25.md'), `---
 date: 2026-04-25
 tags: [灯]
 ---
 
 只有一点灯光。
+`, 'utf8')
+    await writeFile(path.join(directory, '2026-04-26.md'), `---
+date: 2026-04-26
+---
+
+根目录旧结构不再进入索引。
 `, 'utf8')
 
     const index = await listJournalIndex(directory)
@@ -74,7 +82,7 @@ tags: [灯]
           caption: '雨打在窗户上',
           id: 'img_20260424_213801',
           murmurId: 'm_20260424_213800',
-          src: '2026-04-24.media/rain.jpg',
+          src: 'media/2026/04/rain.jpg',
           tags: ['窗户', '夜晚'],
         },
       ],

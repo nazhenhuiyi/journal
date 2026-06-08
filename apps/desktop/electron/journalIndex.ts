@@ -45,45 +45,10 @@ export async function listJournalIndex(journalDirectory: string): Promise<Journa
 }
 
 async function collectJournalMarkdownFiles(journalDirectory: string) {
-  const byDate = new Map<string, {
-    date: string
-    fileName: string
-    filePath: string
-  }>()
-  const nestedFiles = await collectNestedJournalMarkdownFiles(
+  return collectNestedJournalMarkdownFiles(
     path.join(journalDirectory, 'entries'),
     journalDirectory,
   )
-
-  for (const file of nestedFiles) {
-    byDate.set(file.date, file)
-  }
-
-  const legacyFileNames = await readdir(journalDirectory).catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      return []
-    }
-
-    throw error
-  })
-
-  for (const fileName of legacyFileNames) {
-    if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(fileName)) {
-      continue
-    }
-
-    const date = fileName.slice(0, -3)
-
-    if (!byDate.has(date)) {
-      byDate.set(date, {
-        date,
-        fileName,
-        filePath: path.join(journalDirectory, fileName),
-      })
-    }
-  }
-
-  return [...byDate.values()]
 }
 
 async function collectNestedJournalMarkdownFiles(directory: string, journalDirectory: string) {

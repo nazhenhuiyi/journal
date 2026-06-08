@@ -114,12 +114,12 @@ time: 2026-04-29T21:38:00+08:00
 
 ::image
 id: img_20260429_213801
-src: 2026-04-29.media/rain.jpg
+src: media/2026/04/rain.jpg
 caption: 雨窗
 tags: [雨]
 ::
 :::`,
-          sourceFilePath: '/Users/zilin/.journal/2026-04-29.md',
+          sourceFilePath: '/Users/zilin/.journal/entries/2026/04/2026-04-29.md',
         })}
       </>,
     )
@@ -127,7 +127,7 @@ tags: [雨]
     expect(screen.getByText('窗外下雨了。')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: '雨窗' })).toHaveAttribute(
       'src',
-      'journal-media://local/2026-04-29.media/rain.jpg',
+      'journal-media://local/media/2026/04/rain.jpg',
     )
   })
 
