@@ -14,8 +14,8 @@ import {
   type JournalSyncStatusKind,
   type JournalSyncStatusPresentationOptions,
   type JournalSyncStatusTone,
-  type SyncSnapshot,
-} from '@journal/sync'
+} from '@journal/sync/statusPresentation'
+import type { SyncSnapshot } from '@journal/sync/scheduler'
 
 export type SyncStatusTone = JournalSyncStatusTone
 
