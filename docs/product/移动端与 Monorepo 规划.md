@@ -26,7 +26,7 @@
 | 主题 | 决策 |
 | --- | --- |
 | 仓库形态 | 采用 Monorepo，但分阶段改造 |
-| 当前重点 | 桌面端、移动端和共享 core 已拆入 workspace，下一步验证移动端同步 POC |
+| 当前重点 | 桌面端、移动端和共享 core 已拆入 workspace；第 4 阶段真实 GitHub 私有远端 POC 已通过，下一步做 Android 真机 UI 回归 |
 | 包管理 | 继续使用 npm workspaces，不切 pnpm/yarn |
 | 共享范围 | 共享数据模型、解析、序列化和迁移工具，不共享桌面/移动 UI |
 | 移动端技术栈 | Expo SDK 54 + React Native + TypeScript，优先兼容 Play Store 版 Expo Go |
@@ -185,7 +185,16 @@ git push
 
 移动端不能假设系统里有 `git` 命令，也不依赖 shell 调用。
 
-移动端第一候选是 `isomorphic-git` POC：
+移动端第一候选是 `isomorphic-git` POC。当前已经在移动端新增同步服务边界、Expo 文件系统适配层、SecureStore 凭据存储、last-write-wins merge driver 和手动同步入口。
+
+POC 代码路径：
+
+- `apps/mobile/src/services/sync/mobileGitSync.ts`
+- `apps/mobile/src/services/sync/expoGitFileSystem.ts`
+- `apps/mobile/src/services/sync/secureSyncCredentials.ts`
+- `apps/mobile/src/services/sync/lastWriteWins.ts`
+
+POC 需要覆盖：
 
 - 在 app 私有目录初始化或 clone 一个 repo。
 - 写入一篇 Markdown 日记。
@@ -367,28 +376,64 @@ git push
 - 移动端仍能引用 `@journal/core`。
 - 根目录脚本能清楚区分 desktop、mobile 和 packages。
 
-### 阶段 4：`isomorphic-git` 同步 POC
+### 阶段 4：`isomorphic-git` 同步 POC（已完成真实远端 POC）
 
 目标：验证移动端能否稳定使用 GitHub 私有仓库同步。
 
 任务：
 
-- 在移动端接入 `isomorphic-git`。
-- 接入移动端文件系统适配层。
-- 支持 clone 或 init sync repo。
-- 支持 add、commit、fetch、push。
-- 支持 HTTPS + GitHub token 或 OAuth。
-- 验证安全存储凭据。
-- 用少量日记和图片做真机同步测试。
-- 验证 last-write-wins 冲突处理。
+- [x] 在移动端接入 `isomorphic-git`。
+- [x] 接入 Expo 文件系统适配层。
+- [x] 支持 init sync repo。
+- [x] 支持 clone 远端 sync repo 的代码路径。
+- [x] 支持 add、commit、fetch、push 的同步服务边界。
+- [x] 支持 HTTPS + GitHub token。
+- [x] 使用 Expo SecureStore 保存 token 和 repo 配置。
+- [x] 增加手动同步入口。
+- [x] 增加 last-write-wins merge driver。
+- [x] 为 last-write-wins 规则增加单元测试。
+- [x] 为 init、commit/fetch/merge/push、空远端首同步、空本地空远端、已有远端首拉取、push reject retry 增加同步流程单元测试。
+- [x] 为 Expo 文件系统适配层增加二进制读写、UTF-8 读写、stat shim 和 Node-style 错误码测试。
+- [x] 为 SecureStore 凭据和仓库配置增加归一化、读取和坏数据清理测试。
+- [x] 用 GitHub 私有仓库做真实远端 init / commit / push / clone / fetch / pull 验收。
+- [x] 用少量图片文件做真实远端同步测试。
+- [x] 验证 push 被远端新提交拒绝后的 fetch / merge / retry。
+- [x] OAuth 后置，不进入第一轮 POC。
 
 完成标志：
 
-- 移动端能把一篇日记 commit 并 push 到 GitHub。
+代码完成标志：
+
+- 移动端页面可以填写 GitHub repo URL、branch 和 token。
+- token 不写入 Markdown 或 Git repo，而是保存到 SecureStore。
+- 同步服务可以初始化本地 repo、提交本地 Markdown、fetch 远端、合并远端、push，并在 push 被拒绝后重试一次。
+- 新设备首次同步已有远端时，本地没有 commit 的情况下会 checkout 远端分支并建立 tracking。
+- 本地和空远端都没有 commit 时，同步不会强行 push 一个不存在的分支。
+- 同文件冲突时，日记 Markdown 优先比较 front matter `updatedAt`，批注 JSON 优先比较文件内最新批注时间；缺少可靠时间时使用 fallback。
+
+真实远端验收标志：
+
+- 移动端同步服务能把一篇日记 commit 并 push 到 GitHub 私有仓库。
 - 桌面端能 pull 到这篇日记并正确解析。
-- 桌面端修改后 push，移动端能 fetch/pull 并正确解析。
+- 桌面端修改后 push，移动端同步服务能 fetch/pull 并正确解析。
 - 遇到非 fast-forward 或同文件冲突时，能按 last-write-wins 完成同步。
 - 同步失败时不会导致本地日记丢失。
+
+真实远端 POC 记录：
+
+- 日期：2026-06-08。
+- 永久测试仓库：`nazhenhuiyi/journal-sync-poc-20260608095939`，GitHub 私有仓库。
+- 首次同步：本地模拟移动端通过 `isomorphic-git` `init`、`add`、`commit`、`push` 到 `main`。
+- 远端拉取：另一个本地模拟移动端通过 `isomorphic-git` `clone` 拉到 Markdown 和 `media/` 图片。
+- 桌面验收：系统 Git clone 仓库，读取 `entries/2026/06/2026-06-08.md` 和 `media/2026/06/img_poc_1.png`。
+- 桌面修改：系统 Git 修改同一天日记并 push。
+- 冲突重试：旧移动端 worktree 离线修改同文件，首次 push 被远端拒绝后，执行 fetch、last-write-wins merge、retry push 成功。
+- 最终验收：桌面端 `git pull --ff-only` 拉到 last-write-wins 后的移动端版本，图片文件仍存在。
+
+限制：
+
+- 本机没有连接 Android 设备或模拟器，所以这次没有在 Expo Go UI 上手动点击“同步”按钮。
+- Android bundle 已通过 `npx expo export --platform android` 验证，移动端服务层和真实 GitHub 远端链路已通过；后续真机 UI 回归可以继续使用这个永久测试仓库。
 
 ### 阶段 5：图片与导入导出
 
@@ -413,7 +458,7 @@ git push
 
 | 风险 | 验证方式 |
 | --- | --- |
-| `isomorphic-git` 在 React Native 文件系统上不稳定 | 阶段 3 真机 POC，覆盖 clone、commit、fetch、push、冲突和图片 |
+| `isomorphic-git` 在 React Native 文件系统上不稳定 | 阶段 4 已完成服务层、Android bundle 和真实 GitHub 远端 POC；后续继续用永久测试仓库做 Android 真机 UI 回归 |
 | GitHub token 管理不安全 | 使用系统安全存储，避免明文落盘 |
 | 后续索引层与 Markdown 状态不一致 | 第一版不引入 SQLite；未来如果加索引，必须可从 Markdown 重新生成 |
 | 图片导致 repo 变重 | 第一版限制图片尺寸或压缩，不做视频和 Git LFS |
@@ -422,23 +467,21 @@ git push
 
 ## 12. 下一步执行清单
 
-下一步进入 `isomorphic-git` 同步 POC。
+下一步进入 Android 真机 UI 回归。
 
 执行顺序：
 
-1. 在 `apps/mobile` 新增同步服务边界，不直接写进页面组件。
-2. 验证 `isomorphic-git` 在 Expo / React Native 文件系统上的最小 init、add、commit。
-3. 接入 GitHub 私有仓库 token，验证 fetch 和 push。
-4. 用一篇 Markdown 日记和一张图片做端到端同步。
-5. 按 last-write-wins 处理同文件冲突。
-6. 确认同步失败时本地 Markdown 不丢失。
+1. 使用永久测试仓库 `nazhenhuiyi/journal-sync-poc-20260608095939`。
+2. 在 Android 真机 Expo Go 中填写 repo URL、branch 和 token，执行手动同步。
+3. 验证页面同步状态、错误提示和保存后的 token 输入框清空行为。
+4. 断网或填错 token 触发失败，确认本地 Markdown 仍保留。
 
 ## 13. 仍需确认
 
 - 移动端第一版是先做 iOS，还是 iOS 和 Android 一起做。
 - 历史日记第一版是否允许编辑，还是只允许查看。
 - 图片默认保存原图，还是默认压缩。
-- 手动同步是否作为唯一入口，还是打开 app 时也自动拉取。
+- 手动同步是否作为唯一入口，还是打开 app 时也自动拉取；当前 POC 只做手动同步。
 - `isomorphic-git` POC 失败时，是否接受进入原生 Git 库路线。
 
 ## 14. 参考资料

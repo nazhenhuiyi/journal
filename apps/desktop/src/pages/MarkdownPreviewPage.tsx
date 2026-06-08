@@ -1,5 +1,11 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
+import { Settings2 } from 'lucide-react'
+import {
+  JournalSyncCoordinator,
+  type SyncOperationRequest,
+  type SyncSnapshot,
+} from '@journal/sync/scheduler'
 import SegmentedControl from '../components/SegmentedControl'
 import {
   parseJournalMarkdown,
@@ -23,6 +29,7 @@ import {
   createManagedJournalMarkdown,
   stripManagedFrontMatter,
 } from './markdown-preview/managedJournalMarkdown'
+import { getSyncStatusPresentation } from './syncStatusPresentation'
 
 type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
@@ -36,6 +43,12 @@ export type JournalDayViewHandle = {
 
 const AUTOSAVE_DELAY_MS = 700
 const JOURNAL_MODE_STORAGE_KEY = 'journal.preview.mode'
+const initialSyncSnapshot: SyncSnapshot = {
+  lastError: null,
+  lastSyncedAt: null,
+  pendingReason: null,
+  status: 'idle',
+}
 const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
   { value: 'write', label: '书写' },
@@ -48,6 +61,10 @@ function getJournalStore() {
 
 function getJournalSettingsStore() {
   return typeof window === 'undefined' ? undefined : window.journalSettings
+}
+
+function getJournalSyncStore() {
+  return typeof window === 'undefined' ? undefined : window.journalSync
 }
 
 function readStoredJournalMode(): JournalMode {
@@ -169,11 +186,22 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [realTodayDate, setRealTodayDate] = useState(() => getLocalDateKey())
   const [daySwitchError, setDaySwitchError] = useState('')
   const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('idle')
+  const [syncMessage, setSyncMessage] = useState('')
+  const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
+  const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot>(initialSyncSnapshot)
+  const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
   const hasLoadedJournalRef = useRef(false)
+  const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
+  const isJournalDirtyRef = useRef(false)
   const journalFileRef = useRef<JournalFile | null>(null)
   const lastSavedMarkdownRef = useRef('')
   const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
   const saveRequestIdRef = useRef(0)
+  const syncConfigRef = useRef({
+    branch: 'main',
+    hasCredentials: false,
+    remoteUrl: '',
+  })
   const finalizeJournalRef = useRef<((shouldUpdateState?: boolean) => Promise<boolean>) | null>(null)
   const isReviewing = journalMode === 'review'
   const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
@@ -184,6 +212,17 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     currentJournalDate,
     journalFrontMatter.weather?.text,
   )
+  const hasUnsavedJournalChanges = hasLoadedJournalRef.current && (
+    journalMarkdown !== lastSavedMarkdownRef.current ||
+    hasFrontMatterChanged(journalFrontMatter, lastSavedFrontMatterRef.current)
+  )
+  const syncStatus = getSyncStatusPresentation(
+    syncSnapshot,
+    syncMessage,
+    syncRemoteUrl,
+    hasStoredSyncToken,
+  )
+  const SyncStatusIcon = syncStatus.icon
   const renderedMarkdown = useMemo(
     () =>
       renderJournalMarkdown({
@@ -246,6 +285,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       setJournalFrontMatter(refreshedFrontMatter)
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
+      coordinatorRef.current?.markLocalSave()
     } catch {
       if (journalFileRef.current?.date === loadedFile.date) {
         setWeatherStatus('failed')
@@ -328,7 +368,10 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return null
   }, [])
 
-  const flushPendingSave = useCallback(async (shouldUpdateState = true) => {
+  const flushPendingSave = useCallback(async (
+    shouldUpdateState = true,
+    options: { scheduleSync?: boolean } = {},
+  ) => {
     const currentDate = journalFileRef.current?.date ?? realTodayDate
 
     if (
@@ -359,6 +402,10 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         setJournalFile(savedFile)
       }
 
+      if (options.scheduleSync ?? true) {
+        coordinatorRef.current?.markLocalSave()
+      }
+
       return true
     } catch {
       return false
@@ -370,6 +417,153 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     [flushPendingSave],
   )
 
+  const runDesktopSyncOperation = useCallback(async ({ operation }: SyncOperationRequest) => {
+    const journalSync = getJournalSyncStore()
+
+    if (!journalSync) {
+      return {
+        message: '当前环境还不能同步。',
+        skipped: true,
+      }
+    }
+
+    if (!syncConfigRef.current.remoteUrl.trim()) {
+      return {
+        message: '请先配置 GitHub 同步仓库地址。',
+        needsAuth: true,
+      }
+    }
+
+    if (!syncConfigRef.current.hasCredentials) {
+      return {
+        message: '请先保存 GitHub token。',
+        needsAuth: true,
+      }
+    }
+
+    if (operation === 'pull') {
+      if (isJournalDirtyRef.current) {
+        return {
+          message: '正在编辑，稍后检查远端更新。',
+          skipped: true,
+        }
+      }
+
+      const result = await journalSync.pull()
+
+      if (result.changed && !isJournalDirtyRef.current) {
+        await loadJournalForDate(journalFileRef.current?.date ?? null, () => !isJournalDirtyRef.current)
+      }
+
+      return {
+        changed: result.changed,
+      }
+    }
+
+    if (isJournalDirtyRef.current) {
+      await flushPendingSave(true, { scheduleSync: false })
+    }
+
+    const result = operation === 'full'
+      ? await journalSync.syncNow()
+      : await journalSync.push()
+
+    if (operation === 'full' && !isJournalDirtyRef.current) {
+      await loadJournalForDate(journalFileRef.current?.date ?? null, () => !isJournalDirtyRef.current)
+    }
+
+    return {
+      changed: result.changed,
+    }
+  }, [flushPendingSave, loadJournalForDate])
+
+  useEffect(() => {
+    const coordinator = new JournalSyncCoordinator({
+      onSnapshot: (snapshot) => {
+        setSyncSnapshot(snapshot)
+
+        if (snapshot.status !== 'synced') {
+          setSyncMessage('')
+        }
+      },
+      runOperation: runDesktopSyncOperation,
+    })
+
+    coordinatorRef.current = coordinator
+
+    return () => {
+      coordinator.dispose()
+
+      if (coordinatorRef.current === coordinator) {
+        coordinatorRef.current = null
+      }
+    }
+  }, [runDesktopSyncOperation])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    getJournalSyncStore()?.loadStatus()
+      .then((status) => {
+        if (isCancelled || !status) {
+          return
+        }
+
+        syncConfigRef.current = {
+          branch: status.branch,
+          hasCredentials: status.hasCredentials,
+          remoteUrl: status.remoteUrl,
+        }
+        setHasStoredSyncToken(status.hasCredentials)
+        setSyncRemoteUrl(status.remoteUrl)
+
+        if (status.remoteUrl && status.hasCredentials) {
+          coordinatorRef.current?.startPulling()
+        }
+      })
+      .catch((error) => {
+        if (isCancelled) {
+          return
+        }
+
+        setSyncSnapshot((currentSnapshot) => ({
+          ...currentSnapshot,
+          lastError: getErrorMessage(error),
+          status: 'error',
+        }))
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const coordinator = coordinatorRef.current
+
+    if (!coordinator) {
+      return undefined
+    }
+
+    if (syncRemoteUrl.trim() && hasStoredSyncToken) {
+      coordinator.startPulling()
+
+      return () => coordinator.stopPulling()
+    }
+
+    coordinator.stopPulling()
+
+    return undefined
+  }, [hasStoredSyncToken, syncRemoteUrl])
+
+  const flushAndSyncBeforeLeaving = useCallback(async () => {
+    const didSave = await flushPendingSave(false)
+
+    if (didSave) {
+      await coordinatorRef.current?.flushBeforeLeave()
+    }
+  }, [flushPendingSave])
+
   useEffect(() => {
     finalizeJournalRef.current = finalizeJournalBeforeLeaving
   }, [finalizeJournalBeforeLeaving])
@@ -379,12 +573,12 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }), [finalizeJournalBeforeLeaving])
 
   useEffect(() => () => {
-    void finalizeJournalRef.current?.(false)
-  }, [])
+    void flushAndSyncBeforeLeaving()
+  }, [flushAndSyncBeforeLeaving])
 
   useEffect(() => {
     function finalizeOpenJournal() {
-      void finalizeJournalRef.current?.(false)
+      void flushAndSyncBeforeLeaving()
     }
 
     window.addEventListener('pagehide', finalizeOpenJournal)
@@ -394,7 +588,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       window.removeEventListener('pagehide', finalizeOpenJournal)
       window.removeEventListener('beforeunload', finalizeOpenJournal)
     }
-  }, [])
+  }, [flushAndSyncBeforeLeaving])
 
   useEffect(() => {
     let isCancelled = false
@@ -419,6 +613,18 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }, [journalFile])
 
   useEffect(() => {
+    isJournalDirtyRef.current = Boolean(hasUnsavedJournalChanges)
+  }, [hasUnsavedJournalChanges])
+
+  useEffect(() => {
+    syncConfigRef.current = {
+      ...syncConfigRef.current,
+      hasCredentials: hasStoredSyncToken,
+      remoteUrl: syncRemoteUrl,
+    }
+  }, [hasStoredSyncToken, syncRemoteUrl])
+
+  useEffect(() => {
     let timeoutId: number | undefined
 
     function updateRealTodayDate() {
@@ -435,16 +641,22 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     function handleVisibilityChange() {
       if (!document.hidden) {
         updateRealTodayDate()
+        void coordinatorRef.current?.notifyForeground()
       }
     }
 
+    function handleWindowFocus() {
+      updateRealTodayDate()
+      void coordinatorRef.current?.notifyForeground()
+    }
+
     scheduleNextDayCheck()
-    window.addEventListener('focus', updateRealTodayDate)
+    window.addEventListener('focus', handleWindowFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       window.clearTimeout(timeoutId)
-      window.removeEventListener('focus', updateRealTodayDate)
+      window.removeEventListener('focus', handleWindowFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
@@ -479,6 +691,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           lastSavedFrontMatterRef.current = savedEntry.frontMatter
           journalFileRef.current = file
           setJournalFile(file)
+          coordinatorRef.current?.markLocalSave()
         })
         .catch(() => undefined)
     }, AUTOSAVE_DELAY_MS)
@@ -552,6 +765,16 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           </div>
         ) : null}
         <div className="journal-topbar-actions">
+          <a
+            aria-label={`同步状态：${syncStatus.label}，打开设置`}
+            className={`journal-sync-button is-${syncStatus.tone}`}
+            href="#/settings"
+            title={syncStatus.detail}
+          >
+            <SyncStatusIcon aria-hidden="true" size={16} strokeWidth={2.2} />
+            <span>{syncStatus.label}</span>
+            <Settings2 aria-hidden="true" size={14} strokeWidth={2.25} />
+          </a>
           <SegmentedControl
             ariaLabel="纸面状态"
             onChange={handleModeChange}
@@ -657,6 +880,10 @@ function isBlankJournalMarkdown(markdown: string) {
 
 function hasFrontMatterChanged(currentFrontMatter: DayFrontMatter, savedFrontMatter: DayFrontMatter) {
   return serializeJournalFrontMatter(currentFrontMatter) !== serializeJournalFrontMatter(savedFrontMatter)
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '同步过程中出现未知错误。'
 }
 
 export default MarkdownPreviewPage

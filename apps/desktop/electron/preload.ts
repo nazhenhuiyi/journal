@@ -32,6 +32,24 @@ contextBridge.exposeInMainWorld('journalSettings', {
   },
 })
 
+contextBridge.exposeInMainWorld('journalSync', {
+  loadStatus() {
+    return ipcRenderer.invoke('journalSync:loadStatus')
+  },
+  saveSettings(payload: unknown) {
+    return ipcRenderer.invoke('journalSync:saveSettings', payload)
+  },
+  pull() {
+    return ipcRenderer.invoke('journalSync:pull')
+  },
+  push() {
+    return ipcRenderer.invoke('journalSync:push')
+  },
+  syncNow() {
+    return ipcRenderer.invoke('journalSync:syncNow')
+  },
+})
+
 contextBridge.exposeInMainWorld('journalStore', {
   loadToday() {
     return ipcRenderer.invoke('journal:loadToday')

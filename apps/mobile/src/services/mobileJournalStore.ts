@@ -106,14 +106,22 @@ async function readExistingFrontMatter(date: string): Promise<DayFrontMatter> {
 
 async function getEntryFilePath(date: string) {
   const [year, month] = date.split('-')
-  const entriesDirectory = `${getWorktreeDirectory()}entries/${year}/${month}/`
+  const entriesDirectory = `${getJournalWorktreeDirectory()}entries/${year}/${month}/`
 
   await FileSystem.makeDirectoryAsync(entriesDirectory, { intermediates: true })
 
   return `${entriesDirectory}${date}.md`
 }
 
-function getWorktreeDirectory() {
+export async function ensureJournalWorktreeDirectory() {
+  const worktreeDirectory = getJournalWorktreeDirectory()
+
+  await FileSystem.makeDirectoryAsync(worktreeDirectory, { intermediates: true })
+
+  return worktreeDirectory
+}
+
+export function getJournalWorktreeDirectory() {
   if (!FileSystem.documentDirectory) {
     throw new Error('File system document directory is unavailable.')
   }

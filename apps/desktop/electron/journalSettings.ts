@@ -3,6 +3,8 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 export type JournalSettings = {
+  syncBranch: string
+  syncRemoteUrl: string
   version: 1
   weatherLocation: string
 }
@@ -13,6 +15,8 @@ export type JournalSettingsFile = JournalSettings & {
 }
 
 export type SaveJournalSettingsPayload = {
+  syncBranch?: unknown
+  syncRemoteUrl?: unknown
   weatherLocation?: unknown
 }
 
@@ -20,6 +24,8 @@ const SETTINGS_VERSION = 1
 const SETTINGS_FILE_NAME = 'settings.json'
 
 export const defaultJournalSettings: JournalSettings = {
+  syncBranch: 'main',
+  syncRemoteUrl: '',
   version: SETTINGS_VERSION,
   weatherLocation: '',
 }
@@ -47,7 +53,8 @@ export async function saveJournalSettings(
   payload: unknown,
 ): Promise<JournalSettingsFile> {
   const settingsPath = getJournalSettingsPath(journalDirectory)
-  const settings = normalizeSavePayload(payload)
+  const currentSettings = normalizeJournalSettings(await readJsonFile(settingsPath))
+  const settings = normalizeSavePayload(payload, currentSettings)
 
   await mkdir(journalDirectory, { recursive: true })
   await writeJsonFile(settingsPath, settings)
@@ -66,22 +73,78 @@ function normalizeJournalSettings(value: unknown): JournalSettings {
 
   return {
     version: SETTINGS_VERSION,
+    syncBranch: normalizeSyncBranch(value.syncBranch) ?? defaultJournalSettings.syncBranch,
+    syncRemoteUrl: normalizeSyncRemoteUrl(value.syncRemoteUrl) ?? defaultJournalSettings.syncRemoteUrl,
     weatherLocation: normalizeWeatherLocation(value.weatherLocation) ?? '',
   }
 }
 
-function normalizeSavePayload(payload: unknown): JournalSettings {
+function normalizeSavePayload(payload: unknown, currentSettings: JournalSettings): JournalSettings {
   const payloadRecord = isRecord(payload) ? payload : {}
-  const weatherLocation = normalizeWeatherLocation(payloadRecord.weatherLocation)
+  const syncBranch = payloadRecord.syncBranch === undefined
+    ? currentSettings.syncBranch
+    : normalizeSyncBranch(payloadRecord.syncBranch)
+  const syncRemoteUrl = payloadRecord.syncRemoteUrl === undefined
+    ? currentSettings.syncRemoteUrl
+    : normalizeSyncRemoteUrl(payloadRecord.syncRemoteUrl)
+  const weatherLocation = payloadRecord.weatherLocation === undefined
+    ? currentSettings.weatherLocation
+    : normalizeWeatherLocation(payloadRecord.weatherLocation)
+
+  if (syncBranch === null) {
+    throw new Error('同步分支不能包含空白字符。')
+  }
+
+  if (syncRemoteUrl === null) {
+    throw new Error('同步仓库地址不能包含换行。')
+  }
 
   if (weatherLocation === null) {
     throw new Error('天气位置不能包含换行。')
   }
 
   return {
+    syncBranch,
+    syncRemoteUrl,
     version: SETTINGS_VERSION,
     weatherLocation: weatherLocation ?? '',
   }
+}
+
+function normalizeSyncBranch(value: unknown) {
+  if (value === undefined || value === null) {
+    return 'main'
+  }
+
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const branch = value.trim()
+
+  if (!branch || /\s/.test(branch)) {
+    return null
+  }
+
+  return branch
+}
+
+function normalizeSyncRemoteUrl(value: unknown) {
+  if (value === undefined || value === null) {
+    return ''
+  }
+
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const remoteUrl = value.trim()
+
+  if (/[\r\n]/.test(remoteUrl)) {
+    return null
+  }
+
+  return remoteUrl
 }
 
 function normalizeWeatherLocation(value: unknown) {

@@ -1,0 +1,435 @@
+import type { FsClient, HttpClient } from 'isomorphic-git'
+import * as git from 'isomorphic-git'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  assertSafeRemoteUrl,
+  commitJournalChanges,
+  createJournalGitAuthenticatedHttpClient,
+  createJournalGitAuthHeaders,
+  initJournalGitSyncRepository,
+  pullJournalUpdates,
+  pushJournalChanges,
+  syncJournalNow,
+  type JournalGitRuntime,
+} from './gitCore'
+
+const mockFs = {
+  promises: {
+    stat: vi.fn(),
+  },
+}
+const mockGit = {
+  add: vi.fn(),
+  addRemote: vi.fn(),
+  checkout: vi.fn(),
+  clone: vi.fn(),
+  commit: vi.fn(),
+  currentBranch: vi.fn(),
+  fetch: vi.fn(),
+  getConfig: vi.fn(),
+  init: vi.fn(),
+  merge: vi.fn(),
+  push: vi.fn(),
+  remove: vi.fn(),
+  resolveRef: vi.fn(),
+  setConfig: vi.fn(),
+  statusMatrix: vi.fn(),
+}
+const credentials = {
+  token: 'github-token',
+}
+
+function createRuntime(): JournalGitRuntime {
+  return {
+    dir: '/journal',
+    fs: mockFs as unknown as FsClient,
+    git: mockGit as unknown as typeof git,
+    http: { request: vi.fn() } as unknown as HttpClient,
+  }
+}
+
+describe('journal git sync core', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    mockFs.promises.stat.mockResolvedValue({})
+    mockGit.add.mockResolvedValue(undefined)
+    mockGit.addRemote.mockResolvedValue(undefined)
+    mockGit.checkout.mockResolvedValue(undefined)
+    mockGit.clone.mockResolvedValue(undefined)
+    mockGit.commit.mockResolvedValue('commit-oid')
+    mockGit.currentBranch.mockResolvedValue('main')
+    mockGit.fetch.mockResolvedValue({
+      fetchHead: 'remote-head',
+    })
+    mockGit.getConfig.mockResolvedValue('https://github.com/example/journal-sync.git')
+    mockGit.init.mockResolvedValue(undefined)
+    mockGit.merge.mockResolvedValue({
+      fastForward: true,
+      oid: 'remote-head',
+    })
+    mockGit.push.mockResolvedValue({
+      error: null,
+      ok: true,
+      refs: {
+        main: {
+          error: '',
+          ok: true,
+        },
+      },
+    })
+    mockGit.remove.mockResolvedValue(undefined)
+    mockGit.resolveRef.mockResolvedValue('local-head')
+    mockGit.setConfig.mockResolvedValue(undefined)
+    mockGit.statusMatrix.mockResolvedValue([])
+  })
+
+  it('initializes a repository and configures author and remote', async () => {
+    mockFs.promises.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), {
+      code: 'ENOENT',
+    }))
+
+    await initJournalGitSyncRepository(createRuntime(), {
+      authorEmail: 'desktop@example.invalid',
+      authorName: 'Desktop',
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+
+    expect(mockGit.init).toHaveBeenCalledWith(expect.objectContaining({
+      defaultBranch: 'main',
+      dir: '/journal',
+      fs: mockFs,
+    }))
+    expect(mockGit.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      path: 'user.name',
+      value: 'Desktop',
+    }))
+    expect(mockGit.addRemote).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      remote: 'origin',
+      url: 'https://github.com/example/journal-sync.git',
+    }))
+  })
+
+  it('rejects HTTPS remote URLs that include credentials', async () => {
+    expect(() => assertSafeRemoteUrl('https://token@github.com/example/journal-sync.git'))
+      .toThrow('不能包含用户名或 token')
+    expect(() => assertSafeRemoteUrl('https://user:token@github.com/example/journal-sync.git'))
+      .toThrow('不能包含用户名或 token')
+
+    expect(() => assertSafeRemoteUrl('https://github.com/example/journal-sync.git'))
+      .not.toThrow()
+    expect(() => assertSafeRemoteUrl('git@github.com:example/journal-sync.git'))
+      .toThrow('必须使用 http 或 https')
+    expect(() => assertSafeRemoteUrl('ssh://github.com/example/journal-sync.git'))
+      .toThrow('必须使用 http 或 https')
+  })
+
+  it('creates Git Basic auth headers from credentials', () => {
+    expect(createJournalGitAuthHeaders({
+      accept: 'application/x-git-upload-pack-advertisement',
+    }, credentials)).toEqual({
+      Authorization: 'Basic eC1hY2Nlc3MtdG9rZW46Z2l0aHViLXRva2Vu',
+      accept: 'application/x-git-upload-pack-advertisement',
+    })
+    expect(createJournalGitAuthHeaders(undefined, {
+      token: 'secret',
+      username: 'alice',
+    })).toEqual({
+      Authorization: 'Basic YWxpY2U6c2VjcmV0',
+    })
+  })
+
+  it('preserves an explicitly provided Authorization header', () => {
+    expect(createJournalGitAuthHeaders({
+      authorization: 'Bearer existing-token',
+    }, credentials)).toEqual({
+      authorization: 'Bearer existing-token',
+    })
+  })
+
+  it('wraps Git HTTP clients with the shared auth header logic', async () => {
+    const request = vi.fn(async () => ({
+      body: [],
+      headers: {},
+      method: 'GET',
+      statusCode: 200,
+      statusMessage: 'OK',
+      url: 'https://github.com/example/journal-sync.git',
+    }))
+    const authenticatedHttp = createJournalGitAuthenticatedHttpClient(
+      { request } as unknown as HttpClient,
+      credentials,
+    )
+
+    await authenticatedHttp.request({
+      headers: {
+        accept: 'application/x-git-upload-pack-advertisement',
+      },
+      method: 'GET',
+      url: 'https://github.com/example/journal-sync.git/info/refs?service=git-upload-pack',
+    })
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: 'Basic eC1hY2Nlc3MtdG9rZW46Z2l0aHViLXRva2Vu',
+        accept: 'application/x-git-upload-pack-advertisement',
+      }),
+    }))
+  })
+
+  it('uses preauthenticated HTTP clients for remote operations instead of onAuth callbacks', async () => {
+    const runtime = createRuntime()
+    const request = vi.fn(async () => ({
+      body: [],
+      headers: {},
+      method: 'GET',
+      statusCode: 200,
+      statusMessage: 'OK',
+      url: 'https://github.com/example/journal-sync.git',
+    }))
+
+    runtime.http = { request } as unknown as HttpClient
+
+    await pullJournalUpdates(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    const fetchOptions = mockGit.fetch.mock.calls[0][0]
+
+    expect(fetchOptions.onAuth).toBeUndefined()
+    await fetchOptions.http.request({
+      headers: {
+        accept: 'application/x-git-upload-pack-advertisement',
+      },
+      method: 'GET',
+      url: 'https://github.com/example/journal-sync.git/info/refs?service=git-upload-pack',
+    })
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: 'Basic eC1hY2Nlc3MtdG9rZW46Z2l0aHViLXRva2Vu',
+        accept: 'application/x-git-upload-pack-advertisement',
+      }),
+    }))
+  })
+
+  it('does not commit when no tracked journal file changed', async () => {
+    mockGit.statusMatrix.mockResolvedValue([
+      ['settings.json', 1, 2, 1],
+    ])
+
+    const commitOid = await commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(commitOid).toBeNull()
+    expect(mockGit.add).not.toHaveBeenCalled()
+    expect(mockGit.commit).not.toHaveBeenCalled()
+  })
+
+  it('stages deleted tracked journal files with git remove', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 0, 1],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 1, 0, 0],
+      ])
+
+    const commitOid = await commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(mockGit.remove).toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-08.md',
+    }))
+    expect(mockGit.add).not.toHaveBeenCalled()
+    expect(commitOid).toBe('commit-oid')
+  })
+
+  it('fetches, merges, and retries once when push is rejected by remote updates', async () => {
+    mockGit.push
+      .mockRejectedValueOnce(Object.assign(new Error('remote changed'), {
+        code: 'PushRejectedError',
+      }))
+      .mockResolvedValueOnce({
+        error: null,
+        ok: true,
+        refs: {
+          main: {
+            error: '',
+            ok: true,
+          },
+        },
+      })
+
+    const result = await syncJournalNow(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.fetch).toHaveBeenCalledTimes(2)
+    expect(mockGit.merge).toHaveBeenCalledTimes(2)
+    expect(mockGit.push).toHaveBeenCalledTimes(2)
+    expect(result.retriedPush).toBe(true)
+  })
+
+  it('refreshes the worktree after merging remote updates', async () => {
+    await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.merge).toHaveBeenCalledWith(expect.objectContaining({
+      theirs: 'remotes/origin/main',
+    }))
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'main',
+    }))
+  })
+
+  it('allows the first push when an empty remote cannot be fetched yet', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 2],
+      ])
+      .mockResolvedValue([])
+    mockGit.fetch.mockRejectedValueOnce(Object.assign(new Error('empty remote'), {
+      code: 'EmptyServerResponseError',
+    }))
+
+    const result = await syncJournalNow(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/empty-journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.push).toHaveBeenCalledTimes(1)
+    expect(result.fetchResult).toBeNull()
+    expect(result.mergeResult).toBeNull()
+  })
+
+  it('checks out the remote branch when the local repository has no commits yet', async () => {
+    mockGit.resolveRef.mockRejectedValueOnce(Object.assign(new Error('no local branch'), {
+      code: 'NotFoundError',
+    }))
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'main',
+      remote: 'origin',
+      track: true,
+    }))
+    expect(result.updatedWorktree).toBe(true)
+  })
+
+  it('does not force checkout remote files over uncommitted local journal content', async () => {
+    mockGit.resolveRef.mockRejectedValueOnce(Object.assign(new Error('no local branch'), {
+      code: 'NotFoundError',
+    }))
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.checkout).not.toHaveBeenCalled()
+    expect(result.updatedWorktree).toBe(false)
+    expect(result.dirtyPathsAfterPull).toEqual([
+      'entries/2026/06/2026-06-08.md',
+    ])
+  })
+
+  it('does not merge remote updates over uncommitted local journal content', async () => {
+    mockGit.statusMatrix.mockResolvedValue([
+      ['entries/2026/06/2026-06-08.md', 1, 2, 1],
+    ])
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.fetch).toHaveBeenCalledTimes(1)
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.checkout).not.toHaveBeenCalled()
+    expect(result.updatedWorktree).toBe(false)
+    expect(result.dirtyPathsAfterPull).toEqual([
+      'entries/2026/06/2026-06-08.md',
+    ])
+  })
+
+  it('pushes committed local changes without fetching first', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 2],
+      ])
+      .mockResolvedValue([])
+
+    const result = await pushJournalChanges(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.push).toHaveBeenCalledTimes(1)
+    expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'main',
+      remoteRef: 'main',
+    }))
+    expect(result.localCommitOid).toBe('commit-oid')
+  })
+})

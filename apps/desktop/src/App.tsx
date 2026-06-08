@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router'
 import AppLayout from './layouts/AppLayout'
 import CalendarPage from './pages/CalendarPage'
 import MarkdownPreviewPage from './pages/MarkdownPreviewPage'
+import SettingsPage from './pages/SettingsPage'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
             <Route element={<Navigate to="/preview" replace />} index />
             <Route element={<MarkdownPreviewPage />} path="/preview" />
             <Route element={<CalendarPage />} path="/calendar" />
+            <Route element={<SettingsPage />} path="/settings" />
             <Route element={<Navigate to="/preview" replace />} path="*" />
           </Route>
         </Routes>

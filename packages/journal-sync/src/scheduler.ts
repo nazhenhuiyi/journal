@@ -1,0 +1,310 @@
+export type SyncState =
+  | 'disabled'
+  | 'idle'
+  | 'pending'
+  | 'syncing'
+  | 'synced'
+  | 'retrying'
+  | 'needs-auth'
+  | 'error'
+
+export type SyncTrigger =
+  | 'app-open'
+  | 'app-background'
+  | 'manual'
+  | 'network-online'
+  | 'pull-interval'
+  | 'save-idle'
+
+export type SyncOperation = 'full' | 'pull' | 'push'
+export type SyncPendingReason = 'local-save' | 'remote-check' | 'retry'
+
+export type SyncSnapshot = {
+  lastError: string | null
+  lastSyncedAt: string | null
+  pendingReason: SyncPendingReason | null
+  status: SyncState
+}
+
+export type SyncOperationRequest = {
+  operation: SyncOperation
+  trigger: SyncTrigger
+}
+
+export type SyncOperationResult = {
+  changed?: boolean
+  message?: string
+  needsAuth?: boolean
+  skipped?: boolean
+}
+
+export type SyncTimerApi = {
+  clearInterval(handle: unknown): void
+  clearTimeout(handle: unknown): void
+  setInterval(callback: () => void, delayMs: number): unknown
+  setTimeout(callback: () => void, delayMs: number): unknown
+}
+
+export type JournalSyncCoordinatorOptions = {
+  leaveFlushTimeoutMs?: number
+  now?: () => Date
+  onSnapshot?: (snapshot: SyncSnapshot) => void
+  pullIntervalMs?: number
+  pushDebounceMs?: number
+  runOperation: (request: SyncOperationRequest) => Promise<SyncOperationResult>
+  timers?: SyncTimerApi
+}
+
+const defaultPushDebounceMs = 20_000
+const defaultPullIntervalMs = 180_000
+const defaultLeaveFlushTimeoutMs = 5_000
+
+const defaultTimers: SyncTimerApi = {
+  clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  setInterval: (callback, delayMs) => setInterval(callback, delayMs),
+  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+}
+
+export class JournalSyncCoordinator {
+  private activeRun: Promise<SyncSnapshot> | null = null
+  private leaveFlushTimeoutHandle: unknown | null = null
+  private pendingPullAfterRun: SyncTrigger | null = null
+  private pendingPushAfterRun: SyncTrigger | null = null
+  private pullIntervalHandle: unknown | null = null
+  private pushTimeoutHandle: unknown | null = null
+  private queuedRun: Promise<SyncSnapshot> | null = null
+  private snapshot: SyncSnapshot = {
+    lastError: null,
+    lastSyncedAt: null,
+    pendingReason: null,
+    status: 'idle',
+  }
+
+  constructor(private readonly options: JournalSyncCoordinatorOptions) {}
+
+  getSnapshot() {
+    return this.snapshot
+  }
+
+  markLocalSave() {
+    this.clearPushTimer()
+    this.updateSnapshot({
+      lastError: null,
+      pendingReason: 'local-save',
+      status: 'pending',
+    })
+    this.pushTimeoutHandle = this.timers.setTimeout(() => {
+      this.pushTimeoutHandle = null
+      void this.runSingleFlight('push', 'save-idle')
+    }, this.pushDebounceMs)
+  }
+
+  startPulling() {
+    this.stopPulling()
+    void this.pullNow('app-open')
+    this.pullIntervalHandle = this.timers.setInterval(() => {
+      void this.pullNow('pull-interval')
+    }, this.pullIntervalMs)
+  }
+
+  stopPulling() {
+    if (this.pullIntervalHandle !== null) {
+      this.timers.clearInterval(this.pullIntervalHandle)
+      this.pullIntervalHandle = null
+    }
+  }
+
+  notifyForeground() {
+    return this.pullNow('app-open')
+  }
+
+  notifyNetworkOnline() {
+    if (this.snapshot.status === 'retrying' || this.snapshot.status === 'error') {
+      return this.runSingleFlight('push', 'network-online')
+    }
+
+    return this.pullNow('network-online')
+  }
+
+  pullNow(trigger: SyncTrigger = 'manual') {
+    return this.runSingleFlight('pull', trigger)
+  }
+
+  syncNow() {
+    this.clearPushTimer()
+    return this.runSingleFlight('full', 'manual')
+  }
+
+  async flushBeforeLeave() {
+    if (
+      this.snapshot.status !== 'pending' &&
+      this.snapshot.status !== 'retrying' &&
+      this.snapshot.status !== 'error'
+    ) {
+      return true
+    }
+
+    this.clearPushTimer()
+
+    const run = this.runSingleFlight('push', 'app-background')
+    const didFinish = await Promise.race([
+      run.then(() => true, () => true),
+      this.createLeaveTimeout(),
+    ])
+
+    if (didFinish && this.leaveFlushTimeoutHandle !== null) {
+      this.timers.clearTimeout(this.leaveFlushTimeoutHandle)
+      this.leaveFlushTimeoutHandle = null
+    }
+
+    if (!didFinish) {
+      this.updateSnapshot({
+        pendingReason: 'local-save',
+        status: 'pending',
+      })
+    }
+
+    return didFinish
+  }
+
+  dispose() {
+    this.clearPushTimer()
+    this.stopPulling()
+
+    if (this.leaveFlushTimeoutHandle !== null) {
+      this.timers.clearTimeout(this.leaveFlushTimeoutHandle)
+      this.leaveFlushTimeoutHandle = null
+    }
+  }
+
+  private async runSingleFlight(operation: SyncOperation, trigger: SyncTrigger): Promise<SyncSnapshot> {
+    if (this.activeRun) {
+      if (operation === 'pull') {
+        this.pendingPullAfterRun = trigger
+      } else {
+        this.pendingPushAfterRun = trigger
+      }
+
+      return this.activeRun.then(() => this.queuedRun ?? this.snapshot)
+    }
+
+    this.updateSnapshot({
+      lastError: null,
+      status: 'syncing',
+    })
+
+    this.activeRun = this.executeOperation(operation, trigger)
+
+    try {
+      return await this.activeRun
+    } finally {
+      this.activeRun = null
+
+      if (this.pendingPushAfterRun) {
+        const nextTrigger = this.pendingPushAfterRun
+
+        this.pendingPushAfterRun = null
+        this.startQueuedRun('push', nextTrigger)
+      } else if (this.pendingPullAfterRun) {
+        const nextTrigger = this.pendingPullAfterRun
+
+        this.pendingPullAfterRun = null
+        this.startQueuedRun('pull', nextTrigger)
+      }
+    }
+  }
+
+  private startQueuedRun(operation: SyncOperation, trigger: SyncTrigger) {
+    const run = this.runSingleFlight(operation, trigger)
+
+    this.queuedRun = run
+    void run.finally(() => {
+      if (this.queuedRun === run) {
+        this.queuedRun = null
+      }
+    })
+  }
+
+  private async executeOperation(operation: SyncOperation, trigger: SyncTrigger) {
+    try {
+      const result = await this.options.runOperation({ operation, trigger })
+
+      if (result.needsAuth) {
+        this.updateSnapshot({
+          lastError: result.message ?? null,
+          pendingReason: null,
+          status: 'needs-auth',
+        })
+      } else if (result.skipped && operation === 'pull') {
+        this.updateSnapshot({
+          pendingReason: null,
+          status: this.snapshot.lastSyncedAt ? 'synced' : 'idle',
+        })
+      } else {
+        this.updateSnapshot({
+          lastError: null,
+          lastSyncedAt: this.now().toISOString(),
+          pendingReason: null,
+          status: 'synced',
+        })
+      }
+    } catch (error) {
+      this.updateSnapshot({
+        lastError: getErrorMessage(error),
+        pendingReason: operation === 'pull' ? 'remote-check' : 'retry',
+        status: operation === 'pull' ? 'error' : 'retrying',
+      })
+    }
+
+    return this.snapshot
+  }
+
+  private createLeaveTimeout() {
+    return new Promise<false>((resolve) => {
+      this.leaveFlushTimeoutHandle = this.timers.setTimeout(() => {
+        this.leaveFlushTimeoutHandle = null
+        resolve(false)
+      }, this.leaveFlushTimeoutMs)
+    })
+  }
+
+  private clearPushTimer() {
+    if (this.pushTimeoutHandle !== null) {
+      this.timers.clearTimeout(this.pushTimeoutHandle)
+      this.pushTimeoutHandle = null
+    }
+  }
+
+  private updateSnapshot(nextSnapshot: Partial<SyncSnapshot>) {
+    this.snapshot = {
+      ...this.snapshot,
+      ...nextSnapshot,
+    }
+    this.options.onSnapshot?.(this.snapshot)
+  }
+
+  private get leaveFlushTimeoutMs() {
+    return this.options.leaveFlushTimeoutMs ?? defaultLeaveFlushTimeoutMs
+  }
+
+  private get now() {
+    return this.options.now ?? (() => new Date())
+  }
+
+  private get pullIntervalMs() {
+    return this.options.pullIntervalMs ?? defaultPullIntervalMs
+  }
+
+  private get pushDebounceMs() {
+    return this.options.pushDebounceMs ?? defaultPushDebounceMs
+  }
+
+  private get timers() {
+    return this.options.timers ?? defaultTimers
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+}

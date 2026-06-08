@@ -58,18 +58,59 @@ interface Window {
   }
   journalSettings?: {
     load(): Promise<{
+      syncBranch: string
+      syncRemoteUrl: string
       version: 1
       weatherLocation: string
       workingDirectory: string
       settingsPath: string
     }>
     save(payload: {
+      syncBranch?: string
+      syncRemoteUrl?: string
       weatherLocation: string
     }): Promise<{
+      syncBranch: string
+      syncRemoteUrl: string
       version: 1
       weatherLocation: string
       workingDirectory: string
       settingsPath: string
+    }>
+  }
+  journalSync?: {
+    loadStatus(): Promise<{
+      branch: string
+      dirtyPaths: string[]
+      hasCredentials: boolean
+      hasRepository: boolean
+      remoteUrl: string
+    }>
+    pull(): Promise<{
+      changed: boolean
+      dirtyPaths: string[]
+      message: string
+    }>
+    push(): Promise<{
+      changed: boolean
+      dirtyPaths: string[]
+      message: string
+    }>
+    saveSettings(payload: {
+      syncBranch?: string
+      syncRemoteUrl?: string
+      syncToken?: string
+    }): Promise<{
+      branch: string
+      dirtyPaths: string[]
+      hasCredentials: boolean
+      hasRepository: boolean
+      remoteUrl: string
+    }>
+    syncNow(): Promise<{
+      changed: boolean
+      dirtyPaths: string[]
+      message: string
     }>
   }
 }

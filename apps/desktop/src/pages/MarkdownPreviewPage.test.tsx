@@ -139,8 +139,12 @@ describe('MarkdownPreviewPage', () => {
         expect.stringContaining('地铁上突然想到的一句。'),
       )
     })
-    expect(saveDate.mock.calls[0][1]).toContain(':::murmur')
-    expect(saveDate.mock.calls[0][1]).toContain('id: m_20260428_101205')
+    const savedMurmurCall = saveDate.mock.calls.find(([, content]) =>
+      content.includes('地铁上突然想到的一句。'),
+    )
+
+    expect(savedMurmurCall?.[1]).toContain(':::murmur')
+    expect(savedMurmurCall?.[1]).toContain('id: m_20260428_101205')
   })
 
   it('preserves existing murmur blocks when saving long-entry edits', async () => {
@@ -196,7 +200,11 @@ describe('MarkdownPreviewPage', () => {
         expect.stringContaining('新写的一句。'),
       )
     })
-    expect(saveDate.mock.calls[0][1]).toContain(':::murmur')
-    expect(saveDate.mock.calls[0][1]).toContain('旧碎碎念。')
+    const savedEditCall = saveDate.mock.calls.find(([, content]) =>
+      content.includes('新写的一句。'),
+    )
+
+    expect(savedEditCall?.[1]).toContain(':::murmur')
+    expect(savedEditCall?.[1]).toContain('旧碎碎念。')
   })
 })

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import type { LucideIcon } from 'lucide-react'
-import { BookOpen, CalendarDays, PenLine } from 'lucide-react'
+import { BookOpen, CalendarDays, PenLine, Settings2 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 import { brand } from '../brand'
 import { panelTransition } from '../pages/markdown-preview/constants'
@@ -15,6 +15,7 @@ const menuItems: Array<{
 }> = [
   { label: '今日', description: '', icon: PenLine, to: '/preview' },
   { label: '日历', description: '翻看旧日', icon: CalendarDays, to: '/calendar' },
+  { label: '设置', description: '同步', icon: Settings2, to: '/settings' },
 ]
 
 function formatMenuDate(date = new Date()) {

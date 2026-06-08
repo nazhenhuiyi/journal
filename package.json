@@ -16,13 +16,16 @@
     "lint": "npm run lint:desktop",
     "lint:desktop": "npm --workspace @journal/desktop run lint",
     "preview": "npm --workspace @journal/desktop run preview",
-    "test": "npm run test:desktop && npm run test:core",
+    "test": "npm run test:desktop && npm run test:core && npm run test:sync && npm run test:mobile",
     "test:core": "npm --workspace @journal/core run test",
     "test:desktop": "npm --workspace @journal/desktop run test",
+    "test:mobile": "npm --workspace @journal/mobile run test",
+    "test:sync": "npm --workspace @journal/sync run test",
     "test:watch": "npm --workspace @journal/desktop run test:watch",
-    "typecheck": "npm run typecheck:desktop && npm run typecheck:core && npm run typecheck:mobile",
+    "typecheck": "npm run typecheck:desktop && npm run typecheck:core && npm run typecheck:sync && npm run typecheck:mobile",
     "typecheck:core": "npm --workspace @journal/core run typecheck",
     "typecheck:desktop": "npm --workspace @journal/desktop run typecheck",
-    "typecheck:mobile": "npm --workspace @journal/mobile run typecheck"
+    "typecheck:mobile": "npm --workspace @journal/mobile run typecheck",
+    "typecheck:sync": "npm --workspace @journal/sync run typecheck"
   }
 }

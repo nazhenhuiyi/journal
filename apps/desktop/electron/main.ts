@@ -1,9 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
+import {
+  loadJournalGitSyncStatus,
+  pullJournalUpdates,
+  pushJournalChanges,
+  saveJournalGitSyncSettings,
+  syncJournalNow,
+} from './journalSync'
 import { importJournalImagesForDate } from './journalMedia'
 import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
@@ -62,6 +69,13 @@ ipcMain.handle('journalSettings:load', () => loadJournalSettings(getJournalDirec
 ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
   saveJournalSettings(getJournalDirectory(), payload),
 )
+ipcMain.handle('journalSync:loadStatus', () => loadJournalGitSyncStatus(getJournalDirectory()))
+ipcMain.handle('journalSync:saveSettings', (_event, payload: unknown) =>
+  saveJournalGitSyncSettings(getJournalDirectory(), payload),
+)
+ipcMain.handle('journalSync:pull', () => pullJournalUpdates(getJournalDirectory()))
+ipcMain.handle('journalSync:push', () => pushJournalChanges(getJournalDirectory()))
+ipcMain.handle('journalSync:syncNow', () => syncJournalNow(getJournalDirectory()))
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:listEntries', () => listJournalEntries())
@@ -118,6 +132,21 @@ function getJournalDirectory() {
 function getJournalPath(date: string) {
   assertDateKey(date)
 
+  const [year, month] = date.split('-')
+  const fileName = `${date}.md`
+  const directory = path.join(getJournalDirectory(), 'entries', year, month)
+
+  return {
+    date,
+    directory,
+    fileName,
+    filePath: path.join(directory, fileName),
+  }
+}
+
+function getLegacyJournalPath(date: string) {
+  assertDateKey(date)
+
   const fileName = `${date}.md`
   const directory = getJournalDirectory()
 
@@ -132,6 +161,23 @@ function getJournalPath(date: string) {
 function getJournalAnnotationsPath(date: string) {
   assertDateKey(date)
 
+  const [year, month] = date.split('-')
+  const directory = getJournalDirectory()
+  const annotationsDirectory = path.join(directory, 'annotations', year, month)
+  const fileName = `${date}.json`
+
+  return {
+    date,
+    directory: annotationsDirectory,
+    fileName,
+    filePath: path.join(annotationsDirectory, fileName),
+    sourcePath: getJournalPath(date).filePath,
+  }
+}
+
+function getLegacyJournalAnnotationsPath(date: string) {
+  assertDateKey(date)
+
   const directory = getJournalDirectory()
   const annotationsDirectory = path.join(directory, 'annotations')
   const fileName = `${date}.json`
@@ -141,7 +187,7 @@ function getJournalAnnotationsPath(date: string) {
     directory: annotationsDirectory,
     fileName,
     filePath: path.join(annotationsDirectory, fileName),
-    sourcePath: path.join(directory, `${date}.md`),
+    sourcePath: getLegacyJournalPath(date).filePath,
   }
 }
 
@@ -170,18 +216,9 @@ async function loadTodayJournal() {
 
 async function listJournalEntries(): Promise<JournalEntry[]> {
   const directory = getJournalDirectory()
-  const fileNames = await readdir(directory).catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      return []
-    }
-
-    throw error
-  })
-  const journalFileNames = fileNames.filter((fileName) => /^\d{4}-\d{2}-\d{2}\.md$/.test(fileName))
+  const journalFiles = await collectJournalMarkdownFiles(directory)
   const entries = await Promise.all(
-    journalFileNames.map(async (fileName) => {
-      const date = fileName.slice(0, -3)
-      const filePath = path.join(directory, fileName)
+    journalFiles.map(async ({ date, fileName, filePath }) => {
       const content = await readFile(filePath, 'utf8').catch(() => null)
 
       if (!content || !hasJournalContent(content)) {
@@ -213,12 +250,89 @@ function hasJournalContent(content: string) {
   )
 }
 
+async function collectJournalMarkdownFiles(journalDirectory: string) {
+  const byDate = new Map<string, {
+    date: string
+    fileName: string
+    filePath: string
+  }>()
+  const entriesDirectory = path.join(journalDirectory, 'entries')
+  const nestedFiles = await collectNestedJournalMarkdownFiles(entriesDirectory, journalDirectory)
+
+  for (const file of nestedFiles) {
+    byDate.set(file.date, file)
+  }
+
+  const legacyFileNames = await readdir(journalDirectory).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  })
+
+  for (const fileName of legacyFileNames) {
+    if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(fileName)) {
+      continue
+    }
+
+    const date = fileName.slice(0, -3)
+
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        fileName,
+        filePath: path.join(journalDirectory, fileName),
+      })
+    }
+  }
+
+  return [...byDate.values()]
+}
+
+async function collectNestedJournalMarkdownFiles(directory: string, journalDirectory: string) {
+  const dirents = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  })
+  const files: Array<{
+    date: string
+    fileName: string
+    filePath: string
+  }> = []
+
+  for (const dirent of dirents) {
+    const filePath = path.join(directory, dirent.name)
+
+    if (dirent.isDirectory()) {
+      files.push(...await collectNestedJournalMarkdownFiles(filePath, journalDirectory))
+      continue
+    }
+
+    if (!dirent.isFile() || !/^\d{4}-\d{2}-\d{2}\.md$/.test(dirent.name)) {
+      continue
+    }
+
+    files.push({
+      date: dirent.name.slice(0, -3),
+      fileName: path.relative(journalDirectory, filePath),
+      filePath,
+    })
+  }
+
+  return files
+}
+
 async function loadJournal(date: unknown) {
   if (typeof date !== 'string') {
     throw new TypeError('Journal date must be a string.')
   }
 
   const { date: dateKey, directory, filePath } = getJournalPath(date)
+  const legacyPath = getLegacyJournalPath(dateKey)
 
   await mkdir(directory, { recursive: true })
 
@@ -234,11 +348,52 @@ async function loadJournal(date: unknown) {
     return journalFilePayload(existingContent, dateKey)
   }
 
+  const legacyContent = await readFile(legacyPath.filePath, 'utf8').catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  })
+
+  if (legacyContent !== null) {
+    const migratedContent = await migrateLegacyJournalContent(dateKey, legacyContent)
+
+    await writeJournalFile(filePath, migratedContent)
+
+    return journalFilePayload(migratedContent, dateKey)
+  }
+
   const content = createDefaultJournalMarkdown(dateKey)
 
   await writeFile(filePath, content, 'utf8')
 
   return journalFilePayload(content, dateKey)
+}
+
+async function migrateLegacyJournalContent(date: string, content: string) {
+  const [year, month] = date.split('-')
+  const legacyMediaDirectoryName = `${date}.media`
+  const nextMediaDirectoryName = `media/${year}/${month}`
+
+  if (!content.includes(`${legacyMediaDirectoryName}/`)) {
+    return content
+  }
+
+  const journalDirectory = getJournalDirectory()
+  const legacyMediaDirectory = path.join(journalDirectory, legacyMediaDirectoryName)
+  const nextMediaDirectory = path.join(journalDirectory, nextMediaDirectoryName)
+  const legacyMediaStat = await stat(legacyMediaDirectory).catch(() => null)
+
+  if (legacyMediaStat?.isDirectory()) {
+    await mkdir(nextMediaDirectory, { recursive: true })
+    await cp(legacyMediaDirectory, nextMediaDirectory, {
+      force: false,
+      recursive: true,
+    })
+  }
+
+  return content.split(`${legacyMediaDirectoryName}/`).join(`${nextMediaDirectoryName}/`)
 }
 
 async function saveTodayJournal(content: unknown) {
@@ -282,13 +437,24 @@ async function readJournalAnnotations(date: unknown): Promise<AnnotationFile> {
   }
 
   const { filePath, sourcePath } = getJournalAnnotationsPath(date)
-  const content = await readFile(filePath, 'utf8').catch((error: unknown) => {
+  const legacyPath = getLegacyJournalAnnotationsPath(date)
+  let content = await readFile(filePath, 'utf8').catch((error: unknown) => {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null
     }
 
     throw error
   })
+
+  if (content === null) {
+    content = await readFile(legacyPath.filePath, 'utf8').catch((error: unknown) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+        return null
+      }
+
+      throw error
+    })
+  }
 
   if (content === null) {
     return {

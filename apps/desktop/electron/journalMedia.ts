@@ -38,7 +38,8 @@ export async function importJournalImagesForDate(
     return []
   }
 
-  const mediaDirectoryName = `${date}.media`
+  const [year, month] = date.split('-')
+  const mediaDirectoryName = `media/${year}/${month}`
   const mediaDirectory = path.join(journalDirectory, mediaDirectoryName)
   const timestamp = formatImageTimestamp(now)
   const usedFileNames = new Set<string>()

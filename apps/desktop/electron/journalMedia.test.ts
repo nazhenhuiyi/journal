@@ -41,9 +41,9 @@ describe('journal media import', () => {
     expect(importedImages).toEqual([
       {
         id: 'img_20260429_213800',
-        src: '2026-04-29.media/img_20260429_213800.jpg',
+        src: 'media/2026/04/img_20260429_213800.jpg',
         fileName: 'img_20260429_213800.jpg',
-        filePath: path.join(directory, '2026-04-29.media', 'img_20260429_213800.jpg'),
+        filePath: path.join(directory, 'media', '2026', '04', 'img_20260429_213800.jpg'),
       },
     ])
     await expect(readFile(importedImages[0].filePath, 'utf8')).resolves.toBe('image-bytes')
@@ -73,7 +73,7 @@ describe('journal media import', () => {
 
   it('skips unsupported files and avoids existing file names', async () => {
     const directory = await createTemporaryDirectory()
-    const mediaDirectory = path.join(directory, '2026-04-29.media')
+    const mediaDirectory = path.join(directory, 'media', '2026', '04')
     const sourceImage = path.join(directory, 'source.PNG')
     const sourceText = path.join(directory, 'notes.txt')
 

@@ -8,18 +8,9 @@ import {
 } from '@journal/core'
 
 export async function listJournalIndex(journalDirectory: string): Promise<JournalIndexEntry[]> {
-  const fileNames = await readdir(journalDirectory).catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      return []
-    }
-
-    throw error
-  })
-  const journalFileNames = fileNames.filter((fileName) => /^\d{4}-\d{2}-\d{2}\.md$/.test(fileName))
+  const journalFiles = await collectJournalMarkdownFiles(journalDirectory)
   const entries = await Promise.all(
-    journalFileNames.map(async (fileName) => {
-      const date = fileName.slice(0, -3)
-      const filePath = path.join(journalDirectory, fileName)
+    journalFiles.map(async ({ date, fileName, filePath }) => {
       const content = await readFile(filePath, 'utf8').catch(() => null)
 
       if (!content) {
@@ -51,6 +42,84 @@ export async function listJournalIndex(journalDirectory: string): Promise<Journa
   await writeJournalIndexFile(journalDirectory, indexEntries)
 
   return indexEntries
+}
+
+async function collectJournalMarkdownFiles(journalDirectory: string) {
+  const byDate = new Map<string, {
+    date: string
+    fileName: string
+    filePath: string
+  }>()
+  const nestedFiles = await collectNestedJournalMarkdownFiles(
+    path.join(journalDirectory, 'entries'),
+    journalDirectory,
+  )
+
+  for (const file of nestedFiles) {
+    byDate.set(file.date, file)
+  }
+
+  const legacyFileNames = await readdir(journalDirectory).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  })
+
+  for (const fileName of legacyFileNames) {
+    if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(fileName)) {
+      continue
+    }
+
+    const date = fileName.slice(0, -3)
+
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        fileName,
+        filePath: path.join(journalDirectory, fileName),
+      })
+    }
+  }
+
+  return [...byDate.values()]
+}
+
+async function collectNestedJournalMarkdownFiles(directory: string, journalDirectory: string) {
+  const dirents = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  })
+  const files: Array<{
+    date: string
+    fileName: string
+    filePath: string
+  }> = []
+
+  for (const dirent of dirents) {
+    const filePath = path.join(directory, dirent.name)
+
+    if (dirent.isDirectory()) {
+      files.push(...await collectNestedJournalMarkdownFiles(filePath, journalDirectory))
+      continue
+    }
+
+    if (!dirent.isFile() || !/^\d{4}-\d{2}-\d{2}\.md$/.test(dirent.name)) {
+      continue
+    }
+
+    files.push({
+      date: dirent.name.slice(0, -3),
+      fileName: path.relative(journalDirectory, filePath),
+      filePath,
+    })
+  }
+
+  return files
 }
 
 function getJournalIndexPath(journalDirectory: string) {

@@ -4,6 +4,8 @@
 
 一个桌面优先、正在补移动端的个人日记应用。当前核心只保留写日记、看日记、碎碎念和图片记录。
 
+移动端正在验证 GitHub 私有仓库同步 POC：使用 `isomorphic-git`、Expo FileSystem 和 SecureStore，先支持手动同步和 last-write-wins 冲突策略。
+
 ## 开发
 
 ```sh
@@ -27,6 +29,8 @@ npm run build
 ```
 
 `npm run build` 当前转发到桌面端构建，会在完成 TypeScript/Vite 构建后调用 `electron-builder` 生成桌面安装包。
+
+`npm test` 会跑桌面端、`journal-core` 和移动端同步规则测试。
 
 ## 目录
 
