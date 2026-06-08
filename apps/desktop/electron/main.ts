@@ -19,6 +19,10 @@ import {
   parseJournalMarkdown,
   stripManagedFrontMatter,
 } from '@journal/core'
+import {
+  isFreshWeather,
+  isFreshWeatherForLocation,
+} from '../src/domain/weatherFreshness'
 import type {
   Annotation,
   AnnotationFile,
@@ -315,7 +319,7 @@ async function saveJournal(date: unknown, content: unknown) {
     date: dateKey,
   }
 
-  if (!hasFreshWeather(nextFrontMatter.weather, dateKey)) {
+  if (!isFreshWeather(nextFrontMatter.weather, dateKey)) {
     delete nextFrontMatter.weather
   }
 
@@ -641,7 +645,7 @@ async function refreshTodayWeather(location: unknown) {
   const parsedEntry = parseJournalMarkdown(existingContent)
   const journalSettings = await loadJournalSettings(getJournalDirectory())
 
-  if (hasFreshWeatherForLocation(parsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
+  if (isFreshWeatherForLocation(parsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
     return journalFilePayload(existingContent)
   }
 
@@ -657,7 +661,7 @@ async function refreshTodayWeather(location: unknown) {
   })
   const latestParsedEntry = parseJournalMarkdown(latestContent)
 
-  if (hasFreshWeatherForLocation(latestParsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
+  if (isFreshWeatherForLocation(latestParsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
     return journalFilePayload(latestContent)
   }
 
@@ -807,20 +811,6 @@ function hasCoordinates(
   location: WeatherLookupLocation,
 ): location is WeatherLookupLocation & { latitude: number; longitude: number } {
   return location.latitude !== undefined && location.longitude !== undefined
-}
-
-function hasFreshWeather(weather: DayFrontMatter['weather'], date: string) {
-  return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
-}
-
-function hasFreshWeatherForLocation(frontMatter: DayFrontMatter, date: string, weatherLocation: string) {
-  if (!hasFreshWeather(frontMatter.weather, date)) {
-    return false
-  }
-
-  const query = weatherLocation.trim()
-
-  return !query || (frontMatter.location?.query === query && frontMatter.location?.name === query)
 }
 
 function hashText(text: string) {

@@ -18,6 +18,7 @@ import {
 import {
   renderJournalMarkdown,
 } from '../domain/markdown'
+import { isFreshWeatherForLocation } from '../domain/weatherFreshness'
 import { brand } from '../brand'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
@@ -916,20 +917,6 @@ function resolveBrowserWeatherLocation(): Promise<{ latitude: number; longitude:
       },
     )
   })
-}
-
-function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
-  return Boolean(weather?.text && weather.updatedAt?.startsWith(date))
-}
-
-function isFreshWeatherForLocation(frontMatter: DayFrontMatter, date: string, weatherLocation: string) {
-  if (!isFreshWeather(frontMatter.weather, date)) {
-    return false
-  }
-
-  const query = weatherLocation.trim()
-
-  return !query || (frontMatter.location?.query === query && frontMatter.location?.name === query)
 }
 
 async function loadConfiguredWeatherLocation() {
