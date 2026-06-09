@@ -42,7 +42,7 @@ export function SyncSettingsPage({
   }, [onRefreshGitStatus])
 
   const isConfigured = Boolean(syncRemoteUrl.trim()) && hasStoredSyncToken
-  const recentCommits = gitStatus?.recentCommits.slice(0, 3) ?? []
+  const recentCommits = gitStatus?.recentCommits.slice(0, 1) ?? []
 
   return (
     <PageShell onBack={onBack} title="同步">
@@ -141,10 +141,15 @@ function CommitRow({
 }) {
   return (
     <View style={[styles.commitRow, divider ? styles.divider : null]}>
-      <Text className="font-mono text-xs font-semibold leading-5 text-muted-fg">
-        {commit.shortOid}
-      </Text>
-      <Text className="shrink text-right text-sm font-semibold leading-5 text-foreground" numberOfLines={2}>
+      <View style={styles.commitMeta}>
+        <Text className="font-mono text-xs font-semibold leading-5 text-muted-fg">
+          {commit.shortOid}
+        </Text>
+        <Text className="text-xs leading-5 text-muted-fg" numberOfLines={1}>
+          {formatCommitTime(commit.committedAt)}
+        </Text>
+      </View>
+      <Text className="text-right text-sm font-semibold leading-5 text-foreground" numberOfLines={2} style={styles.commitMessage}>
         {commit.message}
       </Text>
     </View>
@@ -172,6 +177,25 @@ function MessageRow({
 function formatLastSyncedAt(value: string | null) {
   if (!value) {
     return '还没有同步'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('zh-CN', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
+  })
+}
+
+function formatCommitTime(value: string | null) {
+  if (!value) {
+    return '时间未知'
   }
 
   const date = new Date(value)
@@ -220,6 +244,13 @@ const styles = StyleSheet.create({
     gap: 14,
     justifyContent: 'space-between',
     minHeight: 52,
+  },
+  commitMessage: {
+    flex: 1,
+    minWidth: 0,
+  },
+  commitMeta: {
+    minWidth: 82,
   },
   content: {
     gap: 28,

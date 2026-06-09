@@ -97,6 +97,7 @@ export function useMobileSync({
         remoteUrl: remoteUrl.trim(),
       }, {
         includeDirtyPaths,
+        recentCommitLimit: 1,
       })
 
       setMobileGitStatus(status)

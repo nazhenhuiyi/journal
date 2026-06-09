@@ -441,6 +441,61 @@ describe('journal git sync core', () => {
     ])
   })
 
+  it('limits recent commit object reads when requested', async () => {
+    const commitChain = [
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Latest sync\n\nBody',
+          parent: ['2222222222222222222222222222222222222222'],
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_900_000,
+          },
+          message: 'Previous sync',
+          parent: [],
+        },
+        oid: '2222222222222222222222222222222222222222',
+      },
+    ]
+
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => {
+      const entry = commitChain.find((commit) => commit.oid === oid)
+
+      if (!entry) {
+        throw new Error(`missing commit ${oid}`)
+      }
+
+      return {
+        ...entry,
+        payload: '',
+      }
+    })
+
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    }, credentials, {
+      recentCommitLimit: 1,
+    })
+
+    expect(mockGit.readCommit).toHaveBeenCalledTimes(1)
+    expect(status.recentCommits).toEqual([
+      {
+        committedAt: new Date(1_780_987_200 * 1000).toISOString(),
+        message: 'Latest sync',
+        oid: '1111111111111111111111111111111111111111',
+        shortOid: '1111111',
+      },
+    ])
+  })
+
   it('does not stage temporary files left by atomic writes', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([

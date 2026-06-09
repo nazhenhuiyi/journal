@@ -71,6 +71,7 @@ export type JournalGitSyncStatus = {
 export type JournalGitSyncStatusOptions = {
   includeDirtyPaths?: boolean
   includeRecentCommits?: boolean
+  recentCommitLimit?: number
 }
 
 export type JournalGitSyncResult = {
@@ -168,6 +169,7 @@ export async function getJournalGitSyncStatus(
 ): Promise<JournalGitSyncStatus> {
   const includeDirtyPaths = options.includeDirtyPaths ?? true
   const includeRecentCommits = options.includeRecentCommits ?? true
+  const recentCommitLimit = normalizeRecentCommitLimit(options.recentCommitLimit)
   const configuredBranch = getBranchName(config.branch ?? defaultBranch)
   const hasRepository = await traceGitStep(runtime, 'repo.exists', () => hasGitRepository(runtime))
   const branch = hasRepository
@@ -179,8 +181,8 @@ export async function getJournalGitSyncStatus(
   const dirtyPaths = hasRepository && includeDirtyPaths
     ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths')
     : []
-  const recentCommits = hasRepository && includeRecentCommits
-    ? await getRecentCommits(runtime, branch)
+  const recentCommits = hasRepository && includeRecentCommits && recentCommitLimit > 0
+    ? await getRecentCommits(runtime, branch, recentCommitLimit)
     : []
 
   return {
@@ -1339,6 +1341,18 @@ function normalizeReflogMessage(message: string) {
 
 function normalizeRecentCommitMessage(message: string) {
   return message.trim().split(/\r?\n/, 1)[0] || '(no message)'
+}
+
+function normalizeRecentCommitLimit(limit: number | undefined) {
+  if (limit === undefined) {
+    return 3
+  }
+
+  if (!Number.isFinite(limit)) {
+    return 3
+  }
+
+  return Math.max(0, Math.floor(limit))
 }
 
 function getLocalBranchReflogPath(runtime: JournalGitRuntime, branch: string) {
