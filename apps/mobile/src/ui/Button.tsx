@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text, type PressableProps } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { semanticColors } from '@journal/theme'
 import { cn } from './cn'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
@@ -16,18 +17,18 @@ type ButtonProps = PressableProps & {
 const buttonBase = 'min-h-12 flex-row items-center justify-center gap-2 rounded-lg px-4'
 const buttonVariants: Record<ButtonVariant, string> = {
   ghost: 'bg-transparent',
-  primary: 'bg-moss',
-  secondary: 'border border-reed bg-cloud',
+  primary: 'bg-primary',
+  secondary: 'border border-border bg-primary-soft',
 }
 const textVariants: Record<ButtonVariant, string> = {
-  ghost: 'text-moss',
-  primary: 'text-white',
-  secondary: 'text-moss',
+  ghost: 'text-primary',
+  primary: 'text-primary-fg',
+  secondary: 'text-primary',
 }
 const iconColors: Record<ButtonVariant, string> = {
-  ghost: '#254f43',
-  primary: '#ffffff',
-  secondary: '#254f43',
+  ghost: semanticColors.primary,
+  primary: semanticColors['primary-fg'],
+  secondary: semanticColors.primary,
 }
 
 export function Button({

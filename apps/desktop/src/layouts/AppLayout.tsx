@@ -57,7 +57,7 @@ function AppLayout() {
   return (
     <motion.main
       animate={{ opacity: 1 }}
-      className="journal-workspace h-screen overflow-hidden font-sans text-ink"
+      className="journal-workspace h-screen overflow-hidden font-sans text-foreground"
       initial={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >

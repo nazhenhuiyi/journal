@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { semanticColors } from '@journal/theme'
 import { Screen } from '../ui/Screen'
 
 export type MobileIconName = ComponentProps<typeof Ionicons>['name']
@@ -20,17 +21,17 @@ export function PageShell({ children, icon, onBack, title }: PageShellProps) {
           <Pressable
             accessibilityLabel="返回今日"
             accessibilityRole="button"
-            className="h-9 w-9 items-center justify-center rounded-full bg-cloud"
+            className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft"
             onPress={onBack}
             testID="back-to-today-button"
           >
-            <Ionicons color="#254f43" name="chevron-back" size={22} />
+            <Ionicons color={semanticColors.primary} name="chevron-back" size={22} />
           </Pressable>
           <View className="flex-row items-center gap-2">
-            <View className="h-8 w-8 items-center justify-center rounded-lg bg-cloud">
-              <Ionicons color="#254f43" name={icon} size={18} />
+            <View className="h-8 w-8 items-center justify-center rounded-lg bg-primary-soft">
+              <Ionicons color={semanticColors.primary} name={icon} size={18} />
             </View>
-            <Text className="text-lg font-semibold text-ink">{title}</Text>
+            <Text className="text-lg font-semibold text-foreground">{title}</Text>
           </View>
         </View>
         {children}

@@ -366,7 +366,7 @@ function CalendarPage() {
     >
       <header className="mx-auto grid w-[min(100%,66rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-6 px-10 pb-7 pt-9">
         <div className="min-w-0">
-          <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-ink">
+          <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-foreground">
             日历书架
           </h1>
         </div>

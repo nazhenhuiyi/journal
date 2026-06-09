@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode, useEffect } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { semanticColors } from '@journal/theme'
 import type { SyncSnapshot } from '@journal/sync'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -114,7 +115,7 @@ export function SettingsPage({
             status={gitStatus}
           />
 
-          <View className="h-px bg-reed" />
+          <View className="h-px bg-border" />
 
           <View className="gap-3">
             <Input
@@ -148,7 +149,7 @@ export function SettingsPage({
                 value={syncTokenDraft}
               />
               {hasStoredSyncToken ? (
-                <Text className="px-1 text-xs leading-5 text-mossMuted">
+                <Text className="px-1 text-xs leading-5 text-muted-fg">
                   出于安全不会显示明文；粘贴新 token 后保存配置会替换。
                 </Text>
               ) : null}
@@ -177,7 +178,7 @@ export function SettingsPage({
               </Button>
             </View>
             {syncSnapshot.lastError ? (
-              <Text className="text-sm leading-5 text-soil">{syncSnapshot.lastError}</Text>
+              <Text className="text-sm leading-5 text-danger">{syncSnapshot.lastError}</Text>
             ) : null}
           </View>
         </View>
@@ -201,73 +202,73 @@ function MobileGitStatusPanel({
   const recentCommits = status?.recentCommits ?? []
 
   return (
-    <View className="gap-4 rounded-lg border border-reed bg-paper px-4 py-4">
+    <View className="gap-4 rounded-lg border border-border bg-surface px-4 py-4">
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0">
-          <Text className="text-base font-semibold text-ink">Git 状态</Text>
-          <Text className="mt-1 text-xs font-medium text-mossMuted">
+          <Text className="text-base font-semibold text-foreground">Git 状态</Text>
+          <Text className="mt-1 text-xs font-medium text-muted-fg">
             {status?.hasRepository ? status.branch : '还没有本地仓库'}
           </Text>
         </View>
         <Pressable
           accessibilityLabel="刷新 Git 状态"
           accessibilityRole="button"
-          className="h-9 w-9 items-center justify-center rounded-lg bg-cloud"
+          className="h-9 w-9 items-center justify-center rounded-lg bg-primary-soft"
           disabled={isLoading}
           onPress={() => void onRefresh()}
           style={({ pressed }) => ({
             opacity: pressed || isLoading ? 0.62 : 1,
           })}
         >
-          <Ionicons color="#254f43" name="refresh-outline" size={18} />
+          <Ionicons color={semanticColors.primary} name="refresh-outline" size={18} />
         </Pressable>
       </View>
 
       {isLoading ? (
-        <Text className="text-sm leading-5 text-mossMuted">正在读取 Git 状态...</Text>
+        <Text className="text-sm leading-5 text-muted-fg">正在读取 Git 状态...</Text>
       ) : null}
 
       {error ? (
-        <Text className="text-sm leading-5 text-soil">{error}</Text>
+        <Text className="text-sm leading-5 text-danger">{error}</Text>
       ) : null}
 
       <View className="gap-2">
-        <Text className="text-xs font-semibold text-sage">最近 commit</Text>
+        <Text className="text-xs font-semibold text-muted-fg">最近 commit</Text>
         {recentCommits.length > 0 ? (
           <View className="gap-2">
             {recentCommits.map((commit) => (
-              <View className="border-t border-reed pt-2" key={commit.oid}>
+              <View className="border-t border-border pt-2" key={commit.oid}>
                 <View className="flex-row flex-wrap items-center gap-2">
-                  <Text className="font-mono text-xs font-semibold text-moss">
+                  <Text className="font-mono text-xs font-semibold text-primary">
                     {commit.shortOid}
                   </Text>
-                  <Text className="text-xs font-medium text-mossMuted">
+                  <Text className="text-xs font-medium text-muted-fg">
                     {formatGitCommitTime(commit.committedAt)}
                   </Text>
                 </View>
-                <Text className="mt-1 text-sm leading-5 text-ink">
+                <Text className="mt-1 text-sm leading-5 text-foreground">
                   {commit.message}
                 </Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text className="text-sm leading-5 text-mossMuted">还没有本地 commit。</Text>
+          <Text className="text-sm leading-5 text-muted-fg">还没有本地 commit。</Text>
         )}
       </View>
 
       <View className="gap-2">
-        <Text className="text-xs font-semibold text-sage">未提交文件</Text>
+        <Text className="text-xs font-semibold text-muted-fg">未提交文件</Text>
         {dirtyPaths.length > 0 ? (
           <View className="gap-2">
             {dirtyPaths.map((filepath) => (
-              <Text className="font-mono text-xs leading-5 text-ink" key={filepath} selectable>
+              <Text className="font-mono text-xs leading-5 text-foreground" key={filepath} selectable>
                 {filepath}
               </Text>
             ))}
           </View>
         ) : (
-          <Text className="text-sm leading-5 text-mossMuted">没有未提交文件。</Text>
+          <Text className="text-sm leading-5 text-muted-fg">没有未提交文件。</Text>
         )}
       </View>
     </View>
@@ -285,11 +286,11 @@ function DetailRow({
 }) {
   return (
     <View className="flex-row items-center gap-3">
-      <View className="h-9 w-9 items-center justify-center rounded-lg bg-cloud">
-        <Ionicons color="#254f43" name={icon} size={18} />
+      <View className="h-9 w-9 items-center justify-center rounded-lg bg-primary-soft">
+        <Ionicons color={semanticColors.primary} name={icon} size={18} />
       </View>
-      <Text className="text-sm font-medium text-mossMuted">{label}</Text>
-      <Text className="ml-auto shrink text-right text-sm font-semibold text-ink">{value}</Text>
+      <Text className="text-sm font-medium text-muted-fg">{label}</Text>
+      <Text className="ml-auto shrink text-right text-sm font-semibold text-foreground">{value}</Text>
     </View>
   )
 }

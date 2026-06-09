@@ -1,0 +1,82 @@
+@theme {
+  --color-paper-50: #fffdf8;
+  --color-paper-100: #fffaf0;
+  --color-paper-200: #f2e6cf;
+  --color-paper-300: #e3cfaa;
+  --color-paper-500: #b98f55;
+  --color-paper-700: #7a4f32;
+  --color-paper-900: #2f261f;
+
+  --color-ink-50: #f7f4f1;
+  --color-ink-100: #ebe3dc;
+  --color-ink-200: #d5c5b8;
+  --color-ink-300: #ad998b;
+  --color-ink-500: #5f5248;
+  --color-ink-700: #3f332b;
+  --color-ink-900: #2f261f;
+
+  --color-moss-50: #f4f8f4;
+  --color-moss-100: #e6eee6;
+  --color-moss-200: #cfdccf;
+  --color-moss-300: #a9bda5;
+  --color-moss-500: #6f7e63;
+  --color-moss-700: #254f43;
+  --color-moss-900: #17231f;
+
+  --color-walnut-50: #fbf6ee;
+  --color-walnut-100: #f3e7d8;
+  --color-walnut-200: #dfc4a5;
+  --color-walnut-300: #c89567;
+  --color-walnut-500: #9a6842;
+  --color-walnut-700: #7a4f32;
+  --color-walnut-900: #3a2418;
+
+  --color-brass-50: #fff8e6;
+  --color-brass-100: #fff0c2;
+  --color-brass-200: #f4d580;
+  --color-brass-300: #e9bf5f;
+  --color-brass-500: #d7a64b;
+  --color-brass-700: #a57424;
+  --color-brass-900: #5c3b12;
+
+  --color-sky-50: #f2f7fc;
+  --color-sky-100: #e1edf8;
+  --color-sky-200: #c6ddef;
+  --color-sky-300: #93badc;
+  --color-sky-500: #4e6f9f;
+  --color-sky-700: #2459bc;
+  --color-sky-900: #1b315f;
+
+  --color-clay-50: #fff3ee;
+  --color-clay-100: #ffe3d8;
+  --color-clay-200: #f7b9a8;
+  --color-clay-300: #ef907b;
+  --color-clay-500: #df6246;
+  --color-clay-700: #8f3f30;
+  --color-clay-900: #4c2119;
+
+  --color-background: var(--color-paper-100);
+  --color-foreground: var(--color-ink-900);
+  --color-surface: var(--color-paper-50);
+  --color-surface-muted: var(--color-paper-100);
+  --color-border: var(--color-paper-200);
+  --color-border-strong: var(--color-walnut-200);
+  --color-primary: var(--color-moss-700);
+  --color-primary-hover: var(--color-moss-900);
+  --color-primary-soft: var(--color-moss-100);
+  --color-primary-fg: #ffffff;
+  --color-muted-fg: var(--color-ink-500);
+  --color-accent: var(--color-brass-500);
+  --color-accent-soft: var(--color-brass-100);
+  --color-success: var(--color-moss-700);
+  --color-info: var(--color-sky-700);
+  --color-warning: var(--color-brass-700);
+  --color-danger: var(--color-clay-700);
+  --color-ring: var(--color-moss-500);
+
+  --color-paper: var(--color-paper-100);
+  --color-ink: var(--color-ink-900);
+  --color-walnut: var(--color-walnut-700);
+  --color-sage: var(--color-moss-500);
+  --color-brass: var(--color-brass-500);
+}

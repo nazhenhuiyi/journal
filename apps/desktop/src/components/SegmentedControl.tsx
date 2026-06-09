@@ -24,7 +24,7 @@ function SegmentedControl<T extends string>({
     <div
       aria-label={ariaLabel}
       className={classNames(
-        'inline-flex h-9 items-center gap-1 rounded-[9px] bg-transparent p-0.5',
+        'inline-flex h-9 items-center gap-1 rounded-[8px] border border-border bg-surface-muted p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.58)]',
       )}
       role="group"
     >
@@ -35,11 +35,11 @@ function SegmentedControl<T extends string>({
           <button
             aria-pressed={isActive}
             className={classNames(
-              'h-8 min-w-[3.55rem] rounded-[8px] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
-              'cursor-pointer text-[rgba(47,38,31,0.48)] transition-[background-color,color] duration-200 ease-out',
-              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(111,126,99,0.36)]',
-              !isActive && 'hover:bg-[rgba(122,79,50,0.05)] hover:text-[rgba(47,38,31,0.68)]',
-              isActive && 'bg-[rgba(111,126,99,0.12)] text-ink',
+              'h-8 min-w-[3.55rem] rounded-[7px] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
+              'cursor-pointer text-muted-fg transition-[background-color,color,box-shadow] duration-200 ease-out',
+              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              !isActive && 'hover:bg-surface hover:text-foreground',
+              isActive && 'bg-surface text-primary shadow-[0_1px_6px_color-mix(in_srgb,var(--color-walnut)_12%,transparent)]',
             )}
             key={option.value}
             onClick={() => onChange(option.value)}

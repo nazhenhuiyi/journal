@@ -124,7 +124,7 @@ const journalEditorTheme = EditorView.theme({
   '.cm-content': {
     minHeight: '34rem',
     padding: '3.1rem 2.8rem 2.4rem 4.2rem',
-    caretColor: 'var(--color-walnut)',
+    caretColor: 'var(--color-primary)',
   },
   '.cm-line': {
     borderRadius: '8px 6px 9px 6px',
@@ -134,10 +134,10 @@ const journalEditorTheme = EditorView.theme({
     display: 'none',
   },
   '.cm-activeLine': {
-    backgroundColor: 'rgba(215, 166, 75, 0.08)',
+    backgroundColor: 'color-mix(in srgb, var(--color-accent) 9%, transparent)',
   },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'rgba(215, 166, 75, 0.28)',
+    backgroundColor: 'color-mix(in srgb, var(--color-accent) 28%, transparent)',
   },
   '&.cm-focused': {
     outline: 'none',

@@ -578,7 +578,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         initial={{ opacity: 0, y: -8 }}
         transition={{ ...panelTransition, delay: 0.05 }}
       >
-        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">{topbarTitle}</h1>
+        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-foreground">{topbarTitle}</h1>
         {showDaySwitchNudge && isViewingAnotherDay ? (
           <div className="journal-day-nudge" role="status">
             <span>

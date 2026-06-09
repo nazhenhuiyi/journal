@@ -1,3 +1,22 @@
+const themeTokens = require('../../packages/journal-theme/tokens.json')
+
+function resolveTokenValue(value) {
+  const match = /^\{([a-z]+)\.(\d+)\}$/.exec(value)
+
+  if (!match) {
+    return value
+  }
+
+  const [, family, shade] = match
+  return themeTokens.primitive[family][shade]
+}
+
+function resolveTokenMap(tokenMap) {
+  return Object.fromEntries(
+    Object.entries(tokenMap).map(([name, value]) => [name, resolveTokenValue(value)]),
+  )
+}
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -8,16 +27,9 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        canvas: '#f4f5ef',
-        cloud: '#eef3f4',
-        ink: '#17231f',
-        moss: '#254f43',
-        mossMuted: '#4f7469',
-        paper: '#fffdf8',
-        reed: '#d8ded5',
-        sage: '#86a99a',
-        skyWash: '#dce9f5',
-        soil: '#8b6656',
+        ...themeTokens.primitive,
+        ...resolveTokenMap(themeTokens.semantic),
+        ...resolveTokenMap(themeTokens.legacy),
       },
       fontFamily: {
         sans: ['System'],
