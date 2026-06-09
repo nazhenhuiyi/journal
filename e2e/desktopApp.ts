@@ -1,6 +1,6 @@
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -75,6 +75,17 @@ export function getLocalDateKey(date = new Date()) {
 
 export async function readJournalEntry(journalDir: string, date = getLocalDateKey()) {
   return await readFile(getJournalEntryPath(journalDir, date), 'utf8')
+}
+
+export async function writeJournalEntry(journalDir: string, date: string, body: string) {
+  const filePath = getJournalEntryPath(journalDir, date)
+
+  await mkdir(path.dirname(filePath), { recursive: true })
+  await writeFile(filePath, `---
+date: ${date}
+---
+
+${body}`, 'utf8')
 }
 
 export async function writeMalformedJournal(filePath: string, date: string) {

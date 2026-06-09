@@ -18,7 +18,7 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-describe('CalendarPage', () => {
+describe('CalendarPage route integration', () => {
   it('opens the requested date from the calendar date query', async () => {
     const loadDate = vi.fn().mockResolvedValue({
       content: '---\ndate: 2026-03-30\n---\n\n# 窗边植物\n窗边那盆植物又长出一点新叶。',

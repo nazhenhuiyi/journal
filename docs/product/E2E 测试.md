@@ -1,6 +1,6 @@
 # E2E 测试
 
-本项目的 E2E 分成三类：桌面端 UI smoke、桌面应用层真实同步、共享同步核心真实 GitHub 回归。默认命令会跑所有 E2E；没有 GitHub token/remote 时，真实同步测试会自动跳过。
+本项目测试分为 unit、integration 和 E2E 三层。E2E 分成三类：桌面端本地核心路径、桌面应用层真实同步、共享同步核心真实 GitHub 回归。默认 E2E 命令会跑所有 E2E；没有 GitHub token/remote 时，真实同步测试会自动跳过。
 
 推荐分层：
 
@@ -8,13 +8,34 @@
 - Integration: Electron/Expo 适配层、文件系统、SecureStore、hook 与 mock store 的组合。
 - E2E: 真实 Electron 窗口、真实 GitHub 测试仓库、跨进程 preload/main/renderer 链路。
 
+## Unit 与 integration
+
+根目录完整 Vitest 校验：
+
+```sh
+npm test
+```
+
+`npm test` 会先跑 unit，再跑 integration。桌面端 workspace 的 `test` 只代表桌面端 unit；桌面端 integration 需要显式运行：
+
+```sh
+npm run test:unit
+npm run test:integration
+npm run test:desktop
+npm run test:desktop:integration
+```
+
+桌面端 integration 文件使用 `*.integration.test.tsx` / `*.integration.test.ts` 命名，覆盖路由、hook、mock preload store、同步协调等多模块协作。不要把依赖真实浏览器、真实网络、完整应用启动、跨页面流程、持久化、同步状态或多个系统协作的 case 放回 unit suite。
+
+## E2E
+
 运行全部 E2E：
 
 ```sh
 npm run e2e
 ```
 
-## Desktop smoke
+## Desktop local app E2E
 
 运行：
 
@@ -30,10 +51,14 @@ npm run e2e:desktop
 
 因此它不会读取或写入真实 `~/.journal`，也不会请求天气服务。当前覆盖：
 
-- 今日页能打开。
-- CodeMirror 正文编辑器可定位。
-- 输入正文后会自动保存到隔离 journal 目录。
-- 设置页同步面板和关键按钮存在。
+- 今日书写页能打开，CodeMirror 正文编辑器可定位。
+- 输入长日记正文后会自动保存到隔离 journal 目录。
+- 刷新 Electron 页面后能重新加载已保存正文。
+- 切到回看模式后能渲染已保存正文。
+- 新建碎碎念后会自动保存到隔离 journal 目录。
+- 刷新后能重新加载碎碎念，回看模式能渲染碎碎念。
+- 日历能列出历史日记、打开指定日期、编辑旧日并保存到对应日期文件。
+- 设置页同步面板和关键按钮存在，未配置 Git 同步状态可见。
 - 损坏 Markdown 会显示 diagnostics banner。
 
 ## Desktop sync app E2E
@@ -100,8 +125,11 @@ npm run e2e:sync:github
 ## 脚本速查
 
 ```sh
-npm run e2e                 # desktop smoke + desktop app sync + sync core
-npm run e2e:desktop         # 只跑不访问外网的 Electron smoke
+npm run e2e                 # desktop local app + desktop app sync + sync core
+npm run e2e:desktop         # 只跑不访问外网的 Electron 本地核心路径
 npm run e2e:desktop:sync    # 跑桌面应用层真实 GitHub 同步
 npm run e2e:sync:github     # 跑共享 sync core 真实 GitHub 同步
+npm test                    # unit + integration
+npm run test:unit           # 所有 workspace unit
+npm run test:integration    # integration，目前包括桌面端 integration
 ```

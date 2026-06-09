@@ -9,8 +9,10 @@
     "build": "tsc && vite build && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "npm run test:unit",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
