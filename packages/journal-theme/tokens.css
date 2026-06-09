@@ -15,21 +15,13 @@
   --color-ink-700: #3f332b;
   --color-ink-900: #2f261f;
 
-  --color-moss-50: #f4f8f4;
-  --color-moss-100: #e6eee6;
-  --color-moss-200: #cfdccf;
-  --color-moss-300: #a9bda5;
-  --color-moss-500: #6f7e63;
-  --color-moss-700: #254f43;
-  --color-moss-900: #17231f;
-
-  --color-walnut-50: #fbf6ee;
-  --color-walnut-100: #f3e7d8;
-  --color-walnut-200: #dfc4a5;
-  --color-walnut-300: #c89567;
-  --color-walnut-500: #9a6842;
-  --color-walnut-700: #7a4f32;
-  --color-walnut-900: #3a2418;
+  --color-moss-50: #f2fbf7;
+  --color-moss-100: #ddf7ea;
+  --color-moss-200: #b9ecd4;
+  --color-moss-300: #7edcaf;
+  --color-moss-500: #36b985;
+  --color-moss-700: #168766;
+  --color-moss-900: #0e5f4b;
 
   --color-brass-50: #fff8e6;
   --color-brass-100: #fff0c2;
@@ -60,7 +52,7 @@
   --color-surface: var(--color-paper-50);
   --color-surface-muted: var(--color-paper-100);
   --color-border: var(--color-paper-200);
-  --color-border-strong: var(--color-walnut-200);
+  --color-border-strong: var(--color-paper-200);
   --color-primary: var(--color-moss-700);
   --color-primary-hover: var(--color-moss-900);
   --color-primary-soft: var(--color-moss-100);
@@ -76,7 +68,6 @@
 
   --color-paper: var(--color-paper-100);
   --color-ink: var(--color-ink-900);
-  --color-walnut: var(--color-walnut-700);
   --color-sage: var(--color-moss-500);
   --color-brass: var(--color-brass-500);
 }

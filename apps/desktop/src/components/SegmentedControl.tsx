@@ -24,7 +24,7 @@ function SegmentedControl<T extends string>({
     <div
       aria-label={ariaLabel}
       className={classNames(
-        'inline-flex h-9 items-center gap-1 rounded-[8px] border border-border bg-surface-muted p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.58)]',
+        'inline-flex h-9 items-center gap-1 rounded-[8px] border border-[var(--journal-line-control)] bg-surface-muted p-0.5',
       )}
       role="group"
     >
@@ -36,10 +36,10 @@ function SegmentedControl<T extends string>({
             aria-pressed={isActive}
             className={classNames(
               'h-8 min-w-[3.55rem] rounded-[7px] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
-              'cursor-pointer text-muted-fg transition-[background-color,color,box-shadow] duration-200 ease-out',
+              'cursor-pointer text-muted-fg transition-[background-color,color] duration-200 ease-out',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               !isActive && 'hover:bg-surface hover:text-foreground',
-              isActive && 'bg-surface text-primary shadow-[0_1px_6px_color-mix(in_srgb,var(--color-walnut)_12%,transparent)]',
+              isActive && 'bg-surface text-primary',
             )}
             key={option.value}
             onClick={() => onChange(option.value)}

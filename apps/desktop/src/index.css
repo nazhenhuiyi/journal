@@ -29,6 +29,14 @@ body {
   height: 100%;
 }
 
+:root {
+  --journal-line-soft: color-mix(in srgb, var(--color-border) 38%, transparent);
+  --journal-line: color-mix(in srgb, var(--color-border) 58%, transparent);
+  --journal-line-control: color-mix(in srgb, var(--color-border) 72%, transparent);
+  --journal-line-active: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  --journal-line-active-strong: color-mix(in srgb, var(--color-primary) 24%, transparent);
+}
+
 @keyframes float-in {
   from {
     opacity: 0;
@@ -47,26 +55,18 @@ body {
 
 .paper-grain {
   background-image:
-    radial-gradient(circle at 15% 20%, rgba(215, 166, 75, 0.18), transparent 24%),
-    radial-gradient(circle at 82% 12%, rgba(111, 126, 99, 0.22), transparent 28%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 250, 240, 0.8)),
-    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.035) 0 1px, transparent 1px 26px);
+    linear-gradient(180deg, rgba(255, 253, 248, 0.82), rgba(255, 250, 240, 0.82)),
+    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.018) 0 1px, transparent 1px 26px);
 }
 
 .journal-workspace {
-  background:
-    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 30rem),
-    radial-gradient(circle at 94% 14%, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 28rem),
-    linear-gradient(135deg, var(--color-paper-200), #eadfc8 58%, var(--color-background));
+  background: var(--color-background);
 }
 
 .journal-shell {
   border: 0;
   border-radius: 0;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.86), transparent 38rem),
-    radial-gradient(circle at 6% 90%, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 24rem),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(251, 248, 239, 0.9));
+  background: var(--color-background);
   box-shadow: none;
 }
 
@@ -75,11 +75,9 @@ body {
 }
 
 .journal-topbar {
-  border-bottom: 1.5px solid color-mix(in srgb, var(--color-walnut) 18%, transparent);
+  border-bottom: 1px solid var(--journal-line-soft);
   padding-inline: clamp(2.35rem, 4.2vw, 4.35rem);
-  background: color-mix(in srgb, var(--color-surface) 84%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.54) inset;
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
 }
 
 .journal-topbar-actions {
@@ -100,12 +98,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.44rem;
-  border: 1px solid rgba(122, 79, 50, 0.12);
+  border: 1px solid var(--journal-line-control);
   border-radius: 999px;
   padding: 0.36rem 0.62rem;
   color: rgba(47, 38, 31, 0.64);
-  background: rgba(255, 253, 244, 0.54);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  background: transparent;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 650;
@@ -113,15 +110,13 @@ body {
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
+    color 180ms ease;
 }
 
 .journal-sync-button:hover {
-  border-color: rgba(111, 126, 99, 0.28);
+  border-color: var(--journal-line-active);
   color: var(--color-ink);
-  background: rgba(255, 253, 244, 0.84);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--color-primary-soft) 34%, transparent);
 }
 
 .journal-sync-button:focus-visible {
@@ -145,31 +140,31 @@ body {
 }
 
 .journal-sync-button.is-success {
-  border-color: color-mix(in srgb, var(--color-success) 22%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 16%, transparent);
   color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
 }
 
 .journal-sync-button.is-pending {
-  border-color: color-mix(in srgb, var(--color-warning) 26%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface));
 }
 
 .journal-sync-button.is-active {
-  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 18%, transparent);
   color: var(--color-info);
   background: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
 }
 
 .journal-sync-button.is-warning {
-  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 22%, transparent);
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
 }
 
 .journal-sync-button.is-danger {
-  border-color: color-mix(in srgb, var(--color-danger) 28%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 20%, transparent);
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
 }
@@ -182,7 +177,7 @@ body {
   gap: 0.65rem;
   margin-left: auto;
   padding: 0.24rem 0.3rem 0.24rem 0.72rem;
-  border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 16%, transparent);
   border-radius: 8px;
   color: rgba(47, 38, 31, 0.68);
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
@@ -199,7 +194,7 @@ body {
 .journal-day-nudge button {
   flex: 0 0 auto;
   min-height: 1.95rem;
-  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
   border-radius: 7px;
   padding: 0.28rem 0.7rem;
   color: var(--color-success);
@@ -214,7 +209,7 @@ body {
 }
 
 .journal-day-nudge button:hover {
-  border-color: color-mix(in srgb, var(--color-success) 42%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
   color: var(--color-primary-hover);
   background: rgba(255, 253, 244, 0.96);
 }
@@ -227,10 +222,7 @@ body {
 .journal-page {
   min-height: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--color-walnut) 8%, transparent), transparent 18rem),
-    radial-gradient(circle at 84% 92%, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 22rem),
-    rgba(255, 250, 240, 0.3);
+  background: var(--color-background);
 }
 
 .settings-topbar {
@@ -267,7 +259,7 @@ body {
   min-height: 2.12rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(122, 79, 50, 0.12);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.36rem 0.72rem;
   color: rgba(47, 38, 31, 0.66);
@@ -282,7 +274,7 @@ body {
 }
 
 .settings-return-link:hover {
-  border-color: rgba(111, 126, 99, 0.24);
+  border-color: var(--journal-line-active);
   color: var(--color-ink);
   background: rgba(255, 253, 244, 0.82);
 }
@@ -298,10 +290,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: clamp(1.35rem, 2.7vw, 2.8rem) clamp(1.45rem, 4vw, 4rem);
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.64), transparent 32rem),
-    radial-gradient(circle at 92% 24%, rgba(111, 126, 99, 0.09), transparent 18rem),
-    rgba(255, 250, 240, 0.3);
+  background: var(--color-background);
 }
 
 .settings-sync-panel {
@@ -309,15 +298,10 @@ body {
   width: min(100%, 58rem);
   gap: 1.15rem;
   margin: 0 auto;
-  border: 1px solid rgba(122, 79, 50, 0.14);
+  border: 1px solid var(--journal-line);
   border-radius: 8px;
   padding: 1.2rem;
-  background:
-    radial-gradient(circle at 8% 12%, rgba(215, 166, 75, 0.08), transparent 14rem),
-    rgba(255, 253, 244, 0.72);
-  box-shadow:
-    0 16px 34px rgba(86, 58, 35, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.36);
+  background: color-mix(in srgb, var(--color-surface) 74%, var(--color-background));
 }
 
 .settings-section-heading {
@@ -325,7 +309,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid rgba(122, 79, 50, 0.1);
+  border-bottom: 1px solid var(--journal-line-soft);
   padding-bottom: 1rem;
 }
 
@@ -342,7 +326,7 @@ body {
   width: 2.35rem;
   height: 2.35rem;
   place-items: center;
-  border: 1px solid rgba(122, 79, 50, 0.1);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   color: rgba(47, 38, 31, 0.58);
   background: rgba(255, 250, 240, 0.66);
@@ -372,26 +356,26 @@ body {
 }
 
 .settings-sync-status.is-success > span {
-  border-color: color-mix(in srgb, var(--color-success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 14%, transparent);
   color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
 }
 
 .settings-sync-status.is-pending > span,
 .settings-sync-status.is-warning > span {
-  border-color: color-mix(in srgb, var(--color-warning) 24%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 18%, transparent);
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface));
 }
 
 .settings-sync-status.is-active > span {
-  border-color: color-mix(in srgb, var(--color-info) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 16%, transparent);
   color: var(--color-info);
   background: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
 }
 
 .settings-sync-status.is-danger > span {
-  border-color: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 18%, transparent);
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
 }
@@ -399,7 +383,7 @@ body {
 .settings-dirty-path {
   max-width: 18rem;
   overflow: hidden;
-  border: 1px solid rgba(215, 166, 75, 0.18);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-radius: 8px;
   padding: 0.5rem 0.62rem;
   text-overflow: ellipsis;
@@ -418,7 +402,7 @@ body {
   min-width: 0;
   align-content: start;
   gap: 0.7rem;
-  border: 1px solid rgba(122, 79, 50, 0.11);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.86rem;
   background: rgba(255, 250, 240, 0.46);
@@ -508,7 +492,7 @@ body {
 .settings-input-with-icon {
   width: 100%;
   min-height: 2.72rem;
-  border: 1px solid rgba(122, 79, 50, 0.15);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   color: var(--color-ink);
   background: rgba(255, 250, 240, 0.76);
@@ -622,20 +606,19 @@ body {
 }
 
 .settings-actions button:not(:disabled):hover {
-  transform: translateY(-1px);
+  color: var(--color-primary-hover);
 }
 
 .settings-secondary-button {
-  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border: 1px solid var(--journal-line-active);
   color: var(--color-primary);
   background: rgba(255, 253, 244, 0.64);
 }
 
 .settings-primary-button {
-  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, transparent);
+  border: 1px solid transparent;
   color: var(--color-primary-fg);
   background: var(--color-primary);
-  box-shadow: 0 10px 18px color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 @media (max-width: 720px) {
@@ -661,24 +644,14 @@ body {
   min-width: 0;
   flex-direction: column;
   gap: 1.45rem;
-  border-right: 1.5px solid color-mix(in srgb, var(--color-walnut) 18%, transparent);
+  border-right: 1px solid var(--journal-line-soft);
   padding: 2.35rem 0.65rem 1.45rem;
-  background:
-    radial-gradient(circle at 12% 92%, color-mix(in srgb, var(--color-primary) 11%, transparent), transparent 8rem),
-    linear-gradient(180deg, rgba(255, 253, 246, 0.86), rgba(247, 239, 219, 0.66));
+  background: color-mix(in srgb, var(--color-surface-muted) 72%, var(--color-surface));
 }
 
 .journal-menu::after {
-  pointer-events: none;
-  position: absolute;
-  bottom: 3.2rem;
-  left: 1.05rem;
-  width: 6.5rem;
-  height: 8.5rem;
-  border-left: 1.5px solid rgba(111, 126, 99, 0.14);
-  border-radius: 60% 0 0 0;
-  content: "";
-  transform: rotate(18deg);
+  display: none;
+  content: none;
 }
 
 .journal-menu-mark {
@@ -688,13 +661,9 @@ body {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 9px 7px 10px 8px;
+  border-radius: 8px;
   color: var(--color-primary);
-  background:
-    radial-gradient(circle at 58% 46%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 1.65rem),
-    rgba(255, 253, 244, 0.62);
-  box-shadow: 0 9px 22px color-mix(in srgb, var(--color-primary) 10%, transparent);
-  transform: rotate(-2deg);
+  background: color-mix(in srgb, var(--color-primary-soft) 34%, transparent);
 }
 
 .journal-menu-brand {
@@ -767,14 +736,9 @@ body {
 }
 
 .journal-menu :is(a, button).is-active {
-  border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  border-color: var(--journal-line-active);
   color: var(--color-foreground);
-  background:
-    radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--color-primary) 20%, transparent), transparent 3rem),
-    color-mix(in srgb, var(--color-primary-soft) 72%, var(--color-surface));
-  box-shadow:
-    0 12px 22px rgba(86, 58, 35, 0.11),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface));
 }
 
 .journal-menu-list > :nth-child(1) svg {
@@ -795,7 +759,7 @@ body {
 
 .journal-menu :is(a, button):hover svg,
 .journal-menu :is(a, button).is-active svg {
-  transform: rotate(-2deg) scale(1.06);
+  transform: none;
 }
 
 .journal-menu button:disabled {
@@ -838,9 +802,7 @@ body {
 }
 
 .calendar-library {
-  background:
-    radial-gradient(ellipse at 54% 6%, rgba(255, 255, 255, 0.72), transparent 34rem),
-    linear-gradient(180deg, rgba(255, 252, 245, 0.54), rgba(239, 229, 210, 0.64));
+  background: var(--color-background);
 }
 
 .calendar-day-screen {
@@ -855,7 +817,7 @@ body {
   justify-content: space-between;
   gap: 0.9rem;
   min-height: 3.45rem;
-  border-bottom: 1px solid rgba(122, 79, 50, 0.1);
+  border-bottom: 1px solid var(--journal-line-soft);
   padding: 0.48rem 1.7rem;
   background: rgba(255, 252, 243, 0.58);
 }
@@ -885,7 +847,7 @@ body {
 
 .calendar-day-back:hover,
 .calendar-day-nav:not(:disabled):hover {
-  border-color: rgba(111, 126, 99, 0.16);
+  border-color: var(--journal-line-active);
   color: var(--color-ink);
   background: rgba(255, 253, 244, 0.62);
 }
@@ -910,7 +872,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.12rem;
-  border: 1px solid rgba(111, 126, 99, 0.15);
+  border: 1px solid var(--journal-line-control);
   border-radius: 9px;
   padding: 0.14rem;
   background: rgba(255, 253, 244, 0.34);
@@ -936,7 +898,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border: 1px solid rgba(111, 126, 99, 0.2);
+  border: 1px solid var(--journal-line-control);
   border-radius: 999px;
   padding: 0.45rem 0.76rem;
   color: var(--color-ink);
@@ -948,14 +910,12 @@ body {
   cursor: pointer;
   transition:
     background-color 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
+    border-color 180ms ease;
 }
 
 .calendar-year-button:hover {
-  border-color: color-mix(in srgb, var(--color-ring) 36%, transparent);
-  background: rgba(111, 126, 99, 0.1);
-  transform: translateY(-1px);
+  border-color: var(--journal-line-active);
+  background: color-mix(in srgb, var(--color-primary-soft) 52%, transparent);
 }
 
 .calendar-year-button:focus-visible,
@@ -971,7 +931,7 @@ body {
   min-height: 2.18rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(122, 79, 50, 0.1);
+  border: 1px solid var(--journal-line-control);
   border-radius: 999px;
   color: rgba(47, 38, 31, 0.7);
   background: rgba(255, 253, 244, 0.44);
@@ -989,12 +949,9 @@ body {
   bottom: -0.22rem;
   left: 2.2rem;
   height: 0.82rem;
-  border: 1px solid rgba(122, 79, 50, 0.16);
+  border: 1px solid var(--journal-line-soft);
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(177, 133, 80, 0.22), rgba(122, 79, 50, 0.08)),
-    rgba(255, 250, 240, 0.6);
-  box-shadow: 0 12px 20px rgba(86, 58, 35, 0.08);
+  background: color-mix(in srgb, var(--color-border) 26%, transparent);
   content: "";
 }
 
@@ -1018,25 +975,18 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
   justify-items: center;
   overflow: hidden;
-  border: 1.5px solid color-mix(in srgb, var(--book-accent) 62%, #2f261f);
+  border: 1px solid color-mix(in srgb, var(--book-accent) 36%, rgba(47, 38, 31, 0.16));
   border-radius: 8px 7px 4px 4px;
   padding: 0.65rem 0.35rem 0.7rem;
   color: #fffdf8;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent 26%, rgba(47, 38, 31, 0.12) 72%, rgba(255, 255, 255, 0.1)),
-    linear-gradient(180deg, color-mix(in srgb, var(--book-accent) 84%, white), var(--book-accent));
-  box-shadow:
-    inset 0.42rem 0 0 rgba(255, 255, 255, 0.12),
-    inset -0.24rem 0 0 rgba(47, 38, 31, 0.12),
-    0 7px 14px rgba(86, 58, 35, 0.1);
+  background: var(--book-accent);
+  box-shadow: none;
   cursor: pointer;
   font: inherit;
   text-align: center;
-  transform: translateY(0);
   transition:
     border-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    opacity 180ms ease;
 }
 
 .calendar-book:nth-child(2n) {
@@ -1053,12 +1003,8 @@ body {
 
 .calendar-book:not(:disabled):hover,
 .calendar-book.is-active {
-  border-color: rgba(47, 38, 31, 0.34);
-  box-shadow:
-    inset 0.42rem 0 0 rgba(255, 255, 255, 0.16),
-    inset -0.24rem 0 0 rgba(47, 38, 31, 0.16),
-    0 12px 20px rgba(86, 58, 35, 0.15);
-  transform: translateY(-0.34rem);
+  border-color: rgba(47, 38, 31, 0.22);
+  opacity: 0.9;
 }
 
 .calendar-book.is-empty {
@@ -1068,12 +1014,8 @@ body {
 }
 
 .calendar-book.is-empty.is-active {
-  border-color: color-mix(in srgb, var(--book-accent) 62%, #2f261f);
-  box-shadow:
-    inset 0.45rem 0 0 rgba(255, 255, 255, 0.12),
-    inset -0.28rem 0 0 rgba(47, 38, 31, 0.13),
-    0 9px 18px rgba(86, 58, 35, 0.12);
-  transform: none;
+  border-color: color-mix(in srgb, var(--book-accent) 36%, rgba(47, 38, 31, 0.16));
+  box-shadow: none;
 }
 
 .calendar-book-cap {
@@ -1107,17 +1049,12 @@ body {
   top: 1.25rem;
   align-self: start;
   min-height: 18rem;
-  border: 1px solid rgba(122, 79, 50, 0.13);
+  border: 1px solid var(--journal-line);
   border-radius: 8px;
   padding: 1.2rem;
   color: var(--color-ink);
-  background:
-    radial-gradient(circle at 20% 14%, rgba(20, 114, 79, 0.1), transparent 9rem),
-    radial-gradient(circle at 88% 90%, rgba(215, 166, 75, 0.1), transparent 10rem),
-    linear-gradient(135deg, rgba(255, 254, 247, 0.95), rgba(246, 239, 224, 0.86));
-  box-shadow:
-    0 14px 26px rgba(86, 58, 35, 0.07),
-    0 1px 0 rgba(255, 255, 255, 0.54) inset;
+  background: color-mix(in srgb, var(--color-surface) 74%, var(--color-background));
+  box-shadow: none;
 }
 
 .calendar-open-book-heading {
@@ -1176,15 +1113,11 @@ body {
 
 .calendar-grid-panel {
   min-width: 0;
-  border: 1px solid rgba(122, 79, 50, 0.13);
+  border: 1px solid var(--journal-line);
   border-radius: 8px;
   padding: 1rem;
-  background:
-    radial-gradient(circle at 92% 10%, rgba(215, 166, 75, 0.07), transparent 11rem),
-    rgba(255, 253, 244, 0.72);
-  box-shadow:
-    0 12px 24px rgba(86, 58, 35, 0.06),
-    0 1px 0 rgba(255, 255, 255, 0.56) inset;
+  background: color-mix(in srgb, var(--color-surface) 74%, var(--color-background));
+  box-shadow: none;
 }
 
 .calendar-week-row,
@@ -1213,21 +1146,18 @@ body {
   display: grid;
   min-height: 5.15rem;
   align-content: space-between;
-  border: 1px solid rgba(122, 79, 50, 0.11);
+  border: 1px solid var(--journal-line-control);
   border-radius: 7px;
   padding: 0.7rem;
   color: var(--color-ink);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 251, 242, 0.72)),
-    repeating-linear-gradient(0deg, rgba(47, 38, 31, 0.024) 0 1px, transparent 1px 18px);
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
   cursor: pointer;
   font: inherit;
   text-align: left;
   text-decoration: none;
   transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .calendar-day-cell:not(.is-empty):not(.is-blank)::after {
@@ -1238,14 +1168,12 @@ body {
   height: 0.38rem;
   border-radius: 999px;
   background: var(--color-success);
-  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--color-success) 12%, transparent);
   content: "";
 }
 
 .calendar-day-cell:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--color-ring) 30%, transparent);
-  box-shadow: 0 10px 18px rgba(86, 58, 35, 0.075);
-  transform: translateY(-2px);
+  border-color: var(--journal-line-active);
+  background: var(--color-surface);
 }
 
 .calendar-day-cell span {
@@ -1258,7 +1186,7 @@ body {
 .calendar-day-cell small {
   min-height: 1.35rem;
   justify-self: start;
-  border: 1px solid color-mix(in srgb, var(--color-success) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 16%, transparent);
   border-radius: 999px;
   padding: 0.16rem 0.42rem;
   color: var(--color-success);
@@ -1268,19 +1196,13 @@ body {
 }
 
 .calendar-day-cell.is-weekend {
-  background:
-    radial-gradient(circle at 88% 20%, rgba(233, 107, 152, 0.08), transparent 4rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 250, 244, 0.74));
+  background: color-mix(in srgb, var(--color-clay-50) 42%, var(--color-surface));
 }
 
 .calendar-day-cell.is-today {
-  border-color: color-mix(in srgb, var(--color-ring) 36%, transparent);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--color-ring) 10%, transparent),
-    0 12px 20px rgba(86, 58, 35, 0.07);
-  background:
-    radial-gradient(circle at 88% 18%, rgba(20, 114, 79, 0.12), transparent 4rem),
-    rgba(250, 255, 245, 0.82);
+  border-color: color-mix(in srgb, var(--color-ring) 24%, transparent);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--color-primary-soft) 44%, var(--color-surface));
 }
 
 .calendar-day-cell small:empty {
@@ -1297,7 +1219,7 @@ body {
 }
 
 .calendar-day-cell.is-blank {
-  border-color: rgba(122, 79, 50, 0.06);
+  border-color: var(--journal-line-soft);
   background: rgba(255, 253, 244, 0.28);
   box-shadow: none;
   cursor: default;
@@ -1308,11 +1230,7 @@ body {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.64), transparent 38rem),
-    radial-gradient(circle at 0% 20%, rgba(122, 79, 50, 0.06), transparent 18rem),
-    radial-gradient(circle at 100% 88%, rgba(111, 126, 99, 0.08), transparent 20rem),
-    rgba(255, 250, 240, 0.34);
+  background: var(--color-background);
 }
 
 .journal-diagnostics-banner {
@@ -1361,23 +1279,16 @@ body {
   width: min(100%, 54rem);
   min-height: min(58rem, calc(100vh - 9rem));
   margin: 0 auto;
-  border: 1.5px solid color-mix(in srgb, var(--color-walnut) 30%, transparent);
-  border-radius: 18px 14px 20px 13px;
+  border: 1px solid var(--journal-line);
+  border-radius: 12px;
   background:
     repeating-linear-gradient(
       0deg,
       transparent 0 2.2rem,
-      rgba(47, 38, 31, 0.024) 2.2rem calc(2.2rem + 1px)
+      rgba(47, 38, 31, 0.014) 2.2rem calc(2.2rem + 1px)
     ),
-    radial-gradient(ellipse at 50% -12%, rgba(255, 255, 255, 0.82), transparent 26rem),
-    radial-gradient(circle at 9% 18%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 13rem),
-    radial-gradient(circle at 86% 78%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 16rem),
-    radial-gradient(circle at 52% 45%, color-mix(in srgb, var(--color-walnut) 4%, transparent), transparent 18rem),
-    linear-gradient(135deg, rgba(255, 254, 247, 0.98), rgba(255, 249, 235, 0.96));
-  box-shadow:
-    0 24px 54px rgba(86, 58, 35, 0.15),
-    0 1px 0 rgba(255, 255, 255, 0.7) inset,
-    inset 0 0 0 4px rgba(255, 255, 255, 0.28);
+    color-mix(in srgb, var(--color-surface) 86%, var(--color-background));
+  box-shadow: none;
 }
 
 .journal-stage .markdown-preview {
@@ -1396,7 +1307,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-walnut) 10%, transparent);
+  border-bottom: 1px solid var(--journal-line-soft);
   padding-bottom: 0.62rem;
   color: rgba(47, 38, 31, 0.56);
   font-size: 0.78rem;
@@ -1436,10 +1347,10 @@ body {
 }
 
 .journal-editor .cm-tooltip {
-  border: 1px solid rgba(122, 79, 50, 0.18);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   background: #fffaf0;
-  box-shadow: 0 12px 30px rgba(86, 58, 35, 0.12);
+  box-shadow: none;
 }
 
 .journal-murmur-panel {
@@ -1447,14 +1358,10 @@ body {
   max-height: min(58rem, calc(100vh - 9rem));
   min-height: 0;
   flex-direction: column;
-  border: 1.5px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-walnut) 10%);
-  border-radius: 14px 11px 16px 10px;
-  background:
-    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--color-primary) 11%, transparent), transparent 11rem),
-    rgba(255, 253, 244, 0.82);
-  box-shadow:
-    0 18px 38px rgba(86, 58, 35, 0.11),
-    0 1px 0 rgba(255, 255, 255, 0.48) inset;
+  border: 1px solid var(--journal-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface) 74%, var(--color-background));
+  box-shadow: none;
 }
 
 .journal-murmur-panel-header {
@@ -1462,7 +1369,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-bottom: 1px solid var(--journal-line-soft);
   padding: 1rem 1rem 0.85rem;
 }
 
@@ -1486,7 +1393,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.42rem;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.5rem 0.68rem;
   color: var(--color-primary);
@@ -1502,22 +1409,20 @@ body {
 }
 
 .journal-murmur-panel button:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+  border-color: var(--journal-line-active-strong);
   color: var(--color-primary-hover);
   background: color-mix(in srgb, var(--color-primary-soft) 48%, var(--color-surface));
 }
 
 .journal-murmur-panel-header > button {
-  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  border-color: var(--journal-line-active);
   color: var(--color-primary);
-  background:
-    radial-gradient(circle at 12% 24%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 2.4rem),
-    var(--color-surface);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  background: var(--color-surface);
+  box-shadow: none;
 }
 
 .journal-murmur-panel-header > button:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 46%, transparent);
+  border-color: var(--journal-line-active-strong);
   background: color-mix(in srgb, var(--color-primary-soft) 62%, var(--color-surface));
 }
 
@@ -1552,7 +1457,7 @@ body {
 
 .journal-murmur-list button.is-active,
 .journal-murmur-list button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 20%, transparent);
   color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
 }
@@ -1571,7 +1476,7 @@ body {
 .journal-murmur-form textarea,
 .journal-murmur-form input {
   width: 100%;
-  border: 1px solid rgba(122, 79, 50, 0.15);
+  border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.64rem 0.7rem;
   color: var(--color-ink);
@@ -1638,7 +1543,7 @@ body {
 .journal-murmur-image-form {
   display: grid;
   gap: 0.58rem;
-  border: 1px solid rgba(215, 166, 75, 0.22);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-radius: 10px 8px 11px 8px;
   padding: 0.72rem;
   background: rgba(255, 250, 240, 0.72);
@@ -1724,7 +1629,7 @@ body {
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
-  color: rgba(111, 126, 99, 0.95);
+  color: var(--color-primary);
 }
 
 .markdown-preview p,
@@ -1804,7 +1709,7 @@ body {
 }
 
 .markdown-preview li::marker {
-  color: rgba(111, 126, 99, 0.95);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -1835,10 +1740,10 @@ body {
 }
 
 .markdown-preview blockquote {
-  border-left: 4px solid rgba(111, 126, 99, 0.55);
+  border-left: 2px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
   padding: 0.7rem 1rem;
   border-radius: 0 10px 10px 0;
-  background: rgba(111, 126, 99, 0.08);
+  background: color-mix(in srgb, var(--color-primary-soft) 42%, var(--color-surface));
   color: rgba(47, 38, 31, 0.74);
 }
 
@@ -1851,18 +1756,18 @@ body {
 }
 
 .markdown-preview code {
-  border: 1px solid rgba(122, 79, 50, 0.14);
+  border: 1px solid var(--journal-line-control);
   border-radius: 6px;
   padding: 0.08rem 0.34rem;
-  background: rgba(122, 79, 50, 0.07);
+  background: color-mix(in srgb, var(--color-border) 24%, transparent);
   color: #5b3925;
   font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
   font-size: 0.9em;
 }
 
 .markdown-preview kbd {
-  border: 1px solid rgba(122, 79, 50, 0.18);
-  border-bottom-width: 2px;
+  border: 1px solid var(--journal-line-control);
+  border-bottom-color: var(--journal-line);
   border-radius: 6px;
   padding: 0.04rem 0.28rem;
   background: rgba(255, 253, 244, 0.78);
@@ -1872,13 +1777,11 @@ body {
 
 .markdown-preview pre {
   overflow-x: auto;
-  border: 1px solid rgba(122, 79, 50, 0.16);
-  border-radius: 12px 9px 14px 10px;
+  border: 1px solid var(--journal-line-control);
+  border-radius: 8px;
   padding: 1rem 1.1rem;
-  background:
-    linear-gradient(180deg, rgba(255, 253, 244, 0.74), rgba(248, 241, 224, 0.82)),
-    rgba(122, 79, 50, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  background: color-mix(in srgb, var(--color-surface-muted) 72%, var(--color-surface));
+  box-shadow: none;
 }
 
 .markdown-preview pre code {
@@ -1896,8 +1799,7 @@ body {
   height: 1px;
   margin: 2rem 0;
   border: 0;
-  background:
-    linear-gradient(90deg, transparent, rgba(122, 79, 50, 0.26), transparent);
+  background: var(--journal-line-soft);
 }
 
 .markdown-preview sup {
@@ -1912,7 +1814,7 @@ body {
 
 .markdown-preview .footnotes {
   margin-top: 2.4rem;
-  border-top: 1px solid rgba(122, 79, 50, 0.16);
+  border-top: 1px solid var(--journal-line-soft);
   padding-top: 1rem;
   color: rgba(47, 38, 31, 0.68);
   font-size: 0.92rem;
@@ -1945,10 +1847,10 @@ body {
 
 .markdown-preview .journal-murmur,
 .markdown-preview .journal-image {
-  border: 1px solid rgba(111, 126, 99, 0.22);
-  border-radius: 14px 10px 15px 9px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-radius: 8px;
   padding: 0.95rem 1.05rem;
-  background: rgba(111, 126, 99, 0.07);
+  background: color-mix(in srgb, var(--color-primary-soft) 34%, var(--color-surface));
   color: rgba(47, 38, 31, 0.76);
 }
 
@@ -1962,7 +1864,7 @@ body {
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 0.95;
-  color: rgba(111, 126, 99, 0.72);
+  color: color-mix(in srgb, var(--color-primary) 70%, var(--color-muted-fg));
 }
 
 .markdown-preview .journal-murmur > :first-child,
@@ -1977,10 +1879,8 @@ body {
 
 .markdown-preview .journal-image {
   display: block;
-  border-color: rgba(215, 166, 75, 0.26);
-  background:
-    radial-gradient(circle at 12% 18%, rgba(215, 166, 75, 0.12), transparent 9rem),
-    rgba(255, 250, 240, 0.66);
+  border-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  background: color-mix(in srgb, var(--color-accent-soft) 38%, var(--color-surface));
   font-size: 0.96rem;
 }
 
@@ -1988,9 +1888,9 @@ body {
   display: block;
   max-width: 100%;
   height: auto;
-  border: 1px solid rgba(122, 79, 50, 0.16);
-  border-radius: 14px 10px 16px 9px;
-  box-shadow: 0 10px 24px rgba(86, 58, 35, 0.12);
+  border: 1px solid var(--journal-line-control);
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .markdown-preview table {
@@ -1999,14 +1899,14 @@ body {
   border-spacing: 0;
   font-size: 0.95rem;
   overflow: hidden;
-  border: 1px solid rgba(122, 79, 50, 0.18);
+  border: 1px solid var(--journal-line-control);
   border-radius: 10px 8px 12px 9px;
 }
 
 .markdown-preview th,
 .markdown-preview td {
-  border-right: 1px solid rgba(122, 79, 50, 0.18);
-  border-bottom: 1px solid rgba(122, 79, 50, 0.18);
+  border-right: 1px solid var(--journal-line-control);
+  border-bottom: 1px solid var(--journal-line-control);
   padding: 0.58rem 0.75rem;
   vertical-align: top;
 }
@@ -2021,14 +1921,14 @@ body {
 }
 
 .markdown-preview th {
-  background: rgba(111, 126, 99, 0.1);
+  background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface));
   text-align: left;
-  color: #314137;
+  color: var(--color-primary-hover);
   font-weight: 700;
 }
 
 .markdown-preview tbody tr:nth-child(even) {
-  background: rgba(122, 79, 50, 0.035);
+  background: color-mix(in srgb, var(--color-border) 16%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

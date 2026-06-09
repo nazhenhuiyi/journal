@@ -39,7 +39,7 @@ describe('theme tokens css', () => {
 
   it('exposes desktop compatibility aliases', async () => {
     const css = await readFile(new URL('./tokens.css', import.meta.url), 'utf8')
-    const desktopAliases = ['paper', 'ink', 'walnut', 'sage', 'brass']
+    const desktopAliases = ['paper', 'ink', 'sage', 'brass']
 
     for (const name of desktopAliases) {
       const value = tokens.legacy[name as keyof typeof tokens.legacy]
