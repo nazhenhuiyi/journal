@@ -71,11 +71,13 @@ interface Window {
   }
   journalSettings?: {
     load(): Promise<{
+      settingsMessage?: string
       syncBranch: string
       syncRemoteUrl: string
       version: 1
       weatherLocation: string
       workingDirectory: string
+      settingsStatus: 'corrupt' | 'created' | 'ready'
       settingsPath: string
     }>
     save(payload: {
@@ -88,12 +90,16 @@ interface Window {
       version: 1
       weatherLocation: string
       workingDirectory: string
+      settingsMessage?: string
+      settingsStatus: 'corrupt' | 'created' | 'ready'
       settingsPath: string
     }>
   }
   journalSync?: {
     loadStatus(): Promise<{
       branch: string
+      credentialMessage?: string
+      credentialStatus: 'available' | 'corrupt' | 'encryption-unavailable' | 'missing'
       dirtyPaths: string[]
       hasCredentials: boolean
       hasRepository: boolean
@@ -116,6 +122,8 @@ interface Window {
       syncToken?: string
     }): Promise<{
       branch: string
+      credentialMessage?: string
+      credentialStatus: 'available' | 'corrupt' | 'encryption-unavailable' | 'missing'
       dirtyPaths: string[]
       hasCredentials: boolean
       hasRepository: boolean

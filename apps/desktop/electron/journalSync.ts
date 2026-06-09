@@ -16,9 +16,10 @@ import {
 } from '@journal/sync'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
-  hasJournalGitSyncCredentials,
+  inspectJournalGitSyncCredentials,
   loadJournalGitSyncCredentials,
   saveJournalGitSyncCredentials,
+  type JournalGitSyncCredentialStatus,
 } from './journalSyncCredentials'
 
 export type JournalSyncSettingsPayload = {
@@ -35,6 +36,8 @@ export type JournalGitSyncResult = {
 
 export type JournalGitSyncStatus = {
   branch: string
+  credentialMessage?: string
+  credentialStatus: JournalGitSyncCredentialStatus
   dirtyPaths: string[]
   hasCredentials: boolean
   hasRepository: boolean
@@ -48,7 +51,8 @@ const defaultAuthorName = 'Journal Desktop'
 export async function loadJournalGitSyncStatus(journalDirectory: string): Promise<JournalGitSyncStatus> {
   const settings = await loadJournalSettings(journalDirectory)
   const runtime = await createDesktopGitRuntime(journalDirectory)
-  const hasCredentials = await hasJournalGitSyncCredentials(journalDirectory)
+  const credentialState = await inspectJournalGitSyncCredentials(journalDirectory)
+  const hasCredentials = credentialState.status === 'available'
   const status = await getJournalGitSyncStatus(
     runtime,
     createDesktopGitConfig(settings),
@@ -57,6 +61,8 @@ export async function loadJournalGitSyncStatus(journalDirectory: string): Promis
 
   return {
     branch: status.branch,
+    credentialMessage: credentialState.status === 'available' ? undefined : credentialState.message,
+    credentialStatus: credentialState.status,
     dirtyPaths: status.dirtyPaths,
     hasCredentials: status.hasCredentials,
     hasRepository: status.hasRepository,

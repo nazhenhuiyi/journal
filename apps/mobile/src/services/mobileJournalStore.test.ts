@@ -131,6 +131,24 @@ updatedAt: 2026-06-08T08:00:00.000Z
     })
   })
 
+  it('returns markdown diagnostics for malformed journal files', async () => {
+    mockFileSystem.files.set(entryPath, `---
+date: 2026-06-08
+
+# 没有结束标记`)
+
+    const record = await loadDailyJournal('2026-06-08')
+
+    expect(record.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: 'Front Matter 缺少结束标记 ---。',
+          severity: 'error',
+        }),
+      ]),
+    )
+  })
+
   it('lists saved journal files in reverse chronological order', async () => {
     addDirectory('file:///app/journal-worktree/entries/')
     addDirectory('file:///app/journal-worktree/entries/2026/')

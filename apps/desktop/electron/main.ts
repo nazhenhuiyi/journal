@@ -16,13 +16,11 @@ import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
   createJournalMarkdownWithFrontMatter,
   hasMeaningfulJournalChange,
+  isFreshWeather,
+  isFreshWeatherForLocation,
   parseJournalMarkdown,
   stripManagedFrontMatter,
 } from '@journal/core'
-import {
-  isFreshWeather,
-  isFreshWeatherForLocation,
-} from '../src/domain/weatherFreshness'
 import type {
   Annotation,
   AnnotationFile,

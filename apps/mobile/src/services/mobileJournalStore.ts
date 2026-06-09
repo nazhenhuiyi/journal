@@ -5,11 +5,13 @@ import {
   parseJournalMarkdown,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
+  type MarkdownDiagnostic,
   type MurmurBlock,
 } from '@journal/core'
 
 export type MobileJournalRecord = {
   date: string
+  diagnostics: MarkdownDiagnostic[]
   longEntryMarkdown: string
   murmurs: MurmurBlock[]
   markdown: string
@@ -55,6 +57,7 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
   if (!fileInfo.exists) {
     return {
       date,
+      diagnostics: [],
       longEntryMarkdown: '',
       murmurs: [],
       markdown: '',
@@ -67,6 +70,7 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
 
   return {
     date,
+    diagnostics: parsed.diagnostics,
     longEntryMarkdown: parsed.longEntryMarkdown,
     murmurs: parsed.murmurs,
     markdown,
@@ -95,6 +99,7 @@ export async function listDailyJournals(): Promise<MobileJournalRecord[]> {
 
         records.push({
           date,
+          diagnostics: parsed.diagnostics,
           longEntryMarkdown: parsed.longEntryMarkdown,
           markdown,
           murmurs: parsed.murmurs,
@@ -138,6 +143,7 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
 
   return {
     date: input.date,
+    diagnostics: parsed.diagnostics,
     longEntryMarkdown: parsed.longEntryMarkdown,
     murmurs: parsed.murmurs,
     markdown,

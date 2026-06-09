@@ -13,7 +13,9 @@ export {
   saveGitHubSyncCredentials,
   saveGitHubSyncSettings,
   type GitHubSyncCredentials,
+  type GitHubSyncCredentialsState,
   type GitHubSyncSettings,
+  type GitHubSyncSettingsState,
 } from './secureSyncCredentials'
 export {
   cloneMobileGitSyncRepository,

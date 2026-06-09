@@ -1541,7 +1541,7 @@ function encodeUtf8(value: string) {
   const bytes: number[] = []
 
   for (let index = 0; index < value.length; index += 1) {
-    let codePoint = value.codePointAt(index) ?? 0
+    const codePoint = value.codePointAt(index) ?? 0
 
     if (codePoint > 0xffff) {
       index += 1

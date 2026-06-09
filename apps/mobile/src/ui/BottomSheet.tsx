@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Easing,
@@ -40,9 +40,8 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const { height: windowHeight } = useWindowDimensions()
   const [isMounted, setIsMounted] = useState(visible)
+  const [translateY] = useState(() => new Animated.Value(windowHeight))
   const isClosingRef = useRef(false)
-  const translateYRef = useRef(new Animated.Value(windowHeight))
-  const translateY = translateYRef.current
 
   const animateOpen = useCallback(() => {
     isClosingRef.current = false
@@ -92,10 +91,10 @@ export function BottomSheet({
     }).start()
   }, [translateY])
 
-  const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gestureState) => {
-      return gestureState.dy > 6 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
-    },
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gestureState) => (
+      gestureState.dy > 6 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
+    ),
     onPanResponderMove: (_event, gestureState) => {
       translateY.setValue(Math.max(0, gestureState.dy))
     },
@@ -107,7 +106,7 @@ export function BottomSheet({
       }
     },
     onPanResponderTerminate: settleOpen,
-  })
+  }), [animateClose, settleOpen, translateY])
 
   useEffect(() => {
     if (visible) {

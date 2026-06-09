@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   hasJournalGitSyncCredentials,
+  inspectJournalGitSyncCredentials,
   loadJournalGitSyncCredentials,
   saveJournalGitSyncCredentials,
 } from './journalSyncCredentials'
@@ -57,7 +58,7 @@ describe('journal sync credentials', () => {
     })
   })
 
-  it('does not report corrupted credentials as available', async () => {
+  it('does not report corrupted credentials as available or delete them', async () => {
     await saveJournalGitSyncCredentials(journalDirectory, {
       token: 'secret-token',
     })
@@ -69,7 +70,26 @@ describe('journal sync credentials', () => {
     }), 'utf8')
 
     expect(await hasJournalGitSyncCredentials(journalDirectory)).toBe(false)
-    await expect(loadJournalGitSyncCredentials(journalDirectory)).resolves.toBeNull()
+    await expect(inspectJournalGitSyncCredentials(journalDirectory)).resolves.toMatchObject({
+      status: 'corrupt',
+    })
+    await expect(loadJournalGitSyncCredentials(journalDirectory)).rejects.toThrow('GitHub token 文件内容无效')
+    await expect(readFile(storedCredentialsPath, 'utf8')).resolves.toContain('encryptedPayload')
+  })
+
+  it('reports unavailable system encryption without deleting stored credentials', async () => {
+    await saveJournalGitSyncCredentials(journalDirectory, {
+      token: 'secret-token',
+    })
+    const storedCredentialsPath = await findStoredCredentialsPath(userDataDirectory)
+
+    mockSafeStorage.isEncryptionAvailable.mockReturnValue(false)
+
+    await expect(inspectJournalGitSyncCredentials(journalDirectory)).resolves.toMatchObject({
+      status: 'encryption-unavailable',
+    })
+    await expect(loadJournalGitSyncCredentials(journalDirectory)).rejects.toThrow('系统加密存储不可用')
+    await expect(readFile(storedCredentialsPath, 'utf8')).resolves.toContain('encryptedPayload')
   })
 
   it('migrates legacy credentials out of the journal worktree', async () => {

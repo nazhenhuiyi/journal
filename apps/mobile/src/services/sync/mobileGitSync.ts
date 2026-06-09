@@ -41,12 +41,12 @@ export async function getMobileGitSyncStatus(
   config: MobileGitSyncConfig = {},
 ): Promise<MobileGitSyncStatus> {
   const runtime = await createMobileGitRuntime()
-  const credentials = await loadGitHubSyncCredentials()
+  const credentialState = await loadGitHubSyncCredentials()
 
   return getJournalGitSyncStatus(
     runtime,
     withMobileAuthorDefaults(config),
-    credentials,
+    credentialState.status === 'available' ? credentialState.credentials : null,
   )
 }
 
@@ -135,7 +135,7 @@ export async function syncMobileJournalWithGitHub(
 }
 
 async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
-  ;(globalThis as typeof globalThis & { Buffer?: typeof Buffer }).Buffer = Buffer
+  globalThis.Buffer = Buffer
   const trace = createMobileGitTraceLogger()
 
   return {
@@ -229,13 +229,21 @@ async function collectGitHttpBody(body: Parameters<typeof http.request>[0]['body
 }
 
 async function requireCredentials(credentials?: GitHubSyncCredentials): Promise<JournalGitCredentials> {
-  const resolvedCredentials = credentials ?? await loadGitHubSyncCredentials()
-
-  if (!resolvedCredentials?.token) {
-    throw new Error('GitHub token is required before syncing.')
+  if (credentials) {
+    return credentials
   }
 
-  return resolvedCredentials
+  const credentialState = await loadGitHubSyncCredentials()
+
+  if (credentialState.status === 'available') {
+    return credentialState.credentials
+  }
+
+  if (credentialState.status === 'corrupt') {
+    throw new Error(credentialState.message ?? 'GitHub token 无法读取，请重新保存。')
+  }
+
+  throw new Error('GitHub token is required before syncing.')
 }
 
 function withMobileAuthorDefaults(config: MobileGitSyncConfig): MobileGitSyncConfig {

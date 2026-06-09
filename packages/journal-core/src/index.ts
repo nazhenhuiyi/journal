@@ -16,6 +16,10 @@ export {
   serializeJournalMarkdownBody,
   serializeMurmurBlock,
 } from './serializeJournalMarkdown'
+export {
+  isFreshWeather,
+  isFreshWeatherForLocation,
+} from './weatherFreshness'
 export type {
   Annotation,
   AnnotationFile,

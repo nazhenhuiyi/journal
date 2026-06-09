@@ -107,6 +107,26 @@ describe('MarkdownPreviewPage', () => {
     expect(screen.queryByRole('textbox', { name: '日记正文' })).not.toBeInTheDocument()
   })
 
+  it('shows markdown diagnostics from the loaded journal', async () => {
+    const storedJournal = {
+      content: '---\ndate: 2026-04-28\n\n# 没有结束标记\n',
+      date: '2026-04-28',
+      fileName: '2026-04-28.md',
+      filePath: '/Users/zilin/.journal/2026-04-28.md',
+      updatedAt: null,
+    }
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveToday: vi.fn().mockResolvedValue(storedJournal),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    expect(await screen.findByText('Markdown 格式需要处理')).toBeInTheDocument()
+    expect(screen.getByText(/Front Matter 缺少结束标记/)).toBeInTheDocument()
+  })
+
   it('creates and saves a murmur from the writing panel', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 3, 28, 10, 12, 5))

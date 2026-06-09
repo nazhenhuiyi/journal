@@ -25,6 +25,7 @@ describe('journal settings', () => {
     const settings = await loadJournalSettings(journalDirectory)
 
     expect(settings.weatherLocation).toBe('')
+    expect(settings.settingsStatus).toBe('created')
     expect(settings.workingDirectory).toBe(journalDirectory)
     await expect(readFile(settings.settingsPath, 'utf8')).resolves.toContain('"weatherLocation": ""')
   })
@@ -39,9 +40,10 @@ describe('journal settings', () => {
     const settings = await loadJournalSettings(journalDirectory)
 
     expect(settings.weatherLocation).toBe('Shanghai')
+    expect(settings.settingsStatus).toBe('ready')
   })
 
-  it('repairs broken settings and rejects invalid saved values', async () => {
+  it('keeps broken settings intact until the user saves again', async () => {
     const journalDirectory = await createTemporaryJournalDirectory()
     const settingsPath = path.join(journalDirectory, 'settings.json')
 
@@ -50,6 +52,18 @@ describe('journal settings', () => {
     const settings = await loadJournalSettings(journalDirectory)
 
     expect(settings.weatherLocation).toBe('')
+    expect(settings.settingsStatus).toBe('corrupt')
+    await expect(readFile(settingsPath, 'utf8')).resolves.toBe('{broken')
+
+    await saveJournalSettings(journalDirectory, {
+      weatherLocation: '上海',
+    })
+    await expect(readFile(settingsPath, 'utf8')).resolves.toContain('"weatherLocation": "上海"')
+  })
+
+  it('rejects invalid saved values', async () => {
+    const journalDirectory = await createTemporaryJournalDirectory()
+
     await expect(saveJournalSettings(journalDirectory, {
       weatherLocation: '上海\n北京',
     })).rejects.toThrow('天气位置不能包含换行')

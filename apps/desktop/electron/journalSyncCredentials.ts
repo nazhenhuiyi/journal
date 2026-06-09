@@ -8,45 +8,110 @@ export type JournalGitSyncCredentials = {
   username?: string
 }
 
+export type JournalGitSyncCredentialStatus =
+  | 'available'
+  | 'corrupt'
+  | 'encryption-unavailable'
+  | 'missing'
+
+export type JournalGitSyncCredentialState =
+  | {
+      credentials: JournalGitSyncCredentials
+      status: 'available'
+    }
+  | {
+      message?: string
+      status: Exclude<JournalGitSyncCredentialStatus, 'available'>
+    }
+
 type StoredCredentialsFile = {
   encryptedPayload: string
   version: 1
 }
 
+type StoredCredentialsReadResult =
+  | {
+      status: 'available'
+      storedCredentials: StoredCredentialsFile
+    }
+  | {
+      message: string
+      status: 'corrupt'
+    }
+  | {
+      status: 'missing'
+    }
+
 const CREDENTIALS_FILE_NAME = 'sync-credentials.json'
 
 export async function hasJournalGitSyncCredentials(journalDirectory: string) {
-  return (await loadJournalGitSyncCredentials(journalDirectory).catch(() => null)) !== null
+  return (await inspectJournalGitSyncCredentials(journalDirectory)).status === 'available'
+}
+
+export async function inspectJournalGitSyncCredentials(
+  journalDirectory: string,
+): Promise<JournalGitSyncCredentialState> {
+  const storedCredentials = await readStoredCredentials(journalDirectory)
+
+  if (storedCredentials.status === 'missing') {
+    return { status: 'missing' }
+  }
+
+  if (storedCredentials.status === 'corrupt') {
+    return {
+      message: storedCredentials.message,
+      status: 'corrupt',
+    }
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return {
+      message: '系统加密存储不可用，无法读取 GitHub token。',
+      status: 'encryption-unavailable',
+    }
+  }
+
+  try {
+    const decryptedPayload = safeStorage.decryptString(
+      Buffer.from(storedCredentials.storedCredentials.encryptedPayload, 'base64'),
+    )
+    const credentials = parseCredentials(decryptedPayload)
+
+    if (!credentials) {
+      return {
+        message: 'GitHub token 文件内容无效，请重新保存 token。',
+        status: 'corrupt',
+      }
+    }
+
+    return {
+      credentials,
+      status: 'available',
+    }
+  } catch (error) {
+    return {
+      message: error instanceof Error
+        ? `GitHub token 无法解密：${error.message}`
+        : 'GitHub token 无法解密，请重新保存 token。',
+      status: 'corrupt',
+    }
+  }
 }
 
 export async function loadJournalGitSyncCredentials(
   journalDirectory: string,
 ): Promise<JournalGitSyncCredentials | null> {
-  const storedCredentials = await readStoredCredentials(journalDirectory)
+  const credentialState = await inspectJournalGitSyncCredentials(journalDirectory)
 
-  if (!storedCredentials) {
+  if (credentialState.status === 'available') {
+    return credentialState.credentials
+  }
+
+  if (credentialState.status === 'missing') {
     return null
   }
 
-  assertSafeStorageAvailable()
-
-  let credentials: JournalGitSyncCredentials | null = null
-
-  try {
-    const decryptedPayload = safeStorage.decryptString(
-      Buffer.from(storedCredentials.encryptedPayload, 'base64'),
-    )
-
-    credentials = parseCredentials(decryptedPayload)
-  } catch {
-    credentials = null
-  }
-
-  if (!credentials) {
-    await clearJournalGitSyncCredentials(journalDirectory)
-  }
-
-  return credentials
+  throw new Error(credentialState.message ?? getCredentialStatusMessage(credentialState.status))
 }
 
 export async function saveJournalGitSyncCredentials(
@@ -104,21 +169,21 @@ function getCredentialsFileName(journalDirectory: string) {
   return `${journalKey}-${CREDENTIALS_FILE_NAME}`
 }
 
-async function readStoredCredentials(journalDirectory: string) {
+async function readStoredCredentials(journalDirectory: string): Promise<StoredCredentialsReadResult> {
   const currentCredentials = await readStoredCredentialsFile(getCredentialsPath(journalDirectory))
 
-  if (currentCredentials) {
+  if (currentCredentials.status !== 'missing') {
     return currentCredentials
   }
 
   const legacyCredentialsPath = getLegacyCredentialsPath(journalDirectory)
   const legacyCredentials = await readStoredCredentialsFile(legacyCredentialsPath)
 
-  if (!legacyCredentials) {
-    return null
+  if (legacyCredentials.status !== 'available') {
+    return legacyCredentials
   }
 
-  await writeStoredCredentials(journalDirectory, legacyCredentials)
+  await writeStoredCredentials(journalDirectory, legacyCredentials.storedCredentials)
   await unlink(legacyCredentialsPath).catch((error: unknown) => {
     if (isNodeError(error, 'ENOENT')) {
       return
@@ -130,7 +195,7 @@ async function readStoredCredentials(journalDirectory: string) {
   return legacyCredentials
 }
 
-async function readStoredCredentialsFile(credentialsPath: string) {
+async function readStoredCredentialsFile(credentialsPath: string): Promise<StoredCredentialsReadResult> {
   const content = await readFile(credentialsPath, 'utf8').catch((error: unknown) => {
     if (isNodeError(error, 'ENOENT')) {
       return null
@@ -140,22 +205,33 @@ async function readStoredCredentialsFile(credentialsPath: string) {
   })
 
   if (content === null) {
-    return null
+    return { status: 'missing' } satisfies StoredCredentialsReadResult
   }
 
   try {
     const parsed = JSON.parse(content) as Partial<StoredCredentialsFile>
 
     if (parsed.version !== 1 || typeof parsed.encryptedPayload !== 'string') {
-      return null
+      return {
+        message: 'GitHub token 文件格式不正确，请重新保存 token。',
+        status: 'corrupt',
+      } satisfies StoredCredentialsReadResult
     }
 
     return {
-      encryptedPayload: parsed.encryptedPayload,
-      version: 1,
-    } satisfies StoredCredentialsFile
-  } catch {
-    return null
+      status: 'available',
+      storedCredentials: {
+        encryptedPayload: parsed.encryptedPayload,
+        version: 1,
+      },
+    } satisfies StoredCredentialsReadResult
+  } catch (error) {
+    return {
+      message: error instanceof Error
+        ? `GitHub token 文件无法解析：${error.message}`
+        : 'GitHub token 文件无法解析，请重新保存 token。',
+      status: 'corrupt',
+    } satisfies StoredCredentialsReadResult
   }
 }
 
@@ -208,6 +284,18 @@ function assertSafeStorageAvailable() {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('系统加密存储不可用，无法安全保存 GitHub token。')
   }
+}
+
+function getCredentialStatusMessage(status: Exclude<JournalGitSyncCredentialStatus, 'available'>) {
+  if (status === 'corrupt') {
+    return 'GitHub token 已损坏，请重新保存 token。'
+  }
+
+  if (status === 'encryption-unavailable') {
+    return '系统加密存储不可用，无法读取 GitHub token。'
+  }
+
+  return '请先保存 GitHub token。'
 }
 
 function isNodeError(error: unknown, code: string) {

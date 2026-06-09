@@ -13,8 +13,11 @@
     "dev:mobile": "npm --workspace @journal/mobile run start",
     "build": "npm run build:desktop",
     "build:desktop": "npm --workspace @journal/desktop run build",
-    "lint": "npm run lint:desktop",
+    "lint": "npm run lint:desktop && npm run lint:core && npm run lint:sync && npm run lint:mobile",
+    "lint:core": "npm --workspace @journal/core run lint",
     "lint:desktop": "npm --workspace @journal/desktop run lint",
+    "lint:mobile": "npm --workspace @journal/mobile run lint",
+    "lint:sync": "npm --workspace @journal/sync run lint",
     "preview": "npm --workspace @journal/desktop run preview",
     "test": "npm run test:desktop && npm run test:core && npm run test:sync && npm run test:mobile",
     "test:core": "npm --workspace @journal/core run test",
@@ -27,5 +30,12 @@
     "typecheck:desktop": "npm --workspace @journal/desktop run typecheck",
     "typecheck:mobile": "npm --workspace @journal/mobile run typecheck",
     "typecheck:sync": "npm --workspace @journal/sync run typecheck"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.4.26"
   }
 }

@@ -68,7 +68,10 @@ vi.mock('./expoGitFileSystem', () => ({
 }))
 vi.mock('./secureSyncCredentials', () => ({
   loadGitHubSyncCredentials: vi.fn(() => Promise.resolve({
-    token: 'stored-token',
+    credentials: {
+      token: 'stored-token',
+    },
+    status: 'available',
   })),
 }))
 

@@ -31,6 +31,8 @@ function getJournalSyncStore() {
 
 function SettingsPage() {
   const [dirtyPaths, setDirtyPaths] = useState<string[]>([])
+  const [credentialMessage, setCredentialMessage] = useState('')
+  const [credentialStatus, setCredentialStatus] = useState<JournalSyncStatus['credentialStatus']>('missing')
   const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
   const [isLoadingSyncSettings, setIsLoadingSyncSettings] = useState(true)
   const [isSavingSyncSettings, setIsSavingSyncSettings] = useState(false)
@@ -51,9 +53,7 @@ function SettingsPage() {
     },
   )
   const SyncStatusIcon = syncStatus.icon
-  const tokenHint = hasStoredSyncToken
-    ? 'Token 已保存，留空会继续使用原来的凭据。'
-    : '保存 Token 后才能访问私有仓库。'
+  const tokenHint = getTokenHint(credentialStatus, credentialMessage, hasStoredSyncToken)
   const disabled = isLoadingSyncSettings || isSavingSyncSettings || isSyncingNow
   const dirtyPathLabel = useMemo(() => {
     if (dirtyPaths.length === 0) {
@@ -109,6 +109,8 @@ function SettingsPage() {
   }, [])
 
   function applySyncStatus(status: JournalSyncStatus) {
+    setCredentialMessage(status.credentialMessage ?? '')
+    setCredentialStatus(status.credentialStatus)
     setDirtyPaths(status.dirtyPaths)
     setHasStoredSyncToken(status.hasCredentials)
     setRecentCommits(status.recentCommits)
@@ -194,6 +196,15 @@ function SettingsPage() {
           status: 'needs-auth',
         })
         setSyncMessage('请先填写仓库地址')
+        return
+      }
+
+      if (
+        savedStatus.credentialStatus === 'corrupt' ||
+        savedStatus.credentialStatus === 'encryption-unavailable'
+      ) {
+        setSyncSnapshot(createSyncSnapshotFromStatus(savedStatus))
+        setSyncMessage(savedStatus.credentialMessage ?? getCredentialStatusLabel(savedStatus.credentialStatus))
         return
       }
 
@@ -410,6 +421,14 @@ function SettingsPage() {
 }
 
 function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
+  if (status.credentialStatus === 'corrupt' || status.credentialStatus === 'encryption-unavailable') {
+    return {
+      ...initialSyncSnapshot,
+      lastError: status.credentialMessage ?? getCredentialStatusLabel(status.credentialStatus),
+      status: 'error',
+    }
+  }
+
   if (status.dirtyPaths.length > 0) {
     return {
       ...initialSyncSnapshot,
@@ -419,6 +438,34 @@ function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
   }
 
   return initialSyncSnapshot
+}
+
+function getTokenHint(
+  credentialStatus: JournalSyncStatus['credentialStatus'],
+  credentialMessage: string,
+  hasStoredSyncToken: boolean,
+) {
+  if (credentialStatus === 'corrupt' || credentialStatus === 'encryption-unavailable') {
+    return credentialMessage || getCredentialStatusLabel(credentialStatus)
+  }
+
+  if (hasStoredSyncToken) {
+    return 'Token 已保存，留空会继续使用原来的凭据。'
+  }
+
+  return '保存 Token 后才能访问私有仓库。'
+}
+
+function getCredentialStatusLabel(status: JournalSyncStatus['credentialStatus']) {
+  if (status === 'corrupt') {
+    return 'GitHub token 无法读取，请重新保存。'
+  }
+
+  if (status === 'encryption-unavailable') {
+    return '系统加密存储不可用，无法读取 GitHub token。'
+  }
+
+  return '请先保存 GitHub token。'
 }
 
 function getErrorMessage(error: unknown) {

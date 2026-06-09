@@ -34,7 +34,7 @@ describe('secure sync credentials', () => {
     )
   })
 
-  it('loads trimmed GitHub credentials and clears corrupt values', async () => {
+  it('loads trimmed GitHub credentials and reports corrupt values without clearing them', async () => {
     mockSecureStore.getItemAsync
       .mockResolvedValueOnce(JSON.stringify({
         token: '  ghp_secret  ',
@@ -45,13 +45,16 @@ describe('secure sync credentials', () => {
       }))
 
     await expect(loadGitHubSyncCredentials()).resolves.toEqual({
-      token: 'ghp_secret',
-      username: 'journal',
+      credentials: {
+        token: 'ghp_secret',
+        username: 'journal',
+      },
+      status: 'available',
     })
-    await expect(loadGitHubSyncCredentials()).resolves.toBeNull()
-    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(
-      'journal.githubSyncCredentials.v1',
-    )
+    await expect(loadGitHubSyncCredentials()).resolves.toMatchObject({
+      status: 'corrupt',
+    })
+    expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled()
   })
 
   it('stores and loads normalized repository settings', async () => {
@@ -74,8 +77,11 @@ describe('secure sync credentials', () => {
     }))
 
     await expect(loadGitHubSyncSettings()).resolves.toEqual({
-      branch: 'sync',
-      remoteUrl: 'https://github.com/example/journal-sync.git',
+      settings: {
+        branch: 'sync',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      status: 'available',
     })
   })
 
@@ -90,9 +96,9 @@ describe('secure sync credentials', () => {
       remoteUrl: 'https://token@github.com/example/journal-sync.git',
     }))
 
-    await expect(loadGitHubSyncSettings()).resolves.toBeNull()
-    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(
-      'journal.githubSyncSettings.v1',
-    )
+    await expect(loadGitHubSyncSettings()).resolves.toMatchObject({
+      status: 'corrupt',
+    })
+    expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled()
   })
 })

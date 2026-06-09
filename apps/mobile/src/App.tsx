@@ -1,7 +1,5 @@
-import { type ComponentProps, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ComponentProps, useCallback, useRef, useState } from 'react'
 import {
-  Alert,
-  AppState,
   Pressable,
   ScrollView,
   Text,
@@ -12,57 +10,30 @@ import { Ionicons } from '@expo/vector-icons'
 import type { MurmurBlock } from '@journal/core'
 import {
   getJournalSyncStatusPresentation,
-  JournalSyncCoordinator,
   type JournalSyncStatusTone,
-  type SyncOperationRequest,
   type SyncSnapshot,
 } from '@journal/sync'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
-  createMurmur,
-  getLocalDateKey,
-  listDailyJournals,
-  loadDailyJournal,
-  saveDailyJournal,
-  type MobileJournalRecord,
-  type SaveDailyJournalResult,
-} from './services/mobileJournalStore'
-import { shouldDeferBackgroundSyncForInput } from './services/inputStability'
-import {
-  getMobileGitSyncStatus,
-  loadGitHubSyncCredentials,
-  loadGitHubSyncSettings,
-  loadPendingMobileSyncPaths,
-  pullMobileJournalUpdatesFromGitHub,
-  saveGitHubSyncCredentials,
-  saveGitHubSyncSettings,
-  savePendingMobileSyncPaths,
-  syncMobileJournalWithGitHub,
-  type MobileGitSyncStatus,
-} from './services/sync'
+  useMobileJournal,
+  type MobileLocalSaveHandler,
+  type SaveState,
+} from './hooks/useMobileJournal'
+import { useMobileSync } from './hooks/useMobileSync'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
 import { cn } from './ui/cn'
-import { Input } from './ui/Input'
+import { JournalListPage } from './pages/JournalListPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { Screen } from './ui/Screen'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
-type SaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
-type SaveCurrentJournalOptions = {
-  scheduleSync?: boolean
-  showAlert?: boolean
-}
 type HeaderStatusTone = 'blue' | 'green' | 'plain' | 'soil'
 type HeaderStatus = {
   label: string
   tone: HeaderStatusTone
-}
-type JournalListRow = {
-  date: string
-  isToday: boolean
-  murmurCount: number
-  preview: string
 }
 type RootStackParamList = {
   Today: undefined
@@ -71,17 +42,9 @@ type RootStackParamList = {
   Settings: undefined
 }
 
-const dateRolloverCheckMs = 60_000
-const localSaveDebounceMs = 5_000
-const mobilePullIntervalMs = 30_000
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
-const initialSyncSnapshot: SyncSnapshot = {
-  lastError: null,
-  lastSyncedAt: null,
-  pendingReason: null,
-  status: 'idle',
-}
+
 type TodayFallbackNavigation = {
   canGoBack: () => boolean
   goBack: () => void
@@ -97,352 +60,71 @@ function returnToToday(navigation: TodayFallbackNavigation) {
   navigation.replace('Today')
 }
 
-function mergeChangedPaths(
-  first: readonly string[],
-  second: readonly string[],
-) {
-  return [...new Set([...first, ...second])].sort()
-}
-
-function logMobileSyncOperation(details: {
-  changedPathCount: number
-  collectDirtyPathsAfterSync: boolean
-  operation: SyncOperationRequest['operation']
-  trigger: SyncOperationRequest['trigger']
-}) {
-  console.info(`[journal-sync] mobile.operation ok 0ms ${JSON.stringify(details)}`)
-}
-
 export default function App() {
-  const [today, setToday] = useState(() => getLocalDateKey())
-  const [record, setRecord] = useState<MobileJournalRecord | null>(null)
-  const [longEntryMarkdown, setLongEntryMarkdown] = useState('')
-  const [murmurs, setMurmurs] = useState<MurmurBlock[]>([])
   const [murmurDraft, setMurmurDraft] = useState('')
-  const [saveState, setSaveState] = useState<SaveState>('loading')
-  const [hasLoadedSyncConfiguration, setHasLoadedSyncConfiguration] = useState(false)
-  const [syncBranch, setSyncBranch] = useState('main')
-  const [isSavingSyncConfiguration, setIsSavingSyncConfiguration] = useState(false)
-  const [isLoadingGitStatus, setIsLoadingGitStatus] = useState(false)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
-  const [gitStatusError, setGitStatusError] = useState<string | null>(null)
-  const [mobileGitStatus, setMobileGitStatus] = useState<MobileGitSyncStatus | null>(null)
-  const [syncMessage, setSyncMessage] = useState('')
-  const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
-  const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot>(initialSyncSnapshot)
-  const [syncTokenDraft, setSyncTokenDraft] = useState('')
-  const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
-  const journalVersionRef = useRef(0)
-  const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
-  const isLongEntryFocusedRef = useRef(false)
-  const journalContentRef = useRef({ longEntryMarkdown: '', murmurs: [] as MurmurBlock[] })
-  const lastLongEntryEditedAtRef = useRef(0)
-  const saveCurrentJournalRef = useRef<((options?: SaveCurrentJournalOptions) => Promise<SaveDailyJournalResult | null>) | null>(null)
-  const saveStateRef = useRef<SaveState>('loading')
-  const todayRef = useRef(today)
-  const syncConfigRef = useRef({
-    branch: 'main',
-    hasStoredSyncToken: false,
-    remoteUrl: '',
+  const onLocalSaveRef = useRef<MobileLocalSaveHandler | null>(null)
+  const {
+    addMurmur,
+    checkForDateRollover,
+    handleLongEntryChange,
+    isLongEntryFocusedRef,
+    isLongEntryInputUnstable,
+    longEntryMarkdown,
+    murmurs,
+    record,
+    reloadTodayFromDisk,
+    reloadTodayFromDiskIfChanged,
+    saveCurrentJournal,
+    saveCurrentJournalRef,
+    saveState,
+    saveStateRef,
+    today,
+  } = useMobileJournal({ onLocalSaveRef })
+  const {
+    gitStatusError,
+    handleSyncNow,
+    hasStoredSyncToken,
+    isLoadingGitStatus,
+    isSavingSyncConfiguration,
+    mobileGitStatus,
+    refreshMobileGitStatus,
+    saveSyncConfiguration,
+    setSyncBranch,
+    setSyncRemoteUrl,
+    setSyncTokenDraft,
+    syncBranch,
+    syncMessage,
+    syncRemoteUrl,
+    syncSnapshot,
+    syncTokenDraft,
+  } = useMobileSync({
+    checkForDateRollover,
+    isLongEntryInputUnstable,
+    onLocalSaveRef,
+    reloadTodayFromDisk,
+    reloadTodayFromDiskIfChanged,
+    saveCurrentJournalRef,
+    saveStateRef,
   })
-
-  const refreshMobileGitStatus = useCallback(async (input?: {
-    branch?: string
-    remoteUrl?: string
-  }) => {
-    const branch = input?.branch ?? syncConfigRef.current.branch
-    const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
-
-    setIsLoadingGitStatus(true)
-    setGitStatusError(null)
-
-    try {
-      const status = await getMobileGitSyncStatus({
-        branch: branch.trim() || 'main',
-        remoteUrl: remoteUrl.trim(),
-      })
-
-      setMobileGitStatus(status)
-      return status
-    } catch (error) {
-      console.error(error)
-      setGitStatusError(getErrorMessage(error))
-      return null
-    } finally {
-      setIsLoadingGitStatus(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    let isMounted = true
-    const loadingVersion = journalVersionRef.current
-
-    setSaveState('loading')
-
-    loadDailyJournal(today)
-      .then((loadedRecord) => {
-        if (!isMounted) {
-          return
-        }
-
-        setRecord(loadedRecord)
-
-        if (journalVersionRef.current === loadingVersion) {
-          setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-          setMurmurs(loadedRecord.murmurs)
-          setSaveState('idle')
-        } else {
-          setSaveState('dirty')
-        }
-      })
-      .catch((error) => {
-        console.error(error)
-
-        if (isMounted) {
-          setSaveState('error')
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [today])
-
-  useEffect(() => {
-    todayRef.current = today
-  }, [today])
-
-  useEffect(() => {
-    journalContentRef.current = {
-      longEntryMarkdown,
-      murmurs,
-    }
-  }, [longEntryMarkdown, murmurs])
-
-  useEffect(() => {
-    saveStateRef.current = saveState
-  }, [saveState])
-
-  useEffect(() => {
-    syncConfigRef.current = {
-      branch: syncBranch,
-      hasStoredSyncToken,
-      remoteUrl: syncRemoteUrl,
-    }
-  }, [hasStoredSyncToken, syncBranch, syncRemoteUrl])
-
-  const restorePendingPathsForSync = useCallback(async (input?: {
-    branch?: string
-    hasStoredSyncToken?: boolean
-    remoteUrl?: string
-  }) => {
-    const hasToken = input?.hasStoredSyncToken ?? syncConfigRef.current.hasStoredSyncToken
-    const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
-
-    if (!remoteUrl.trim() || !hasToken) {
-      return
-    }
-
-    try {
-      const pendingPaths = await loadPendingMobileSyncPaths()
-
-      coordinatorRef.current?.markDirtyWorktree(pendingPaths)
-    } catch (error) {
-      console.error(error)
-    }
-  }, [])
-
-  const resumeConfiguredSync = useCallback(async () => {
-    if (!syncConfigRef.current.remoteUrl.trim() || !syncConfigRef.current.hasStoredSyncToken) {
-      return
-    }
-
-    await restorePendingPathsForSync()
-    await coordinatorRef.current?.notifyForeground()
-  }, [restorePendingPathsForSync])
-
-  useEffect(() => {
-    let isMounted = true
-
-    Promise.all([
-      loadGitHubSyncSettings(),
-      loadGitHubSyncCredentials(),
-    ])
-      .then(([settings, credentials]) => {
-        if (!isMounted) {
-          return
-        }
-
-        const nextBranch = settings?.branch ?? 'main'
-        const nextRemoteUrl = settings?.remoteUrl ?? ''
-        const hasToken = credentials !== null
-
-        syncConfigRef.current = {
-          branch: nextBranch,
-          hasStoredSyncToken: hasToken,
-          remoteUrl: nextRemoteUrl,
-        }
-
-        setSyncBranch(nextBranch)
-        setSyncRemoteUrl(nextRemoteUrl)
-        setHasStoredSyncToken(hasToken)
-        setSyncSnapshot((currentSnapshot) => ({
-          ...currentSnapshot,
-          status: 'idle',
-        }))
-        setHasLoadedSyncConfiguration(true)
-      })
-      .catch((error) => {
-        console.error(error)
-
-        if (isMounted) {
-          setSyncSnapshot((currentSnapshot) => ({
-            ...currentSnapshot,
-            lastError: '同步配置读取失败',
-            status: 'error',
-          }))
-          setSyncMessage('同步配置读取失败')
-          setHasLoadedSyncConfiguration(true)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
   const statusLabel = getStatusLabel(saveState, record?.updatedAt ?? null)
+  const markdownDiagnostics = record?.diagnostics ?? []
+  const markdownErrorDiagnostics = markdownDiagnostics.filter((diagnostic) => diagnostic.severity === 'error')
+  const markdownDiagnosticSummary = formatMarkdownDiagnosticSummary(markdownErrorDiagnostics.length)
   const syncStatusLabel = getSyncStatusLabel(
     syncSnapshot,
     syncMessage,
     hasStoredSyncToken,
     syncRemoteUrl,
   )
-
-  const markJournalDirty = useCallback(() => {
-    journalVersionRef.current += 1
-    setSaveState((currentSaveState) => {
-      if (currentSaveState === 'loading' || currentSaveState === 'saving') {
-        return currentSaveState
-      }
-
-      return 'dirty'
-    })
-  }, [])
-
-  const handleLongEntryChange = useCallback((value: string) => {
-    lastLongEntryEditedAtRef.current = Date.now()
-    markJournalDirty()
-    setLongEntryMarkdown(value)
-  }, [markJournalDirty])
-
-  const saveCurrentJournal = useCallback(async (
-    nextLongEntryMarkdown = longEntryMarkdown,
-    nextMurmurs = murmurs,
-    options: SaveCurrentJournalOptions = {},
-  ) => {
-    const savingVersion = journalVersionRef.current
-    const shouldScheduleSync = options.scheduleSync ?? true
-    const shouldShowAlert = options.showAlert ?? true
-
-    setSaveState('saving')
-
-    try {
-      const savedRecord = await saveDailyJournal({
-        date: today,
-        longEntryMarkdown: nextLongEntryMarkdown,
-        murmurs: nextMurmurs,
-      })
-
-      setRecord(savedRecord)
-
-      if (journalVersionRef.current === savingVersion) {
-        if (savedRecord.longEntryMarkdown !== journalContentRef.current.longEntryMarkdown) {
-          setLongEntryMarkdown(savedRecord.longEntryMarkdown)
-        }
-
-        if (nextMurmurs !== journalContentRef.current.murmurs) {
-          setMurmurs(savedRecord.murmurs)
-        }
-
-        setSaveState('saved')
-      } else {
-        setSaveState('dirty')
-      }
-
-      if (shouldScheduleSync && savedRecord.didWrite) {
-        coordinatorRef.current?.markLocalSave(savedRecord.changedPaths)
-      }
-
-      return savedRecord
-    } catch (error) {
-      console.error(error)
-      setSaveState('error')
-
-      if (shouldShowAlert) {
-        Alert.alert('保存失败', '本地日记没有写入成功。')
-      }
-
-      return null
-    }
-  }, [longEntryMarkdown, murmurs, today])
-
-  useEffect(() => {
-    saveCurrentJournalRef.current = (options?: SaveCurrentJournalOptions) => {
-      const latestContent = journalContentRef.current
-
-      return saveCurrentJournal(
-        latestContent.longEntryMarkdown,
-        latestContent.murmurs,
-        options,
-      )
-    }
-  }, [saveCurrentJournal])
-
-  const checkForDateRollover = useCallback(async () => {
-    const nextToday = getLocalDateKey()
-
-    if (nextToday === todayRef.current || saveStateRef.current === 'saving') {
-      return false
-    }
-
-    if (saveStateRef.current === 'dirty') {
-      const savedRecord = await saveCurrentJournalRef.current?.({
-        showAlert: false,
-      })
-
-      if (!savedRecord) {
-        return false
-      }
-    }
-
-    setSaveState('loading')
-    todayRef.current = nextToday
-    setToday(nextToday)
-
-    return true
-  }, [])
-
-  useEffect(() => {
-    if (saveState !== 'dirty') {
-      return undefined
-    }
-
-    const timeoutId = setTimeout(() => {
-      void saveCurrentJournal()
-    }, localSaveDebounceMs)
-
-    return () => clearTimeout(timeoutId)
-  }, [saveCurrentJournal, saveState])
-
-  const isLongEntryInputUnstable = useCallback(() => (
-    shouldDeferBackgroundSyncForInput({
-      isFocused: isLongEntryFocusedRef.current,
-      lastEditedAt: lastLongEntryEditedAtRef.current,
-      now: Date.now(),
-      stableWindowMs: localSaveDebounceMs,
-    })
-  ), [])
+  const isBusy = saveState === 'saving' || saveState === 'loading'
+  const isSyncBusy = isSavingSyncConfiguration || syncSnapshot.status === 'syncing'
+  const headerStatus = getHeaderStatus(
+    saveState,
+    syncSnapshot,
+    hasStoredSyncToken,
+    syncRemoteUrl,
+  )
 
   const openMurmurPanel = useCallback(() => {
     setIsMurmurPanelVisible(true)
@@ -457,394 +139,13 @@ export default function App() {
   }, [])
 
   const handleAddMurmur = useCallback(async () => {
-    const body = murmurDraft.trim()
+    const didAdd = await addMurmur(murmurDraft)
 
-    if (!body) {
-      return
-    }
-
-    const previousMurmurs = murmurs
-    const nextMurmurs = [...previousMurmurs, createMurmur(today, body)]
-
-    journalVersionRef.current += 1
-    setMurmurs(nextMurmurs)
-    const savedRecord = await saveCurrentJournal(longEntryMarkdown, nextMurmurs)
-
-    if (savedRecord) {
+    if (didAdd) {
       setMurmurDraft('')
-    } else {
-      journalVersionRef.current += 1
-      setMurmurs(previousMurmurs)
     }
-  }, [longEntryMarkdown, murmurDraft, murmurs, saveCurrentJournal, today])
+  }, [addMurmur, murmurDraft])
 
-  const saveSyncConfiguration = useCallback(async () => {
-    const remoteUrl = syncRemoteUrl.trim()
-    const branch = syncBranch.trim() || 'main'
-    const token = syncTokenDraft.trim()
-
-    if (!remoteUrl) {
-      Alert.alert('缺少仓库地址', '请先填写 GitHub 私有仓库地址。')
-      return false
-    }
-
-    setIsSavingSyncConfiguration(true)
-
-    try {
-      await saveGitHubSyncSettings({ branch, remoteUrl })
-
-      if (token) {
-        await saveGitHubSyncCredentials({ token })
-        setSyncTokenDraft('')
-        setHasStoredSyncToken(true)
-      }
-
-      syncConfigRef.current = {
-        branch,
-        hasStoredSyncToken: token ? true : hasStoredSyncToken,
-        remoteUrl,
-      }
-      setSyncBranch(branch)
-      setSyncRemoteUrl(remoteUrl)
-      setSyncMessage('同步配置已保存')
-      setSyncSnapshot((currentSnapshot) => ({
-        ...currentSnapshot,
-        lastError: null,
-        status: 'idle',
-      }))
-      await refreshMobileGitStatus({ branch, remoteUrl })
-      void resumeConfiguredSync()
-      return true
-    } catch (error) {
-      console.error(error)
-      setSyncSnapshot((currentSnapshot) => ({
-        ...currentSnapshot,
-        lastError: '同步配置保存失败',
-        status: 'error',
-      }))
-      setSyncMessage('同步配置保存失败')
-      Alert.alert('保存失败', '同步配置没有保存成功。')
-      return false
-    } finally {
-      setIsSavingSyncConfiguration(false)
-    }
-  }, [
-    hasStoredSyncToken,
-    refreshMobileGitStatus,
-    resumeConfiguredSync,
-    syncBranch,
-    syncRemoteUrl,
-    syncTokenDraft,
-  ])
-
-  const reloadTodayFromDisk = useCallback(async () => {
-    const loadedRecord = await loadDailyJournal(today)
-
-    journalVersionRef.current += 1
-    setRecord(loadedRecord)
-    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-    setMurmurs(loadedRecord.murmurs)
-    setSaveState('idle')
-  }, [today])
-
-  const reloadTodayFromDiskIfChanged = useCallback(async () => {
-    const loadedRecord = await loadDailyJournal(today)
-    const currentContent = journalContentRef.current
-
-    if (
-      loadedRecord.longEntryMarkdown === currentContent.longEntryMarkdown &&
-      JSON.stringify(loadedRecord.murmurs) === JSON.stringify(currentContent.murmurs)
-    ) {
-      return false
-    }
-
-    journalVersionRef.current += 1
-    setRecord(loadedRecord)
-    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-    setMurmurs(loadedRecord.murmurs)
-    setSaveState('idle')
-
-    return true
-  }, [today])
-
-  const runMobileSyncOperation = useCallback(async ({ changedPaths, operation, trigger }: SyncOperationRequest) => {
-    const branch = syncConfigRef.current.branch.trim() || 'main'
-    const remoteUrl = syncConfigRef.current.remoteUrl.trim()
-    let operationChangedPaths = [...(changedPaths ?? [])]
-
-    if (!remoteUrl) {
-      return {
-        message: '还没有配置同步仓库',
-        needsAuth: true,
-      }
-    }
-
-    if (!syncConfigRef.current.hasStoredSyncToken) {
-      return {
-        message: '还没有保存 GitHub token',
-        needsAuth: true,
-      }
-    }
-
-    if (operation === 'pull') {
-      if (saveStateRef.current === 'dirty' || saveStateRef.current === 'saving') {
-        return {
-          message: '正在编辑，稍后检查远端更新',
-          skipped: true,
-        }
-      }
-
-      const result = await pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
-        collectDirtyPathsAfterSync: false,
-      })
-      let didReloadFromDisk = false
-
-      if (result.dirtyPathsAfterPull.length > 0) {
-        coordinatorRef.current?.markDirtyWorktree(result.dirtyPathsAfterPull)
-
-        return {
-          changed: false,
-          message: '本地更改等待同步',
-        }
-      }
-
-      if (canApplyRemoteUpdates(saveStateRef.current)) {
-        didReloadFromDisk = await reloadTodayFromDiskIfChanged()
-      }
-
-      return {
-        changed: result.updatedWorktree || didReloadFromDisk,
-      }
-    }
-
-    if (saveStateRef.current === 'saving') {
-      return {
-        message: '本地保存还没有完成，稍后同步',
-        skipped: true,
-      }
-    }
-
-    if (saveStateRef.current === 'dirty') {
-      if (trigger === 'save-idle' && isLongEntryInputUnstable()) {
-        return {
-          message: '正在编辑，稍后同步',
-          skipped: true,
-        }
-      }
-
-      const savedRecord = await saveCurrentJournalRef.current?.({
-        scheduleSync: false,
-        showAlert: operation === 'full',
-      })
-
-      if (!savedRecord) {
-        return {
-          message: '本地保存还没有完成，稍后同步',
-          skipped: true,
-        }
-      }
-
-      if (savedRecord.didWrite) {
-        operationChangedPaths = mergeChangedPaths(operationChangedPaths, savedRecord.changedPaths)
-        coordinatorRef.current?.recordPendingChangedPaths(savedRecord.changedPaths)
-      }
-    }
-
-    const collectDirtyPathsAfterSync = operationChangedPaths.length === 0
-    logMobileSyncOperation({
-      changedPathCount: operationChangedPaths.length,
-      collectDirtyPathsAfterSync,
-      operation,
-      trigger,
-    })
-    const result = await syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
-      changedPaths: operationChangedPaths.length > 0 ? operationChangedPaths : undefined,
-      collectDirtyPathsAfterSync,
-    })
-
-    if (
-      canApplyRemoteUpdates(saveStateRef.current)
-    ) {
-      await reloadTodayFromDisk()
-    }
-
-    return {
-      changed: Boolean(result.localCommitOid || result.mergeResult || result.retriedPush),
-    }
-  }, [isLongEntryInputUnstable, reloadTodayFromDisk, reloadTodayFromDiskIfChanged])
-
-  useEffect(() => {
-    const coordinator = new JournalSyncCoordinator({
-      onSnapshot: (snapshot) => {
-        setSyncSnapshot(snapshot)
-
-        if (snapshot.status !== 'synced') {
-          setSyncMessage('')
-        }
-      },
-      onPendingChangedPathsChange: (pendingPaths) => {
-        void savePendingMobileSyncPaths(pendingPaths).catch((error) => {
-          console.error(error)
-        })
-      },
-      pullIntervalMs: mobilePullIntervalMs,
-      runOperation: runMobileSyncOperation,
-    })
-
-    coordinatorRef.current = coordinator
-
-    return () => {
-      coordinator.dispose()
-
-      if (coordinatorRef.current === coordinator) {
-        coordinatorRef.current = null
-      }
-    }
-  }, [runMobileSyncOperation])
-
-  useEffect(() => {
-    const coordinator = coordinatorRef.current
-
-    if (!coordinator || !hasLoadedSyncConfiguration) {
-      return undefined
-    }
-
-    if (syncRemoteUrl.trim() && hasStoredSyncToken) {
-      let isCancelled = false
-
-      void restorePendingPathsForSync().then(() => {
-        if (!isCancelled) {
-          coordinator.startPulling()
-        }
-      })
-
-      return () => {
-        isCancelled = true
-        coordinator.stopPulling()
-      }
-    }
-
-    coordinator.stopPulling()
-
-    return undefined
-  }, [hasLoadedSyncConfiguration, hasStoredSyncToken, restorePendingPathsForSync, syncRemoteUrl])
-
-  const flushBeforeLeavingApp = useCallback(async () => {
-    if (saveStateRef.current === 'dirty') {
-      const savedRecord = await saveCurrentJournalRef.current?.({
-        scheduleSync: false,
-        showAlert: false,
-      })
-
-      if (savedRecord?.didWrite) {
-        coordinatorRef.current?.markLocalSave(savedRecord.changedPaths)
-      }
-    }
-
-    if (isLongEntryInputUnstable()) {
-      return
-    }
-
-    await coordinatorRef.current?.flushBeforeLeave()
-  }, [isLongEntryInputUnstable])
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      void checkForDateRollover().catch((error) => {
-        console.error(error)
-      })
-    }, dateRolloverCheckMs)
-
-    return () => clearInterval(intervalId)
-  }, [checkForDateRollover])
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        void checkForDateRollover()
-          .catch((error) => {
-            console.error(error)
-          })
-          .finally(() => {
-            void resumeConfiguredSync()
-          })
-      } else if (nextState === 'background' || nextState === 'inactive') {
-        void flushBeforeLeavingApp()
-      }
-    })
-
-    return () => subscription.remove()
-  }, [checkForDateRollover, flushBeforeLeavingApp, resumeConfiguredSync])
-
-  const handleSyncNow = useCallback(async () => {
-    const remoteUrl = syncRemoteUrl.trim()
-    const branch = syncBranch.trim() || 'main'
-    const token = syncTokenDraft.trim()
-
-    if (!remoteUrl) {
-      Alert.alert('缺少仓库地址', '请先填写 GitHub 私有仓库地址。')
-      return
-    }
-
-    if (!token && !hasStoredSyncToken) {
-      Alert.alert('缺少 GitHub token', '请先填写并保存 GitHub token。')
-      return
-    }
-
-    try {
-      await saveGitHubSyncSettings({ branch, remoteUrl })
-
-      if (token) {
-        await saveGitHubSyncCredentials({ token })
-        setSyncTokenDraft('')
-        setHasStoredSyncToken(true)
-      }
-
-      syncConfigRef.current = {
-        remoteUrl,
-        branch,
-        hasStoredSyncToken: token ? true : hasStoredSyncToken,
-      }
-
-      setSyncBranch(branch)
-      setSyncRemoteUrl(remoteUrl)
-      setSyncMessage('')
-
-      const snapshot = await coordinatorRef.current?.syncNow()
-
-      if (snapshot?.status === 'error' || snapshot?.status === 'retrying' || snapshot?.status === 'needs-auth') {
-        Alert.alert('同步失败', snapshot.lastError ?? '同步过程中出现未知错误。')
-      } else {
-        setSyncMessage('同步完成')
-      }
-
-      await refreshMobileGitStatus({ branch, remoteUrl })
-    } catch (error) {
-      console.error(error)
-      setSyncSnapshot((currentSnapshot) => ({
-        ...currentSnapshot,
-        lastError: getErrorMessage(error),
-        status: 'error',
-      }))
-      setSyncMessage('同步失败')
-      Alert.alert('同步失败', getErrorMessage(error))
-    }
-  }, [
-    hasStoredSyncToken,
-    refreshMobileGitStatus,
-    syncBranch,
-    syncRemoteUrl,
-    syncTokenDraft,
-  ])
-
-  const isBusy = saveState === 'saving' || saveState === 'loading'
-  const isSyncBusy = isSavingSyncConfiguration || syncSnapshot.status === 'syncing'
-  const headerStatus = getHeaderStatus(
-    saveState,
-    syncSnapshot,
-    hasStoredSyncToken,
-    syncRemoteUrl,
-  )
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -904,6 +205,11 @@ export default function App() {
                       onPress={openMurmurPanel}
                     />
                   </View>
+                  {markdownDiagnosticSummary ? (
+                    <Text className="mb-4 text-sm leading-5 text-soil">
+                      {markdownDiagnosticSummary}
+                    </Text>
+                  ) : null}
                   <TextInput
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -1034,6 +340,7 @@ export default function App() {
               isSyncBusy={isSyncBusy}
               gitStatus={mobileGitStatus}
               gitStatusError={gitStatusError}
+              markdownDiagnosticSummary={markdownDiagnosticSummary}
               murmursCount={murmurs.length}
               onBack={() => returnToToday(navigation)}
               onRefreshGitStatus={refreshMobileGitStatus}
@@ -1129,450 +436,6 @@ function HeaderIconButton({
   )
 }
 
-function PageShell({
-  children,
-  icon,
-  onBack,
-  title,
-}: {
-  children: ReactNode
-  icon: IconName
-  onBack: () => void
-  title: string
-}) {
-  return (
-    <Screen>
-      <View className="flex-1 px-5 pb-5 pt-4">
-        <View className="mb-5 flex-row items-center gap-3">
-          <Pressable
-            accessibilityLabel="返回今日"
-            accessibilityRole="button"
-            className="h-9 w-9 items-center justify-center rounded-full bg-cloud"
-            onPress={onBack}
-          >
-            <Ionicons color="#254f43" name="chevron-back" size={22} />
-          </Pressable>
-          <View className="flex-row items-center gap-2">
-            <View className="h-8 w-8 items-center justify-center rounded-lg bg-cloud">
-              <Ionicons color="#254f43" name={icon} size={18} />
-            </View>
-            <Text className="text-lg font-semibold text-ink">{title}</Text>
-          </View>
-        </View>
-        {children}
-      </View>
-    </Screen>
-  )
-}
-
-function JournalListPage({
-  longEntryMarkdown,
-  murmurCount,
-  onBack,
-  today,
-}: {
-  longEntryMarkdown: string
-  murmurCount: number
-  onBack: () => void
-  today: string
-}) {
-  const [records, setRecords] = useState<MobileJournalRecord[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [didLoadFail, setDidLoadFail] = useState(false)
-  const rows = createJournalListRows({
-    currentLongEntryMarkdown: longEntryMarkdown,
-    currentMurmurCount: murmurCount,
-    records,
-    today,
-  })
-
-  useEffect(() => {
-    let isMounted = true
-
-    setIsLoading(true)
-    setDidLoadFail(false)
-
-    listDailyJournals()
-      .then((loadedRecords) => {
-        if (!isMounted) {
-          return
-        }
-
-        setRecords(loadedRecords)
-      })
-      .catch((error) => {
-        console.error(error)
-
-        if (isMounted) {
-          setDidLoadFail(true)
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [today])
-
-  return (
-    <PageShell icon="calendar-outline" onBack={onBack} title="日记列表">
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-        <View className="gap-3">
-          {isLoading ? (
-            <Text className="px-1 text-sm font-medium text-mossMuted">正在打开日记列表</Text>
-          ) : null}
-
-          {didLoadFail ? (
-            <Text className="px-1 text-sm font-medium text-soil">日记列表读取失败</Text>
-          ) : null}
-
-          {!isLoading && !didLoadFail && rows.length === 0 ? (
-            <View className="rounded-lg border border-reed bg-paper px-4 py-4">
-              <Text className="text-sm leading-5 text-mossMuted">还没有写下内容</Text>
-            </View>
-          ) : null}
-
-          {rows.map((row) => (
-            <View key={row.date} className="rounded-lg border border-reed bg-paper px-4 py-4">
-              <View className="mb-3 flex-row items-center justify-between gap-3">
-                <Text className="text-base font-semibold text-ink">{row.isToday ? '今天' : formatCompactDate(row.date)}</Text>
-                <Text className="text-sm font-medium text-mossMuted">{formatPaperDateLine(row.date)}</Text>
-              </View>
-              <Text className="text-sm leading-5 text-mossMuted" numberOfLines={3}>
-                {row.preview || (row.murmurCount > 0 ? `${row.murmurCount} 条碎碎念` : '还没有写下内容')}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-    </PageShell>
-  )
-}
-
-function createJournalListRows({
-  currentLongEntryMarkdown,
-  currentMurmurCount,
-  records,
-  today,
-}: {
-  currentLongEntryMarkdown: string
-  currentMurmurCount: number
-  records: MobileJournalRecord[]
-  today: string
-}): JournalListRow[] {
-  const rows = records.map((record) => ({
-    date: record.date,
-    isToday: record.date === today,
-    murmurCount: record.murmurs.length,
-    preview: record.longEntryMarkdown.trim(),
-  }))
-  const todayRow = rows.find((row) => row.date === today)
-
-  if (todayRow) {
-    todayRow.murmurCount = currentMurmurCount
-    todayRow.preview = currentLongEntryMarkdown.trim()
-  } else if (currentLongEntryMarkdown.trim() || currentMurmurCount > 0) {
-    rows.unshift({
-      date: today,
-      isToday: true,
-      murmurCount: currentMurmurCount,
-      preview: currentLongEntryMarkdown.trim(),
-    })
-  }
-
-  return rows.sort((first, second) => second.date.localeCompare(first.date))
-}
-
-function ReviewPage({
-  longEntryMarkdown,
-  murmurCount,
-  onBack,
-}: {
-  longEntryMarkdown: string
-  murmurCount: number
-  onBack: () => void
-}) {
-  const trimmedEntry = longEntryMarkdown.trim()
-
-  return (
-    <PageShell icon="sparkles-outline" onBack={onBack} title="回顾">
-      <View className="gap-3">
-        <View className="rounded-lg border border-reed bg-paper px-4 py-4">
-          <Text className="mb-3 text-base font-semibold text-ink">今天</Text>
-          <View className="flex-row gap-3">
-            <View className="flex-1 rounded-lg bg-cloud px-3 py-3">
-              <Text className="text-xs font-medium text-mossMuted">长日记</Text>
-              <Text className="mt-1 text-lg font-semibold text-moss">{trimmedEntry.length} 字</Text>
-            </View>
-            <View className="flex-1 rounded-lg bg-cloud px-3 py-3">
-              <Text className="text-xs font-medium text-mossMuted">碎碎念</Text>
-              <Text className="mt-1 text-lg font-semibold text-moss">{murmurCount} 条</Text>
-            </View>
-          </View>
-        </View>
-        <Text className="px-1 text-sm leading-5 text-mossMuted">
-          回顾会从已有日记里慢慢长出来，先把今天留下来就好。
-        </Text>
-      </View>
-    </PageShell>
-  )
-}
-
-function SettingsPage({
-  gitStatus,
-  gitStatusError,
-  hasStoredSyncToken,
-  isBusy,
-  isLoadingGitStatus,
-  isSavingSyncConfiguration,
-  isSyncBusy,
-  murmursCount,
-  onBack,
-  onRefreshGitStatus,
-  onSaveCurrent,
-  onSaveSyncConfiguration,
-  onSyncNow,
-  saveState,
-  setSyncBranch,
-  setSyncRemoteUrl,
-  setSyncTokenDraft,
-  statusLabel,
-  syncBranch,
-  syncRemoteUrl,
-  syncSnapshot,
-  syncStatusLabel,
-  syncTokenDraft,
-}: {
-  gitStatus: MobileGitSyncStatus | null
-  gitStatusError: string | null
-  hasStoredSyncToken: boolean
-  isBusy: boolean
-  isLoadingGitStatus: boolean
-  isSavingSyncConfiguration: boolean
-  isSyncBusy: boolean
-  murmursCount: number
-  onBack: () => void
-  onRefreshGitStatus: () => Promise<unknown>
-  onSaveCurrent: () => void
-  onSaveSyncConfiguration: () => Promise<unknown>
-  onSyncNow: () => Promise<unknown>
-  saveState: SaveState
-  setSyncBranch: (value: string) => void
-  setSyncRemoteUrl: (value: string) => void
-  setSyncTokenDraft: (value: string) => void
-  statusLabel: string
-  syncBranch: string
-  syncRemoteUrl: string
-  syncSnapshot: SyncSnapshot
-  syncStatusLabel: string
-  syncTokenDraft: string
-}) {
-  useEffect(() => {
-    void onRefreshGitStatus()
-  }, [onRefreshGitStatus])
-
-  return (
-    <PageShell icon="settings-outline" onBack={onBack} title="设置">
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="gap-5">
-          <View className="gap-3">
-            <DetailRow
-              icon="save-outline"
-              label="本地保存"
-              value={statusLabel}
-            />
-            <DetailRow
-              icon="sync-outline"
-              label="远端同步"
-              value={syncStatusLabel}
-            />
-            <DetailRow
-              icon="document-text-outline"
-              label="本地格式"
-              value="Markdown"
-            />
-            <DetailRow
-              icon="chatbubble-ellipses-outline"
-              label="碎碎念"
-              value={`${murmursCount} 条`}
-            />
-            <Button
-              disabled={isBusy}
-              icon="save-outline"
-              loading={saveState === 'saving'}
-              onPress={onSaveCurrent}
-              variant="secondary"
-            >
-              保存当前
-            </Button>
-          </View>
-
-          <MobileGitStatusPanel
-            error={gitStatusError}
-            isLoading={isLoadingGitStatus}
-            onRefresh={onRefreshGitStatus}
-            status={gitStatus}
-          />
-
-          <View className="h-px bg-reed" />
-
-          <View className="gap-3">
-            <Input
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onChangeText={setSyncRemoteUrl}
-              placeholder="https://github.com/you/journal-sync.git"
-              value={syncRemoteUrl}
-            />
-            <Input
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setSyncBranch}
-              placeholder="main"
-              value={syncBranch}
-            />
-            <View className="gap-1">
-              <Input
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={setSyncTokenDraft}
-                placeholder={hasStoredSyncToken ? 'Token 已保存，留空不改' : 'GitHub token'}
-                secureTextEntry
-                value={syncTokenDraft}
-              />
-              {hasStoredSyncToken ? (
-                <Text className="px-1 text-xs leading-5 text-mossMuted">
-                  出于安全不会显示明文；粘贴新 token 后保存配置会替换。
-                </Text>
-              ) : null}
-            </View>
-            <View className="flex-row gap-3">
-              <Button
-                className="flex-1"
-                disabled={isSyncBusy}
-                icon="key-outline"
-                loading={isSavingSyncConfiguration}
-                onPress={() => void onSaveSyncConfiguration()}
-                variant="secondary"
-              >
-                保存配置
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={isSyncBusy}
-                icon="sync-outline"
-                loading={syncSnapshot.status === 'syncing'}
-                onPress={() => void onSyncNow()}
-              >
-                立即同步
-              </Button>
-            </View>
-            {syncSnapshot.lastError ? (
-              <Text className="text-sm leading-5 text-soil">{syncSnapshot.lastError}</Text>
-            ) : null}
-          </View>
-        </View>
-      </ScrollView>
-    </PageShell>
-  )
-}
-
-function MobileGitStatusPanel({
-  error,
-  isLoading,
-  onRefresh,
-  status,
-}: {
-  error: string | null
-  isLoading: boolean
-  onRefresh: () => Promise<unknown>
-  status: MobileGitSyncStatus | null
-}) {
-  const dirtyPaths = status?.dirtyPaths ?? []
-  const recentCommits = status?.recentCommits ?? []
-
-  return (
-    <View className="gap-4 rounded-lg border border-reed bg-paper px-4 py-4">
-      <View className="flex-row items-center justify-between gap-3">
-        <View className="min-w-0">
-          <Text className="text-base font-semibold text-ink">Git 状态</Text>
-          <Text className="mt-1 text-xs font-medium text-mossMuted">
-            {status?.hasRepository ? status.branch : '还没有本地仓库'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="刷新 Git 状态"
-          accessibilityRole="button"
-          className="h-9 w-9 items-center justify-center rounded-lg bg-cloud"
-          disabled={isLoading}
-          onPress={() => void onRefresh()}
-          style={({ pressed }) => ({
-            opacity: pressed || isLoading ? 0.62 : 1,
-          })}
-        >
-          <Ionicons color="#254f43" name="refresh-outline" size={18} />
-        </Pressable>
-      </View>
-
-      {isLoading ? (
-        <Text className="text-sm leading-5 text-mossMuted">正在读取 Git 状态...</Text>
-      ) : null}
-
-      {error ? (
-        <Text className="text-sm leading-5 text-soil">{error}</Text>
-      ) : null}
-
-      <View className="gap-2">
-        <Text className="text-xs font-semibold text-sage">最近 commit</Text>
-        {recentCommits.length > 0 ? (
-          <View className="gap-2">
-            {recentCommits.map((commit) => (
-              <View className="border-t border-reed pt-2" key={commit.oid}>
-                <View className="flex-row flex-wrap items-center gap-2">
-                  <Text className="font-mono text-xs font-semibold text-moss">
-                    {commit.shortOid}
-                  </Text>
-                  <Text className="text-xs font-medium text-mossMuted">
-                    {formatGitCommitTime(commit.committedAt)}
-                  </Text>
-                </View>
-                <Text className="mt-1 text-sm leading-5 text-ink">
-                  {commit.message}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text className="text-sm leading-5 text-mossMuted">还没有本地 commit。</Text>
-        )}
-      </View>
-
-      <View className="gap-2">
-        <Text className="text-xs font-semibold text-sage">未提交文件</Text>
-        {dirtyPaths.length > 0 ? (
-          <View className="gap-2">
-            {dirtyPaths.map((filepath) => (
-              <Text className="font-mono text-xs leading-5 text-ink" key={filepath} selectable>
-                {filepath}
-              </Text>
-            ))}
-          </View>
-        ) : (
-          <Text className="text-sm leading-5 text-mossMuted">没有未提交文件。</Text>
-        )}
-      </View>
-    </View>
-  )
-}
-
 function InlineStatusButton({
   onPress,
   status,
@@ -1599,26 +462,6 @@ function InlineStatusButton({
   )
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: IconName
-  label: string
-  value: ReactNode
-}) {
-  return (
-    <View className="flex-row items-center gap-3">
-      <View className="h-9 w-9 items-center justify-center rounded-lg bg-cloud">
-        <Ionicons color="#254f43" name={icon} size={18} />
-      </View>
-      <Text className="text-sm font-medium text-mossMuted">{label}</Text>
-      <Text className="ml-auto shrink text-right text-sm font-semibold text-ink">{value}</Text>
-    </View>
-  )
-}
-
 function MurmurItem({ murmur }: { murmur: MurmurBlock }) {
   return (
     <View
@@ -1629,16 +472,6 @@ function MurmurItem({ murmur }: { murmur: MurmurBlock }) {
       <Text className="text-base leading-6 text-ink">{murmur.body}</Text>
     </View>
   )
-}
-
-function formatCompactDate(dateKey: string) {
-  const [, month, day] = dateKey.split('-')
-
-  if (!month || !day) {
-    return dateKey
-  }
-
-  return `${Number(month)}月${Number(day)}日`
 }
 
 function formatPaperDateLine(dateKey: string) {
@@ -1664,25 +497,6 @@ function formatTime(value: string) {
   return date.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
-  })
-}
-
-function formatGitCommitTime(value: string | null) {
-  if (!value) {
-    return '时间未知'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString('zh-CN', {
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: '2-digit',
   })
 }
 
@@ -1751,10 +565,6 @@ function getSyncStatusLabel(
   ).label
 }
 
-function canApplyRemoteUpdates(saveState: SaveState) {
-  return saveState !== 'dirty' && saveState !== 'saving'
-}
-
 function getHeaderTone(tone: JournalSyncStatusTone): HeaderStatusTone {
   if (tone === 'danger' || tone === 'warning') {
     return 'soil'
@@ -1771,8 +581,12 @@ function getHeaderTone(tone: JournalSyncStatusTone): HeaderStatusTone {
   return 'plain'
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+function formatMarkdownDiagnosticSummary(errorCount: number) {
+  if (errorCount === 0) {
+    return ''
+  }
+
+  return errorCount === 1 ? 'Markdown 有 1 个格式问题' : `Markdown 有 ${errorCount} 个格式问题`
 }
 
 const headerStatusTextClasses: Record<HeaderStatusTone, string> = {

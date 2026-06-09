@@ -47,12 +47,14 @@ describe('journal sync desktop adapter', () => {
 
     expect(status).toMatchObject({
       branch: 'main',
+      credentialStatus: 'available',
       hasCredentials: true,
       hasRepository: true,
       remoteUrl: 'https://github.com/example/journal-sync.git',
     })
     await expect(loadJournalGitSyncStatus(journalDirectory)).resolves.toMatchObject({
       hasCredentials: true,
+      credentialStatus: 'available',
       remoteUrl: 'https://github.com/example/journal-sync.git',
     })
   })
@@ -66,6 +68,7 @@ describe('journal sync desktop adapter', () => {
 
     await expect(loadJournalGitSyncStatus(journalDirectory)).resolves.toMatchObject({
       hasCredentials: false,
+      credentialStatus: 'missing',
       remoteUrl: '',
     })
   })

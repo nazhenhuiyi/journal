@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import annotationTargetsEntry from '../__fixtures__/annotation-targets.md?raw'
 import basicEntry from '../__fixtures__/basic-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
-import { parseJournalMarkdown } from '../parseJournalMarkdown'
-import { serializeJournalFrontMatter } from '../frontMatter'
-import { serializeJournalMarkdownBody } from '../serializeJournalMarkdown'
+import {
+  parseJournalMarkdown,
+  serializeJournalFrontMatter,
+  serializeJournalMarkdownBody,
+} from '..'
 
 describe('parseJournalMarkdown', () => {
   it('normalizes front matter and removes it from long entry markdown', () => {

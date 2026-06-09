@@ -1309,6 +1309,8 @@ body {
 }
 
 .journal-stage {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
   background:
@@ -1318,8 +1320,38 @@ body {
     rgba(255, 250, 240, 0.34);
 }
 
+.journal-diagnostics-banner {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+  margin: 0.8rem auto 0;
+  width: min(calc(100% - 2.5rem), 76rem);
+  border: 1px solid rgba(143, 63, 48, 0.18);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem;
+  color: #8f3f30;
+  background: rgba(255, 235, 229, 0.7);
+}
+
+.journal-diagnostics-banner strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.journal-diagnostics-banner ul {
+  display: grid;
+  gap: 0.18rem;
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .journal-writing-panel {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(0, 54rem) 22rem;
   align-items: flex-start;
   justify-content: center;
@@ -1348,6 +1380,7 @@ body {
 }
 
 .journal-stage .markdown-preview {
+  flex: 1 1 auto;
   padding: 4.6rem 4rem 4rem;
 }
 

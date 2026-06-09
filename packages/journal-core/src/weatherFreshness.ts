@@ -1,4 +1,4 @@
-import type { DayFrontMatter } from '@journal/core'
+import type { DayFrontMatter } from './types'
 
 export function isFreshWeather(weather: DayFrontMatter['weather'], date: string) {
   return Boolean(weather?.text && getWeatherUpdatedLocalDateKey(weather.updatedAt) === date)

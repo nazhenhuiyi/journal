@@ -6,8 +6,7 @@ import gfmEntry from '../__fixtures__/gfm-entry.md?raw'
 import murmurEntry from '../__fixtures__/murmur-entry.md?raw'
 import unsafeHtmlEntry from '../__fixtures__/unsafe-html.md?raw'
 import { createDomRangesForSourceRange, createTextSelector } from '../../annotations'
-import { parseJournalMarkdown } from '../parseJournalMarkdown'
-import { renderJournalMarkdown } from '../renderJournalMarkdown'
+import { parseJournalMarkdown, renderJournalMarkdown } from '..'
 import type { Annotation, TextSelector } from '../../annotations'
 
 describe('renderJournalMarkdown', () => {

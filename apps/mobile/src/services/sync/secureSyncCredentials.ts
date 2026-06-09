@@ -6,10 +6,30 @@ export type GitHubSyncCredentials = {
   username?: string
 }
 
+export type GitHubSyncCredentialsState =
+  | {
+      credentials: GitHubSyncCredentials
+      status: 'available'
+    }
+  | {
+      message?: string
+      status: 'corrupt' | 'missing'
+    }
+
 export type GitHubSyncSettings = {
   branch: string
   remoteUrl: string
 }
+
+export type GitHubSyncSettingsState =
+  | {
+      settings: GitHubSyncSettings
+      status: 'available'
+    }
+  | {
+      message?: string
+      status: 'corrupt' | 'missing'
+    }
 
 const credentialsKey = 'journal.githubSyncCredentials.v1'
 const settingsKey = 'journal.githubSyncSettings.v1'
@@ -21,21 +41,26 @@ export async function saveGitHubSyncCredentials(credentials: GitHubSyncCredentia
   }))
 }
 
-export async function loadGitHubSyncCredentials(): Promise<GitHubSyncCredentials | null> {
+export async function loadGitHubSyncCredentials(): Promise<GitHubSyncCredentialsState> {
   const raw = await SecureStore.getItemAsync(credentialsKey)
 
   if (!raw) {
-    return null
+    return { status: 'missing' }
   }
 
   const parsed = parseCredentials(raw)
 
   if (!parsed) {
-    await clearGitHubSyncCredentials()
-    return null
+    return {
+      message: 'GitHub token 无法读取，请重新保存。',
+      status: 'corrupt',
+    }
   }
 
-  return parsed
+  return {
+    credentials: parsed,
+    status: 'available',
+  }
 }
 
 export async function clearGitHubSyncCredentials() {
@@ -51,21 +76,26 @@ export async function saveGitHubSyncSettings(settings: GitHubSyncSettings) {
   }))
 }
 
-export async function loadGitHubSyncSettings(): Promise<GitHubSyncSettings | null> {
+export async function loadGitHubSyncSettings(): Promise<GitHubSyncSettingsState> {
   const raw = await SecureStore.getItemAsync(settingsKey)
 
   if (!raw) {
-    return null
+    return { status: 'missing' }
   }
 
   const parsed = parseSettings(raw)
 
   if (!parsed) {
-    await clearGitHubSyncSettings()
-    return null
+    return {
+      message: '同步配置无法读取，请重新保存仓库地址。',
+      status: 'corrupt',
+    }
   }
 
-  return parsed
+  return {
+    settings: parsed,
+    status: 'available',
+  }
 }
 
 export async function clearGitHubSyncSettings() {

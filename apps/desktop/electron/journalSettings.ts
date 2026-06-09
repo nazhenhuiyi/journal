@@ -10,7 +10,9 @@ export type JournalSettings = {
 }
 
 export type JournalSettingsFile = JournalSettings & {
+  settingsMessage?: string
   workingDirectory: string
+  settingsStatus: JournalSettingsStatus
   settingsPath: string
 }
 
@@ -22,6 +24,20 @@ export type SaveJournalSettingsPayload = {
 
 const SETTINGS_VERSION = 1
 const SETTINGS_FILE_NAME = 'settings.json'
+export type JournalSettingsStatus = 'corrupt' | 'created' | 'ready'
+
+type ReadJsonFileResult =
+  | {
+      status: 'corrupt'
+      message: string
+    }
+  | {
+      status: 'missing'
+    }
+  | {
+      status: 'ok'
+      value: unknown
+    }
 
 export const defaultJournalSettings: JournalSettings = {
   syncBranch: 'main',
@@ -36,16 +52,33 @@ export function getJournalSettingsPath(journalDirectory: string) {
 
 export async function loadJournalSettings(journalDirectory: string): Promise<JournalSettingsFile> {
   const settingsPath = getJournalSettingsPath(journalDirectory)
-  const settings = normalizeJournalSettings(await readJsonFile(settingsPath))
+  const readResult = await readJsonFile(settingsPath)
+
+  if (readResult.status === 'corrupt' || (readResult.status === 'ok' && !isRecord(readResult.value))) {
+    return createJournalSettingsFile(
+      journalDirectory,
+      settingsPath,
+      defaultJournalSettings,
+      'corrupt',
+      readResult.status === 'corrupt'
+        ? readResult.message
+        : '设置文件格式不正确，请重新保存设置。',
+    )
+  }
+
+  const settings = readResult.status === 'ok'
+    ? normalizeJournalSettings(readResult.value)
+    : defaultJournalSettings
 
   await mkdir(journalDirectory, { recursive: true })
   await writeJsonFile(settingsPath, settings)
 
-  return {
-    ...settings,
-    workingDirectory: journalDirectory,
+  return createJournalSettingsFile(
+    journalDirectory,
     settingsPath,
-  }
+    settings,
+    readResult.status === 'missing' ? 'created' : 'ready',
+  )
 }
 
 export async function saveJournalSettings(
@@ -53,17 +86,16 @@ export async function saveJournalSettings(
   payload: unknown,
 ): Promise<JournalSettingsFile> {
   const settingsPath = getJournalSettingsPath(journalDirectory)
-  const currentSettings = normalizeJournalSettings(await readJsonFile(settingsPath))
+  const readResult = await readJsonFile(settingsPath)
+  const currentSettings = readResult.status === 'ok' && isRecord(readResult.value)
+    ? normalizeJournalSettings(readResult.value)
+    : defaultJournalSettings
   const settings = normalizeSavePayload(payload, currentSettings)
 
   await mkdir(journalDirectory, { recursive: true })
   await writeJsonFile(settingsPath, settings)
 
-  return {
-    ...settings,
-    workingDirectory: journalDirectory,
-    settingsPath,
-  }
+  return createJournalSettingsFile(journalDirectory, settingsPath, settings, 'ready')
 }
 
 function normalizeJournalSettings(value: unknown): JournalSettings {
@@ -165,7 +197,7 @@ function normalizeWeatherLocation(value: unknown) {
   return weatherLocation
 }
 
-async function readJsonFile(filePath: string): Promise<unknown> {
+async function readJsonFile(filePath: string): Promise<ReadJsonFileResult> {
   const content = await readFile(filePath, 'utf8').catch((error: unknown) => {
     if (isNodeError(error, 'ENOENT')) {
       return null
@@ -175,13 +207,37 @@ async function readJsonFile(filePath: string): Promise<unknown> {
   })
 
   if (content === null) {
-    return null
+    return { status: 'missing' }
   }
 
   try {
-    return JSON.parse(content) as unknown
-  } catch {
-    return null
+    return {
+      status: 'ok',
+      value: JSON.parse(content) as unknown,
+    }
+  } catch (error) {
+    return {
+      status: 'corrupt',
+      message: error instanceof Error
+        ? `设置文件无法解析：${error.message}`
+        : '设置文件无法解析。',
+    }
+  }
+}
+
+function createJournalSettingsFile(
+  journalDirectory: string,
+  settingsPath: string,
+  settings: JournalSettings,
+  settingsStatus: JournalSettingsStatus,
+  settingsMessage?: string,
+): JournalSettingsFile {
+  return {
+    ...settings,
+    settingsMessage,
+    settingsPath,
+    settingsStatus,
+    workingDirectory: journalDirectory,
   }
 }
 
