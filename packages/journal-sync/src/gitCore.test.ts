@@ -324,6 +324,45 @@ describe('journal git sync core', () => {
   })
 
   it('includes the latest three local commits in sync status', async () => {
+    mockFs.promises.readFile.mockResolvedValue([
+      '0000000000000000000000000000000000000000 3333333333333333333333333333333333333333 Journal <journal@example.invalid> 1780800000 +0000\tcommit (initial): First sync',
+      '3333333333333333333333333333333333333333 2222222222222222222222222222222222222222 Journal <journal@example.invalid> 1780900000 +0000\tcommit: Previous sync',
+      '2222222222222222222222222222222222222222 1111111111111111111111111111111111111111 Journal <journal@example.invalid> 1780987200 +0000\tcommit: Latest sync',
+    ].join('\n'))
+
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    }, credentials)
+
+    expect(mockFs.promises.readFile).toHaveBeenCalledWith(
+      '/journal/.git/logs/refs/heads/main',
+      { encoding: 'utf8' },
+    )
+    expect(mockGit.log).not.toHaveBeenCalled()
+    expect(mockGit.readCommit).not.toHaveBeenCalled()
+    expect(status.recentCommits).toEqual([
+      {
+        committedAt: new Date(1_780_987_200 * 1000).toISOString(),
+        message: 'Latest sync',
+        oid: '1111111111111111111111111111111111111111',
+        shortOid: '1111111',
+      },
+      {
+        committedAt: new Date(1_780_900_000 * 1000).toISOString(),
+        message: 'Previous sync',
+        oid: '2222222222222222222222222222222222222222',
+        shortOid: '2222222',
+      },
+      {
+        committedAt: new Date(1_780_800_000 * 1000).toISOString(),
+        message: 'First sync',
+        oid: '3333333333333333333333333333333333333333',
+        shortOid: '3333333',
+      },
+    ])
+  })
+
+  it('falls back to commit objects when the local reflog is unavailable', async () => {
     const commitChain = [
       {
         commit: {

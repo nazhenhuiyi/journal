@@ -12,7 +12,6 @@ import {
 import {
   renderJournalMarkdown,
 } from '../domain/markdown'
-import { brand } from '../brand'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
 import JournalWeatherHeader from './markdown-preview/JournalWeatherHeader'
@@ -204,7 +203,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     updateLastSavedJournalSnapshot,
   })
   const isReviewing = journalMode === 'review'
-  const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
   const parsedJournalEntry = useMemo(() => parseJournalMarkdown(journalMarkdown), [journalMarkdown])
@@ -624,9 +622,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             <div className="journal-paper">
               <div className="journal-paper-meta">
                 <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
-                <span className="journal-storage-label" title={journalFile?.filePath}>
-                  {journalStorageLabel}
-                </span>
               </div>
               <JournalMarkdownEditor
                 onChange={handleJournalMarkdownChange}

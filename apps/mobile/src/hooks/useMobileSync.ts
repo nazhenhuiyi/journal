@@ -81,9 +81,11 @@ export function useMobileSync({
 
   const refreshMobileGitStatus = useCallback(async (input?: {
     branch?: string
+    includeDirtyPaths?: boolean
     remoteUrl?: string
   }) => {
     const branch = input?.branch ?? syncConfigRef.current.branch
+    const includeDirtyPaths = input?.includeDirtyPaths ?? false
     const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
 
     setIsLoadingGitStatus(true)
@@ -93,6 +95,8 @@ export function useMobileSync({
       const status = await getMobileGitSyncStatus({
         branch: branch.trim() || 'main',
         remoteUrl: remoteUrl.trim(),
+      }, {
+        includeDirtyPaths,
       })
 
       setMobileGitStatus(status)

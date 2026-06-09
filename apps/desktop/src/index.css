@@ -30,6 +30,7 @@ body {
 }
 
 :root {
+  --journal-chrome-background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
   --journal-line-soft: color-mix(in srgb, var(--color-border) 38%, transparent);
   --journal-line: color-mix(in srgb, var(--color-border) 58%, transparent);
   --journal-line-control: color-mix(in srgb, var(--color-border) 72%, transparent);
@@ -77,7 +78,7 @@ body {
 .journal-topbar {
   border-bottom: 1px solid var(--journal-line-soft);
   padding-inline: clamp(2.35rem, 4.2vw, 4.35rem);
-  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
+  background: var(--journal-chrome-background);
 }
 
 .journal-topbar-actions {
@@ -140,9 +141,9 @@ body {
 }
 
 .journal-sync-button.is-success {
-  border-color: color-mix(in srgb, var(--color-success) 16%, transparent);
-  color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  border-color: var(--journal-line-control);
+  color: rgba(47, 38, 31, 0.64);
+  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
 }
 
 .journal-sync-button.is-pending {
@@ -646,7 +647,7 @@ body {
   gap: 1.45rem;
   border-right: 1px solid var(--journal-line-soft);
   padding: 2.35rem 0.65rem 1.45rem;
-  background: color-mix(in srgb, var(--color-surface-muted) 72%, var(--color-surface));
+  background: var(--journal-chrome-background);
 }
 
 .journal-menu::after {
@@ -662,8 +663,8 @@ body {
   justify-content: center;
   border: 0;
   border-radius: 8px;
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary-soft) 34%, transparent);
+  color: rgba(47, 38, 31, 0.62);
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
 }
 
 .journal-menu-brand {
@@ -736,25 +737,25 @@ body {
 }
 
 .journal-menu :is(a, button).is-active {
-  border-color: var(--journal-line-active);
+  border-color: var(--journal-line-control);
   color: var(--color-foreground);
-  background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-surface) 82%, var(--color-background));
 }
 
 .journal-menu-list > :nth-child(1) svg {
-  color: var(--color-primary);
+  color: rgba(47, 38, 31, 0.58);
 }
 
 .journal-menu-list > :nth-child(2) svg {
-  color: var(--color-success);
+  color: rgba(47, 38, 31, 0.58);
 }
 
 .journal-menu-list > :nth-child(3) svg {
-  color: var(--color-warning);
+  color: rgba(47, 38, 31, 0.58);
 }
 
 .journal-menu :is(a, button).is-active svg {
-  color: var(--color-primary);
+  color: var(--color-foreground);
 }
 
 .journal-menu :is(a, button):hover svg,
@@ -1305,25 +1306,12 @@ body {
 .journal-paper-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   border-bottom: 1px solid var(--journal-line-soft);
   padding-bottom: 0.62rem;
   color: rgba(47, 38, 31, 0.56);
   font-size: 0.78rem;
-}
-
-.journal-paper-meta > span {
-  flex: 0 0 auto;
-}
-
-.journal-storage-label {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .journal-editor {
@@ -1396,8 +1384,8 @@ body {
   border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.5rem 0.68rem;
-  color: var(--color-primary);
-  background: rgba(255, 253, 244, 0.76);
+  color: rgba(47, 38, 31, 0.66);
+  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
   cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
@@ -1409,21 +1397,21 @@ body {
 }
 
 .journal-murmur-panel button:hover {
-  border-color: var(--journal-line-active-strong);
-  color: var(--color-primary-hover);
-  background: color-mix(in srgb, var(--color-primary-soft) 48%, var(--color-surface));
+  border-color: var(--journal-line-control);
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background));
 }
 
 .journal-murmur-panel-header > button {
-  border-color: var(--journal-line-active);
-  color: var(--color-primary);
+  border-color: var(--journal-line-control);
+  color: rgba(47, 38, 31, 0.68);
   background: var(--color-surface);
   box-shadow: none;
 }
 
 .journal-murmur-panel-header > button:hover {
-  border-color: var(--journal-line-active-strong);
-  background: color-mix(in srgb, var(--color-primary-soft) 62%, var(--color-surface));
+  border-color: var(--journal-line-control);
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background));
 }
 
 .journal-murmur-panel button:disabled {
@@ -1457,9 +1445,9 @@ body {
 
 .journal-murmur-list button.is-active,
 .journal-murmur-list button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--color-success) 20%, transparent);
-  color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  border-color: var(--journal-line-control);
+  color: var(--color-foreground);
+  background: color-mix(in srgb, var(--color-surface) 86%, var(--color-background));
 }
 
 .journal-murmur-form {
@@ -1504,7 +1492,7 @@ body {
 
 .journal-murmur-actions button:first-child {
   flex: 1;
-  color: var(--color-success);
+  color: rgba(47, 38, 31, 0.66);
 }
 
 .journal-murmur-actions button:last-child,

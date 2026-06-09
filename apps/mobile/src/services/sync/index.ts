@@ -31,6 +31,7 @@ export {
   type MobileGitOperationOptions,
   type MobileGitSyncResult,
   type MobileGitSyncStatus,
+  type MobileGitSyncStatusOptions,
 } from './mobileGitSync'
 export {
   loadPendingMobileSyncPaths,

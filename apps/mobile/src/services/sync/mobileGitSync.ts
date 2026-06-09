@@ -17,6 +17,7 @@ import {
   type JournalGitSyncConfig,
   type JournalGitSyncResult,
   type JournalGitSyncStatus,
+  type JournalGitSyncStatusOptions,
   type JournalGitTrace,
 } from '@journal/sync'
 import { ensureJournalWorktreeDirectory } from '../mobileJournalStore'
@@ -29,6 +30,7 @@ import {
 export type MobileGitSyncConfig = JournalGitSyncConfig
 export type MobileGitOperationOptions = JournalGitOperationOptions
 export type MobileGitSyncStatus = JournalGitSyncStatus
+export type MobileGitSyncStatusOptions = JournalGitSyncStatusOptions
 export type MobileGitSyncResult = JournalGitSyncResult
 export type MobileGitPushResult = JournalGitPushResult
 export type MobileGitPullResult = JournalGitPullResult
@@ -39,6 +41,7 @@ const gitHttpRequestTimeoutMs = 30_000
 
 export async function getMobileGitSyncStatus(
   config: MobileGitSyncConfig = {},
+  options: MobileGitSyncStatusOptions = {},
 ): Promise<MobileGitSyncStatus> {
   const runtime = await createMobileGitRuntime()
   const credentialState = await loadGitHubSyncCredentials()
@@ -47,6 +50,7 @@ export async function getMobileGitSyncStatus(
     runtime,
     withMobileAuthorDefaults(config),
     credentialState.status === 'available' ? credentialState.credentials : null,
+    options,
   )
 }
 

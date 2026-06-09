@@ -39,6 +39,7 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     log: vi.fn(),
     merge: vi.fn(),
     push: vi.fn(),
+    readCommit: vi.fn(),
     readObject: vi.fn(),
     remove: vi.fn(),
     resolveRef: vi.fn(),
@@ -123,6 +124,19 @@ describe('mobile git sync', () => {
         },
       },
     })
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => ({
+      commit: {
+        author: {},
+        committer: {
+          timestamp: 1_780_987_200,
+        },
+        message: 'Mobile sync',
+        parent: [],
+        tree: `tree-${oid}`,
+      },
+      oid,
+      payload: '',
+    }))
     mockGit.readObject.mockImplementation(async ({ filepath, oid }: { filepath: string, oid: string }) => ({
       format: 'content',
       object: new Uint8Array(),
@@ -148,6 +162,7 @@ describe('mobile git sync', () => {
     mockFs.promises.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), {
       code: 'ENOENT',
     }))
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
 
     const status = await initMobileGitSyncRepository({
       branch: 'main',

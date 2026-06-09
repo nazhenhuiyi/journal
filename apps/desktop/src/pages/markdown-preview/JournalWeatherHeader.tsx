@@ -1,4 +1,3 @@
-import { weatherPack } from '../../assets/theme-packs/weather'
 import type { DayFrontMatter } from '@journal/core'
 
 export type WeatherStatus = 'idle' | 'loading' | 'ready' | 'failed'
@@ -11,11 +10,10 @@ type JournalWeatherHeaderProps = {
 
 const previewClasses = {
   root: [
-    'grid grid-cols-[3.3rem_minmax(9rem,0.8fr)_minmax(26rem,1fr)] items-center gap-[1.05rem]',
+    'grid grid-cols-[minmax(9rem,0.8fr)_minmax(26rem,1fr)] items-center gap-[1.05rem]',
     'mx-[1.05rem] mb-0 mt-[0.8rem] min-h-[4.6rem] py-[0.62rem] pl-[0.65rem] pr-[0.8rem]',
     'rounded-[10px] border border-[var(--journal-line)] bg-surface text-[rgba(47,38,31,0.72)]',
   ].join(' '),
-  image: 'h-[3.1rem] w-[3.1rem] object-contain',
   copy: 'flex min-w-0 flex-col gap-[0.12rem]',
   summary: 'overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.78rem] text-[rgba(47,38,31,0.58)]',
   temperature: 'font-display text-[1.36rem] font-[650] leading-[1.1] text-foreground',
@@ -30,7 +28,6 @@ const writingClasses = {
     'flex min-w-0 flex-1 items-center justify-start gap-[0.55rem]',
     'border-0 bg-transparent text-[rgba(47,38,31,0.5)] shadow-none',
   ].join(' '),
-  image: 'h-[0.98rem] w-[0.98rem] flex-none object-contain opacity-[0.58] [filter:none]',
   copy: 'flex min-w-0 flex-none flex-row items-baseline gap-[0.34rem]',
   summary: 'max-w-[10rem] overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
   temperature: 'flex-none font-sans text-[0.76rem] font-[560] leading-none text-[rgba(122,79,50,0.58)]',
@@ -48,7 +45,6 @@ function JournalWeatherHeader({
 }: JournalWeatherHeaderProps) {
   const weather = frontMatter.weather
   const locationLabel = formatLocationLabel(frontMatter.location)
-  const weatherImage = getWeatherImage(weather?.text)
   const classes = variant === 'writing' ? writingClasses : previewClasses
   const weatherDetails = [
     { label: '体感', value: formatTemperature(weather?.feelsLike) },
@@ -59,7 +55,6 @@ function JournalWeatherHeader({
 
   return (
     <section aria-label="今日天气" className={classes.root}>
-      <img alt="" aria-hidden="true" className={classes.image} src={weatherImage} />
       <div className={classes.copy}>
         <span className={classes.summary}>{weather?.text ?? getWeatherStatusLabel(status)}</span>
         <strong className={classes.temperature}>{formatTemperature(weather?.temperature)}</strong>
@@ -118,41 +113,6 @@ function getWeatherStatusLabel(status: WeatherStatus) {
   }
 
   return '今日天气'
-}
-
-function getWeatherImage(weatherText: string | undefined) {
-  const normalizedText = weatherText ?? ''
-  const item = weatherPack.items.find((weatherItem) => {
-    const searchableText = [weatherItem.label, ...weatherItem.keywords].join(' ')
-
-    return searchableText.includes(normalizedText) || normalizedText.includes(weatherItem.label)
-  })
-
-  if (item) {
-    return item.image
-  }
-
-  if (/雷|暴/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.thunder')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雨|淋|阵雨/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.rain')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雪|冰/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.snow')?.image ?? weatherPack.previewImage
-  }
-
-  if (/雾|霾|阴/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.fog')?.image ?? weatherPack.previewImage
-  }
-
-  if (/风/.test(normalizedText)) {
-    return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.wind')?.image ?? weatherPack.previewImage
-  }
-
-  return weatherPack.items.find((weatherItem) => weatherItem.id === 'weather.sunny')?.image ?? weatherPack.previewImage
 }
 
 export default JournalWeatherHeader

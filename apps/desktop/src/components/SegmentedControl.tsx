@@ -39,7 +39,7 @@ function SegmentedControl<T extends string>({
               'cursor-pointer text-muted-fg transition-[background-color,color] duration-200 ease-out',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               !isActive && 'hover:bg-surface hover:text-foreground',
-              isActive && 'bg-surface text-primary',
+              isActive && 'bg-surface text-foreground',
             )}
             key={option.value}
             onClick={() => onChange(option.value)}

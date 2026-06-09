@@ -68,6 +68,11 @@ export type JournalGitSyncStatus = {
   worktreeDirectory: string
 }
 
+export type JournalGitSyncStatusOptions = {
+  includeDirtyPaths?: boolean
+  includeRecentCommits?: boolean
+}
+
 export type JournalGitSyncResult = {
   dirtyPathsAfterSync: string[]
   fetchResult: FetchResult | null
@@ -159,7 +164,10 @@ export async function getJournalGitSyncStatus(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig = {},
   credentials: JournalGitCredentials | null = null,
+  options: JournalGitSyncStatusOptions = {},
 ): Promise<JournalGitSyncStatus> {
+  const includeDirtyPaths = options.includeDirtyPaths ?? true
+  const includeRecentCommits = options.includeRecentCommits ?? true
   const configuredBranch = getBranchName(config.branch ?? defaultBranch)
   const hasRepository = await traceGitStep(runtime, 'repo.exists', () => hasGitRepository(runtime))
   const branch = hasRepository
@@ -168,8 +176,12 @@ export async function getJournalGitSyncStatus(
   const remoteUrl = hasRepository
     ? await getRemoteUrl(runtime, config.remote ?? defaultRemote)
     : config.remoteUrl ?? null
-  const dirtyPaths = hasRepository ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths') : []
-  const recentCommits = hasRepository ? await getRecentCommits(runtime) : []
+  const dirtyPaths = hasRepository && includeDirtyPaths
+    ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths')
+    : []
+  const recentCommits = hasRepository && includeRecentCommits
+    ? await getRecentCommits(runtime, branch)
+    : []
 
   return {
     branch,
@@ -1189,8 +1201,20 @@ async function getDirtyTrackedPaths(runtime: JournalGitRuntime, traceName = 'sta
 
 async function getRecentCommits(
   runtime: JournalGitRuntime,
+  branch: string,
   depth = 3,
 ): Promise<JournalGitRecentCommit[]> {
+  const reflogCommits = await getRecentCommitsFromReflog(runtime, branch, depth)
+
+  if (reflogCommits.length > 0) {
+    await traceGitStep(runtime, 'status.recentCommits', async () => reflogCommits, {
+      commits: reflogCommits.length,
+      source: 'reflog',
+    })
+
+    return reflogCommits
+  }
+
   try {
     const commits = await traceGitStep(
       runtime,
@@ -1224,14 +1248,13 @@ async function getRecentCommits(
     )
 
     return commits.map(({ commit, oid }) => {
-      const message = commit.message.trim().split(/\r?\n/, 1)[0] || '(no message)'
       const timestamp = commit.committer?.timestamp
 
       return {
         committedAt: typeof timestamp === 'number'
           ? new Date(timestamp * 1000).toISOString()
           : null,
-        message,
+        message: normalizeRecentCommitMessage(commit.message),
         oid,
         shortOid: oid.slice(0, 7),
       }
@@ -1239,6 +1262,105 @@ async function getRecentCommits(
   } catch {
     return []
   }
+}
+
+async function getRecentCommitsFromReflog(
+  runtime: JournalGitRuntime,
+  branch: string,
+  depth: number,
+): Promise<JournalGitRecentCommit[]> {
+  const readFile = (runtime.fs as unknown as PromiseGitFileSystem).promises.readFile
+  const reflogPath = getLocalBranchReflogPath(runtime, branch)
+
+  if (!readFile || !reflogPath) {
+    return []
+  }
+
+  try {
+    const contents = await readFile(reflogPath, { encoding: 'utf8' })
+    const text = typeof contents === 'string'
+      ? contents
+      : new TextDecoder().decode(contents)
+    const seenOids = new Set<string>()
+    const commits: JournalGitRecentCommit[] = []
+
+    for (const line of text.split(/\r?\n/).reverse()) {
+      if (!line.trim()) {
+        continue
+      }
+
+      const commit = parseReflogCommitLine(line)
+
+      if (!commit || seenOids.has(commit.oid)) {
+        continue
+      }
+
+      seenOids.add(commit.oid)
+      commits.push(commit)
+
+      if (commits.length >= depth) {
+        break
+      }
+    }
+
+    return commits
+  } catch {
+    return []
+  }
+}
+
+function parseReflogCommitLine(line: string): JournalGitRecentCommit | null {
+  const [meta, rawMessage = ''] = line.split('\t', 2)
+  const fields = meta.trim().split(/\s+/)
+  const oid = fields[1]
+  const timestamp = Number(fields.at(-2))
+
+  if (!oid || !/^[0-9a-f]{40}$/i.test(oid) || /^0+$/.test(oid)) {
+    return null
+  }
+
+  return {
+    committedAt: Number.isFinite(timestamp)
+      ? new Date(timestamp * 1000).toISOString()
+      : null,
+    message: normalizeReflogMessage(rawMessage),
+    oid,
+    shortOid: oid.slice(0, 7),
+  }
+}
+
+function normalizeReflogMessage(message: string) {
+  return normalizeRecentCommitMessage(
+    message
+      .replace(/^commit(?: \(initial\))?:\s*/i, '')
+      .replace(/^merge .*?:\s*/i, ''),
+  )
+}
+
+function normalizeRecentCommitMessage(message: string) {
+  return message.trim().split(/\r?\n/, 1)[0] || '(no message)'
+}
+
+function getLocalBranchReflogPath(runtime: JournalGitRuntime, branch: string) {
+  const branchName = getBranchName(branch)
+
+  if (!isSafeBranchPath(branchName)) {
+    return null
+  }
+
+  return joinRuntimePath(
+    joinRuntimePath(runtime.dir, '.git/logs/refs/heads'),
+    branchName,
+  )
+}
+
+function isSafeBranchPath(branch: string) {
+  return branch.split('/').every((segment) => (
+    segment !== '' &&
+    segment !== '.' &&
+    segment !== '..' &&
+    /^[A-Za-z0-9._-]+$/.test(segment)
+  ))
 }
 
 async function getDirtyTrackedPathsAfterOperation(
