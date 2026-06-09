@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -35,6 +36,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const APP_MIN_WIDTH = 1180
 const JOURNAL_DIR_NAME = '.journal'
 const JOURNAL_MEDIA_PROTOCOL = 'journal-media'
+const JOURNAL_DIR_OVERRIDE = process.env['JOURNAL_DIR']?.trim()
+const JOURNAL_USER_DATA_DIR = process.env['JOURNAL_USER_DATA_DIR']?.trim()
+const SHOULD_DISABLE_WEATHER = process.env['JOURNAL_DISABLE_WEATHER'] === '1'
+
+if (JOURNAL_USER_DATA_DIR) {
+  mkdirSync(JOURNAL_USER_DATA_DIR, { recursive: true })
+  app.setPath('userData', path.resolve(JOURNAL_USER_DATA_DIR))
+}
 
 // The built directory structure
 //
@@ -134,6 +143,10 @@ function getTodayJournalPath() {
 }
 
 function getJournalDirectory() {
+  if (JOURNAL_DIR_OVERRIDE) {
+    return path.resolve(JOURNAL_DIR_OVERRIDE)
+  }
+
   return path.join(app.getPath('home'), JOURNAL_DIR_NAME)
 }
 
@@ -646,6 +659,10 @@ async function refreshTodayWeather(location: unknown) {
   })
   const parsedEntry = parseJournalMarkdown(existingContent)
   const journalSettings = await loadJournalSettings(getJournalDirectory())
+
+  if (SHOULD_DISABLE_WEATHER) {
+    return journalFilePayload(existingContent, date)
+  }
 
   if (isFreshWeatherForLocation(parsedEntry.frontMatter, date, journalSettings.weatherLocation)) {
     return journalFilePayload(existingContent)
