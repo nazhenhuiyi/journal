@@ -407,6 +407,82 @@ body {
   background: rgba(255, 246, 220, 0.44);
 }
 
+.settings-git-inspector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.settings-git-section {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.7rem;
+  border: 1px solid rgba(122, 79, 50, 0.11);
+  border-radius: 8px;
+  padding: 0.86rem;
+  background: rgba(255, 250, 240, 0.46);
+}
+
+.settings-git-section h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
+.settings-git-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-commit-row {
+  display: grid;
+  min-width: 0;
+  gap: 0.26rem;
+}
+
+.settings-commit-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(47, 38, 31, 0.48);
+  font-size: 0.74rem;
+}
+
+.settings-commit-meta code,
+.settings-file-list code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.settings-commit-meta code {
+  color: #14724f;
+  font-weight: 760;
+}
+
+.settings-commit-message,
+.settings-empty-note,
+.settings-file-list li {
+  min-width: 0;
+  margin: 0;
+  color: rgba(47, 38, 31, 0.66);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.settings-commit-message,
+.settings-file-list code {
+  overflow-wrap: anywhere;
+}
+
+.settings-empty-note {
+  color: rgba(47, 38, 31, 0.44);
+}
+
 .settings-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(9rem, 12rem);
@@ -560,6 +636,23 @@ body {
   color: #fffdf6;
   background: #14724f;
   box-shadow: 0 10px 18px rgba(20, 114, 79, 0.14);
+}
+
+@media (max-width: 720px) {
+  .settings-section-heading,
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-dirty-path {
+    max-width: none;
+  }
+
+  .settings-git-inspector,
+  .settings-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .journal-menu {

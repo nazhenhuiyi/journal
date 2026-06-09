@@ -17,6 +17,7 @@ export type MobileJournalRecord = {
 }
 
 export type SaveDailyJournalResult = MobileJournalRecord & {
+  changedPaths: string[]
   didWrite: boolean
 }
 
@@ -124,6 +125,7 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
   if (!hasMeaningfulJournalChange(existingRecord.markdown, markdown)) {
     return {
       ...existingRecord,
+      changedPaths: [],
       didWrite: false,
     }
   }
@@ -140,8 +142,15 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
     murmurs: parsed.murmurs,
     markdown,
     updatedAt,
+    changedPaths: [getEntryRepositoryPath(input.date)],
     didWrite: true,
   }
+}
+
+export function getEntryRepositoryPath(date: string) {
+  const [year, month] = date.split('-')
+
+  return `entries/${year}/${month}/${date}.md`
 }
 
 async function getEntryFilePath(date: string) {

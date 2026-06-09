@@ -1,22 +1,25 @@
-import { parseJournalMarkdown } from '@journal/core'
 import type { MergeDriverCallback } from 'isomorphic-git'
 
-export type LastWriteWinsSide = 'ours' | 'theirs'
+export type FallbackMergeSide = 'ours' | 'theirs'
 
-export type LastWriteWinsInput = {
-  fallbackSide?: LastWriteWinsSide
+export type FallbackMergeInput = {
+  fallbackSide?: FallbackMergeSide
   ours: string
   path: string
   theirs: string
 }
 
-export type LastWriteWinsResult = {
+export type FallbackMergeResult = {
   content: string
   reason: 'fallback' | 'updatedAt'
-  side: LastWriteWinsSide
+  side: FallbackMergeSide
 }
 
-export function chooseLastWriteWinsContent(input: LastWriteWinsInput): LastWriteWinsResult {
+export type LastWriteWinsSide = FallbackMergeSide
+export type LastWriteWinsInput = FallbackMergeInput
+export type LastWriteWinsResult = FallbackMergeResult
+
+export function chooseFallbackMergeContent(input: FallbackMergeInput): FallbackMergeResult {
   const fallbackSide = input.fallbackSide ?? 'theirs'
   const oursUpdatedAt = getContentUpdatedAt(input.path, input.ours)
   const theirsUpdatedAt = getContentUpdatedAt(input.path, input.theirs)
@@ -46,13 +49,13 @@ export function chooseLastWriteWinsContent(input: LastWriteWinsInput): LastWrite
   }
 }
 
-export function createLastWriteWinsMergeDriver(
-  fallbackSide: LastWriteWinsSide = 'theirs',
+export function createFallbackMergeDriver(
+  fallbackSide: FallbackMergeSide = 'theirs',
 ): MergeDriverCallback {
   return ({ contents, path }) => {
     const ours = contents.length >= 3 ? contents[1] : contents[0] ?? ''
     const theirs = contents.length >= 3 ? contents[2] : contents[1] ?? ''
-    const result = chooseLastWriteWinsContent({
+    const result = chooseFallbackMergeContent({
       fallbackSide,
       ours,
       path,
@@ -66,11 +69,10 @@ export function createLastWriteWinsMergeDriver(
   }
 }
 
-function getContentUpdatedAt(path: string, content: string) {
-  if (isJournalMarkdownPath(path)) {
-    return parseTimestamp(parseJournalMarkdown(content).frontMatter.updatedAt)
-  }
+export const chooseLastWriteWinsContent = chooseFallbackMergeContent
+export const createLastWriteWinsMergeDriver = createFallbackMergeDriver
 
+function getContentUpdatedAt(path: string, content: string) {
   if (isJsonPath(path)) {
     return getJsonUpdatedAt(content)
   }
@@ -110,10 +112,6 @@ function getJsonUpdatedAt(content: string) {
   } catch {
     return null
   }
-}
-
-function isJournalMarkdownPath(path: string) {
-  return path.startsWith('entries/') && path.endsWith('.md')
 }
 
 function isJsonPath(path: string) {

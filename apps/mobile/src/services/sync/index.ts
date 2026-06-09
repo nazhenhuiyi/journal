@@ -26,6 +26,11 @@ export {
   type MobileGitSyncConfig,
   type MobileGitPullResult,
   type MobileGitPushResult,
+  type MobileGitOperationOptions,
   type MobileGitSyncResult,
   type MobileGitSyncStatus,
 } from './mobileGitSync'
+export {
+  loadPendingMobileSyncPaths,
+  savePendingMobileSyncPaths,
+} from './pendingSyncPaths'

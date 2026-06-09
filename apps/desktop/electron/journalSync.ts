@@ -9,7 +9,10 @@ import {
   pushJournalChanges as pushSharedJournalChanges,
   syncJournalNow as syncSharedJournalNow,
   type JournalGitCredentials,
+  type JournalGitOperationOptions,
+  type JournalGitRecentCommit,
   type JournalGitRuntime,
+  type JournalGitTrace,
 } from '@journal/sync'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
@@ -35,6 +38,7 @@ export type JournalGitSyncStatus = {
   dirtyPaths: string[]
   hasCredentials: boolean
   hasRepository: boolean
+  recentCommits: JournalGitRecentCommit[]
   remoteUrl: string
 }
 
@@ -56,6 +60,7 @@ export async function loadJournalGitSyncStatus(journalDirectory: string): Promis
     dirtyPaths: status.dirtyPaths,
     hasCredentials: status.hasCredentials,
     hasRepository: status.hasRepository,
+    recentCommits: status.recentCommits,
     remoteUrl: settings.syncRemoteUrl,
   }
 }
@@ -101,12 +106,17 @@ export async function pullJournalUpdates(journalDirectory: string): Promise<Jour
   }
 }
 
-export async function pushJournalChanges(journalDirectory: string): Promise<JournalGitSyncResult> {
+export async function pushJournalChanges(
+  journalDirectory: string,
+  optionsPayload?: unknown,
+): Promise<JournalGitSyncResult> {
   const context = await loadDesktopSyncContext(journalDirectory)
+  const options = normalizeGitOperationOptions(optionsPayload)
   const result = await pushSharedJournalChanges(
     context.runtime,
     context.config,
     context.credentials,
+    options,
   )
 
   return {
@@ -116,12 +126,17 @@ export async function pushJournalChanges(journalDirectory: string): Promise<Jour
   }
 }
 
-export async function syncJournalNow(journalDirectory: string): Promise<JournalGitSyncResult> {
+export async function syncJournalNow(
+  journalDirectory: string,
+  optionsPayload?: unknown,
+): Promise<JournalGitSyncResult> {
   const context = await loadDesktopSyncContext(journalDirectory)
+  const options = normalizeGitOperationOptions(optionsPayload)
   const result = await syncSharedJournalNow(
     context.runtime,
     context.config,
     context.credentials,
+    options,
   )
 
   return {
@@ -160,6 +175,7 @@ async function createDesktopGitRuntime(journalDirectory: string): Promise<Journa
     dir: journalDirectory,
     fs,
     http,
+    trace: createDesktopGitTraceLogger(),
   }
 }
 
@@ -172,6 +188,15 @@ function createDesktopGitConfig(settings: {
     authorName: defaultAuthorName,
     branch: settings.syncBranch,
     remoteUrl: settings.syncRemoteUrl,
+  }
+}
+
+function createDesktopGitTraceLogger(): JournalGitTrace {
+  return (event) => {
+    const details = event.details ? ` ${JSON.stringify(event.details)}` : ''
+    const error = event.errorMessage ? ` ${event.errorMessage}` : ''
+
+    console.info(`[journal-sync] ${event.name} ${event.ok ? 'ok' : 'error'} ${event.durationMs}ms${details}${error}`)
   }
 }
 
@@ -197,6 +222,42 @@ function assertSafeRemoteUrlPayload(payload: unknown) {
   if (typeof payload.syncRemoteUrl === 'string') {
     assertSafeRemoteUrl(payload.syncRemoteUrl)
   }
+}
+
+function normalizeGitOperationOptions(payload: unknown): JournalGitOperationOptions {
+  if (payload === undefined || payload === null) {
+    return {}
+  }
+
+  if (!isRecord(payload)) {
+    throw new Error('Git sync options 格式不正确。')
+  }
+
+  const options: JournalGitOperationOptions = {}
+
+  if (payload.changedPaths !== undefined) {
+    if (!Array.isArray(payload.changedPaths)) {
+      throw new Error('changedPaths 格式不正确。')
+    }
+
+    options.changedPaths = payload.changedPaths.map((changedPath) => {
+      if (typeof changedPath !== 'string') {
+        throw new Error('changedPaths 格式不正确。')
+      }
+
+      return changedPath
+    })
+  }
+
+  if (payload.collectDirtyPathsAfterSync !== undefined) {
+    if (typeof payload.collectDirtyPathsAfterSync !== 'boolean') {
+      throw new Error('collectDirtyPathsAfterSync 格式不正确。')
+    }
+
+    options.collectDirtyPathsAfterSync = payload.collectDirtyPathsAfterSync
+  }
+
+  return options
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

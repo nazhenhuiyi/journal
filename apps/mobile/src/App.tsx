@@ -33,11 +33,13 @@ import {
   getMobileGitSyncStatus,
   loadGitHubSyncCredentials,
   loadGitHubSyncSettings,
+  loadPendingMobileSyncPaths,
   pullMobileJournalUpdatesFromGitHub,
-  pushMobileJournalChangesToGitHub,
   saveGitHubSyncCredentials,
   saveGitHubSyncSettings,
+  savePendingMobileSyncPaths,
   syncMobileJournalWithGitHub,
+  type MobileGitSyncStatus,
 } from './services/sync'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
@@ -71,6 +73,7 @@ type RootStackParamList = {
 
 const dateRolloverCheckMs = 60_000
 const localSaveDebounceMs = 5_000
+const mobilePullIntervalMs = 30_000
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const initialSyncSnapshot: SyncSnapshot = {
@@ -94,6 +97,22 @@ function returnToToday(navigation: TodayFallbackNavigation) {
   navigation.replace('Today')
 }
 
+function mergeChangedPaths(
+  first: readonly string[],
+  second: readonly string[],
+) {
+  return [...new Set([...first, ...second])].sort()
+}
+
+function logMobileSyncOperation(details: {
+  changedPathCount: number
+  collectDirtyPathsAfterSync: boolean
+  operation: SyncOperationRequest['operation']
+  trigger: SyncOperationRequest['trigger']
+}) {
+  console.info(`[journal-sync] mobile.operation ok 0ms ${JSON.stringify(details)}`)
+}
+
 export default function App() {
   const [today, setToday] = useState(() => getLocalDateKey())
   const [record, setRecord] = useState<MobileJournalRecord | null>(null)
@@ -104,7 +123,10 @@ export default function App() {
   const [hasLoadedSyncConfiguration, setHasLoadedSyncConfiguration] = useState(false)
   const [syncBranch, setSyncBranch] = useState('main')
   const [isSavingSyncConfiguration, setIsSavingSyncConfiguration] = useState(false)
+  const [isLoadingGitStatus, setIsLoadingGitStatus] = useState(false)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
+  const [gitStatusError, setGitStatusError] = useState<string | null>(null)
+  const [mobileGitStatus, setMobileGitStatus] = useState<MobileGitSyncStatus | null>(null)
   const [syncMessage, setSyncMessage] = useState('')
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
   const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot>(initialSyncSnapshot)
@@ -123,6 +145,33 @@ export default function App() {
     hasStoredSyncToken: false,
     remoteUrl: '',
   })
+
+  const refreshMobileGitStatus = useCallback(async (input?: {
+    branch?: string
+    remoteUrl?: string
+  }) => {
+    const branch = input?.branch ?? syncConfigRef.current.branch
+    const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
+
+    setIsLoadingGitStatus(true)
+    setGitStatusError(null)
+
+    try {
+      const status = await getMobileGitSyncStatus({
+        branch: branch.trim() || 'main',
+        remoteUrl: remoteUrl.trim(),
+      })
+
+      setMobileGitStatus(status)
+      return status
+    } catch (error) {
+      console.error(error)
+      setGitStatusError(getErrorMessage(error))
+      return null
+    } finally {
+      setIsLoadingGitStatus(false)
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -182,12 +231,11 @@ export default function App() {
     }
   }, [hasStoredSyncToken, syncBranch, syncRemoteUrl])
 
-  const markDirtyWorktreeForSync = useCallback(async (input?: {
+  const restorePendingPathsForSync = useCallback(async (input?: {
     branch?: string
     hasStoredSyncToken?: boolean
     remoteUrl?: string
   }) => {
-    const branch = input?.branch ?? syncConfigRef.current.branch
     const hasToken = input?.hasStoredSyncToken ?? syncConfigRef.current.hasStoredSyncToken
     const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
 
@@ -196,12 +244,9 @@ export default function App() {
     }
 
     try {
-      const status = await getMobileGitSyncStatus({
-        branch: branch.trim() || 'main',
-        remoteUrl: remoteUrl.trim(),
-      })
+      const pendingPaths = await loadPendingMobileSyncPaths()
 
-      coordinatorRef.current?.markDirtyWorktree(status.dirtyPaths)
+      coordinatorRef.current?.markDirtyWorktree(pendingPaths)
     } catch (error) {
       console.error(error)
     }
@@ -212,9 +257,9 @@ export default function App() {
       return
     }
 
-    await markDirtyWorktreeForSync()
+    await restorePendingPathsForSync()
     await coordinatorRef.current?.notifyForeground()
-  }, [markDirtyWorktreeForSync])
+  }, [restorePendingPathsForSync])
 
   useEffect(() => {
     let isMounted = true
@@ -228,12 +273,19 @@ export default function App() {
           return
         }
 
-        if (settings) {
-          setSyncBranch(settings.branch)
-          setSyncRemoteUrl(settings.remoteUrl)
+        const nextBranch = settings?.branch ?? 'main'
+        const nextRemoteUrl = settings?.remoteUrl ?? ''
+        const hasToken = credentials !== null
+
+        syncConfigRef.current = {
+          branch: nextBranch,
+          hasStoredSyncToken: hasToken,
+          remoteUrl: nextRemoteUrl,
         }
 
-        setHasStoredSyncToken(credentials !== null)
+        setSyncBranch(nextBranch)
+        setSyncRemoteUrl(nextRemoteUrl)
+        setHasStoredSyncToken(hasToken)
         setSyncSnapshot((currentSnapshot) => ({
           ...currentSnapshot,
           status: 'idle',
@@ -319,7 +371,7 @@ export default function App() {
       }
 
       if (shouldScheduleSync && savedRecord.didWrite) {
-        coordinatorRef.current?.markLocalSave()
+        coordinatorRef.current?.markLocalSave(savedRecord.changedPaths)
       }
 
       return savedRecord
@@ -460,6 +512,7 @@ export default function App() {
         lastError: null,
         status: 'idle',
       }))
+      await refreshMobileGitStatus({ branch, remoteUrl })
       void resumeConfiguredSync()
       return true
     } catch (error) {
@@ -475,7 +528,14 @@ export default function App() {
     } finally {
       setIsSavingSyncConfiguration(false)
     }
-  }, [hasStoredSyncToken, resumeConfiguredSync, syncBranch, syncRemoteUrl, syncTokenDraft])
+  }, [
+    hasStoredSyncToken,
+    refreshMobileGitStatus,
+    resumeConfiguredSync,
+    syncBranch,
+    syncRemoteUrl,
+    syncTokenDraft,
+  ])
 
   const reloadTodayFromDisk = useCallback(async () => {
     const loadedRecord = await loadDailyJournal(today)
@@ -487,9 +547,30 @@ export default function App() {
     setSaveState('idle')
   }, [today])
 
-  const runMobileSyncOperation = useCallback(async ({ operation, trigger }: SyncOperationRequest) => {
+  const reloadTodayFromDiskIfChanged = useCallback(async () => {
+    const loadedRecord = await loadDailyJournal(today)
+    const currentContent = journalContentRef.current
+
+    if (
+      loadedRecord.longEntryMarkdown === currentContent.longEntryMarkdown &&
+      JSON.stringify(loadedRecord.murmurs) === JSON.stringify(currentContent.murmurs)
+    ) {
+      return false
+    }
+
+    journalVersionRef.current += 1
+    setRecord(loadedRecord)
+    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
+    setMurmurs(loadedRecord.murmurs)
+    setSaveState('idle')
+
+    return true
+  }, [today])
+
+  const runMobileSyncOperation = useCallback(async ({ changedPaths, operation, trigger }: SyncOperationRequest) => {
     const branch = syncConfigRef.current.branch.trim() || 'main'
     const remoteUrl = syncConfigRef.current.remoteUrl.trim()
+    let operationChangedPaths = [...(changedPaths ?? [])]
 
     if (!remoteUrl) {
       return {
@@ -513,17 +594,26 @@ export default function App() {
         }
       }
 
-      const result = await pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl })
+      const result = await pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
+        collectDirtyPathsAfterSync: false,
+      })
+      let didReloadFromDisk = false
 
-      if (
-        result.updatedWorktree &&
-        canApplyRemoteUpdates(saveStateRef.current)
-      ) {
-        await reloadTodayFromDisk()
+      if (result.dirtyPathsAfterPull.length > 0) {
+        coordinatorRef.current?.markDirtyWorktree(result.dirtyPathsAfterPull)
+
+        return {
+          changed: false,
+          message: '本地更改等待同步',
+        }
+      }
+
+      if (canApplyRemoteUpdates(saveStateRef.current)) {
+        didReloadFromDisk = await reloadTodayFromDiskIfChanged()
       }
 
       return {
-        changed: result.updatedWorktree,
+        changed: result.updatedWorktree || didReloadFromDisk,
       }
     }
 
@@ -553,17 +643,24 @@ export default function App() {
           skipped: true,
         }
       }
-    }
 
-    if (operation === 'push') {
-      const result = await pushMobileJournalChangesToGitHub({ branch, remoteUrl })
-
-      return {
-        changed: Boolean(result.localCommitOid || result.retriedPush),
+      if (savedRecord.didWrite) {
+        operationChangedPaths = mergeChangedPaths(operationChangedPaths, savedRecord.changedPaths)
+        coordinatorRef.current?.recordPendingChangedPaths(savedRecord.changedPaths)
       }
     }
 
-    const result = await syncMobileJournalWithGitHub({ branch, remoteUrl })
+    const collectDirtyPathsAfterSync = operationChangedPaths.length === 0
+    logMobileSyncOperation({
+      changedPathCount: operationChangedPaths.length,
+      collectDirtyPathsAfterSync,
+      operation,
+      trigger,
+    })
+    const result = await syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
+      changedPaths: operationChangedPaths.length > 0 ? operationChangedPaths : undefined,
+      collectDirtyPathsAfterSync,
+    })
 
     if (
       canApplyRemoteUpdates(saveStateRef.current)
@@ -574,7 +671,7 @@ export default function App() {
     return {
       changed: Boolean(result.localCommitOid || result.mergeResult || result.retriedPush),
     }
-  }, [isLongEntryInputUnstable, reloadTodayFromDisk])
+  }, [isLongEntryInputUnstable, reloadTodayFromDisk, reloadTodayFromDiskIfChanged])
 
   useEffect(() => {
     const coordinator = new JournalSyncCoordinator({
@@ -585,6 +682,12 @@ export default function App() {
           setSyncMessage('')
         }
       },
+      onPendingChangedPathsChange: (pendingPaths) => {
+        void savePendingMobileSyncPaths(pendingPaths).catch((error) => {
+          console.error(error)
+        })
+      },
+      pullIntervalMs: mobilePullIntervalMs,
       runOperation: runMobileSyncOperation,
     })
 
@@ -609,7 +712,7 @@ export default function App() {
     if (syncRemoteUrl.trim() && hasStoredSyncToken) {
       let isCancelled = false
 
-      void markDirtyWorktreeForSync().then(() => {
+      void restorePendingPathsForSync().then(() => {
         if (!isCancelled) {
           coordinator.startPulling()
         }
@@ -624,7 +727,7 @@ export default function App() {
     coordinator.stopPulling()
 
     return undefined
-  }, [hasLoadedSyncConfiguration, hasStoredSyncToken, markDirtyWorktreeForSync, syncRemoteUrl])
+  }, [hasLoadedSyncConfiguration, hasStoredSyncToken, restorePendingPathsForSync, syncRemoteUrl])
 
   const flushBeforeLeavingApp = useCallback(async () => {
     if (saveStateRef.current === 'dirty') {
@@ -634,7 +737,7 @@ export default function App() {
       })
 
       if (savedRecord?.didWrite) {
-        coordinatorRef.current?.markLocalSave()
+        coordinatorRef.current?.markLocalSave(savedRecord.changedPaths)
       }
     }
 
@@ -714,6 +817,8 @@ export default function App() {
       } else {
         setSyncMessage('同步完成')
       }
+
+      await refreshMobileGitStatus({ branch, remoteUrl })
     } catch (error) {
       console.error(error)
       setSyncSnapshot((currentSnapshot) => ({
@@ -726,6 +831,7 @@ export default function App() {
     }
   }, [
     hasStoredSyncToken,
+    refreshMobileGitStatus,
     syncBranch,
     syncRemoteUrl,
     syncTokenDraft,
@@ -923,13 +1029,17 @@ export default function App() {
             <SettingsPage
               hasStoredSyncToken={hasStoredSyncToken}
               isBusy={isBusy}
+              isLoadingGitStatus={isLoadingGitStatus}
               isSavingSyncConfiguration={isSavingSyncConfiguration}
               isSyncBusy={isSyncBusy}
+              gitStatus={mobileGitStatus}
+              gitStatusError={gitStatusError}
               murmursCount={murmurs.length}
               onBack={() => returnToToday(navigation)}
+              onRefreshGitStatus={refreshMobileGitStatus}
               onSaveCurrent={() => void saveCurrentJournal()}
-              onSaveSyncConfiguration={() => void saveSyncConfiguration()}
-              onSyncNow={() => void handleSyncNow()}
+              onSaveSyncConfiguration={saveSyncConfiguration}
+              onSyncNow={handleSyncNow}
               saveState={saveState}
               setSyncBranch={setSyncBranch}
               setSyncRemoteUrl={setSyncRemoteUrl}
@@ -1213,12 +1323,16 @@ function ReviewPage({
 }
 
 function SettingsPage({
+  gitStatus,
+  gitStatusError,
   hasStoredSyncToken,
   isBusy,
+  isLoadingGitStatus,
   isSavingSyncConfiguration,
   isSyncBusy,
   murmursCount,
   onBack,
+  onRefreshGitStatus,
   onSaveCurrent,
   onSaveSyncConfiguration,
   onSyncNow,
@@ -1233,15 +1347,19 @@ function SettingsPage({
   syncStatusLabel,
   syncTokenDraft,
 }: {
+  gitStatus: MobileGitSyncStatus | null
+  gitStatusError: string | null
   hasStoredSyncToken: boolean
   isBusy: boolean
+  isLoadingGitStatus: boolean
   isSavingSyncConfiguration: boolean
   isSyncBusy: boolean
   murmursCount: number
   onBack: () => void
+  onRefreshGitStatus: () => Promise<unknown>
   onSaveCurrent: () => void
-  onSaveSyncConfiguration: () => void
-  onSyncNow: () => void
+  onSaveSyncConfiguration: () => Promise<unknown>
+  onSyncNow: () => Promise<unknown>
   saveState: SaveState
   setSyncBranch: (value: string) => void
   setSyncRemoteUrl: (value: string) => void
@@ -1253,6 +1371,10 @@ function SettingsPage({
   syncStatusLabel: string
   syncTokenDraft: string
 }) {
+  useEffect(() => {
+    void onRefreshGitStatus()
+  }, [onRefreshGitStatus])
+
   return (
     <PageShell icon="settings-outline" onBack={onBack} title="设置">
       <ScrollView
@@ -1291,6 +1413,13 @@ function SettingsPage({
               保存当前
             </Button>
           </View>
+
+          <MobileGitStatusPanel
+            error={gitStatusError}
+            isLoading={isLoadingGitStatus}
+            onRefresh={onRefreshGitStatus}
+            status={gitStatus}
+          />
 
           <View className="h-px bg-reed" />
 
@@ -1331,7 +1460,7 @@ function SettingsPage({
                 disabled={isSyncBusy}
                 icon="key-outline"
                 loading={isSavingSyncConfiguration}
-                onPress={onSaveSyncConfiguration}
+                onPress={() => void onSaveSyncConfiguration()}
                 variant="secondary"
               >
                 保存配置
@@ -1341,7 +1470,7 @@ function SettingsPage({
                 disabled={isSyncBusy}
                 icon="sync-outline"
                 loading={syncSnapshot.status === 'syncing'}
-                onPress={onSyncNow}
+                onPress={() => void onSyncNow()}
               >
                 立即同步
               </Button>
@@ -1353,6 +1482,94 @@ function SettingsPage({
         </View>
       </ScrollView>
     </PageShell>
+  )
+}
+
+function MobileGitStatusPanel({
+  error,
+  isLoading,
+  onRefresh,
+  status,
+}: {
+  error: string | null
+  isLoading: boolean
+  onRefresh: () => Promise<unknown>
+  status: MobileGitSyncStatus | null
+}) {
+  const dirtyPaths = status?.dirtyPaths ?? []
+  const recentCommits = status?.recentCommits ?? []
+
+  return (
+    <View className="gap-4 rounded-lg border border-reed bg-paper px-4 py-4">
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="min-w-0">
+          <Text className="text-base font-semibold text-ink">Git 状态</Text>
+          <Text className="mt-1 text-xs font-medium text-mossMuted">
+            {status?.hasRepository ? status.branch : '还没有本地仓库'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel="刷新 Git 状态"
+          accessibilityRole="button"
+          className="h-9 w-9 items-center justify-center rounded-lg bg-cloud"
+          disabled={isLoading}
+          onPress={() => void onRefresh()}
+          style={({ pressed }) => ({
+            opacity: pressed || isLoading ? 0.62 : 1,
+          })}
+        >
+          <Ionicons color="#254f43" name="refresh-outline" size={18} />
+        </Pressable>
+      </View>
+
+      {isLoading ? (
+        <Text className="text-sm leading-5 text-mossMuted">正在读取 Git 状态...</Text>
+      ) : null}
+
+      {error ? (
+        <Text className="text-sm leading-5 text-soil">{error}</Text>
+      ) : null}
+
+      <View className="gap-2">
+        <Text className="text-xs font-semibold text-sage">最近 commit</Text>
+        {recentCommits.length > 0 ? (
+          <View className="gap-2">
+            {recentCommits.map((commit) => (
+              <View className="border-t border-reed pt-2" key={commit.oid}>
+                <View className="flex-row flex-wrap items-center gap-2">
+                  <Text className="font-mono text-xs font-semibold text-moss">
+                    {commit.shortOid}
+                  </Text>
+                  <Text className="text-xs font-medium text-mossMuted">
+                    {formatGitCommitTime(commit.committedAt)}
+                  </Text>
+                </View>
+                <Text className="mt-1 text-sm leading-5 text-ink">
+                  {commit.message}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text className="text-sm leading-5 text-mossMuted">还没有本地 commit。</Text>
+        )}
+      </View>
+
+      <View className="gap-2">
+        <Text className="text-xs font-semibold text-sage">未提交文件</Text>
+        {dirtyPaths.length > 0 ? (
+          <View className="gap-2">
+            {dirtyPaths.map((filepath) => (
+              <Text className="font-mono text-xs leading-5 text-ink" key={filepath} selectable>
+                {filepath}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <Text className="text-sm leading-5 text-mossMuted">没有未提交文件。</Text>
+        )}
+      </View>
+    </View>
   )
 }
 
@@ -1447,6 +1664,25 @@ function formatTime(value: string) {
   return date.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
+  })
+}
+
+function formatGitCommitTime(value: string | null) {
+  if (!value) {
+    return '时间未知'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('zh-CN', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
   })
 }
 

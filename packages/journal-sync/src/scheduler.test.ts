@@ -30,6 +30,59 @@ describe('JournalSyncCoordinator', () => {
     })
   })
 
+  it('passes pending changed paths to the debounced push', async () => {
+    const pendingSnapshots: string[][] = []
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      onPendingChangedPathsChange: (paths) => pendingSnapshots.push([...paths]),
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-08.md'])
+    coordinator.markLocalSave(['entries/2026/06/2026-06-09.md'])
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledWith({
+      changedPaths: [
+        'entries/2026/06/2026-06-08.md',
+        'entries/2026/06/2026-06-09.md',
+      ],
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+    expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual([])
+  })
+
+  it('keeps pending changed paths after a failed push and clears them after retry succeeds', async () => {
+    const pendingSnapshots: string[][] = []
+    const runOperation = vi.fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({})
+    const coordinator = new JournalSyncCoordinator({
+      onPendingChangedPathsChange: (paths) => pendingSnapshots.push([...paths]),
+      pushDebounceMs: 20_000,
+      retryDelayMs: 300_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-08.md'])
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(coordinator.getSnapshot().status).toBe('retrying')
+    expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual(['entries/2026/06/2026-06-08.md'])
+
+    await vi.advanceTimersByTimeAsync(300_000)
+
+    expect(runOperation).toHaveBeenLastCalledWith({
+      changedPaths: ['entries/2026/06/2026-06-08.md'],
+      operation: 'push',
+      trigger: 'retry-timer',
+    })
+    expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual([])
+  })
+
   it('flushes pending push when the app leaves', async () => {
     const runOperation = vi.fn(async () => ({}))
     const coordinator = new JournalSyncCoordinator({
@@ -92,7 +145,7 @@ describe('JournalSyncCoordinator', () => {
     })
   })
 
-  it('keeps background pull checks out of the visible status when nothing changed', async () => {
+  it('marks the first unchanged app-open pull as synced', async () => {
     const snapshots: unknown[] = []
     const runOperation = vi.fn(async () => ({
       changed: false,
@@ -105,8 +158,31 @@ describe('JournalSyncCoordinator', () => {
     await coordinator.pullNow('app-open')
 
     expect(runOperation).toHaveBeenCalledOnce()
-    expect(coordinator.getSnapshot().status).toBe('idle')
-    expect(snapshots).toEqual([])
+    expect(coordinator.getSnapshot()).toEqual({
+      lastError: null,
+      lastSyncedAt: '2026-06-08T10:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })
+    expect(snapshots).toHaveLength(1)
+  })
+
+  it('keeps later background pull checks quiet when nothing changed', async () => {
+    const snapshots: unknown[] = []
+    const runOperation = vi.fn(async () => ({
+      changed: false,
+    }))
+    const coordinator = new JournalSyncCoordinator({
+      onSnapshot: (snapshot) => snapshots.push(snapshot),
+      runOperation,
+    })
+
+    await coordinator.pullNow('app-open')
+    await coordinator.pullNow('pull-interval')
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(coordinator.getSnapshot().status).toBe('synced')
+    expect(snapshots).toHaveLength(1)
   })
 
   it('keeps git operations single-flight and queues a push after the active run', async () => {
@@ -277,6 +353,7 @@ describe('JournalSyncCoordinator', () => {
     await vi.advanceTimersByTimeAsync(20_000)
 
     expect(runOperation).toHaveBeenCalledWith({
+      changedPaths: ['entries/2026/06/2026-06-08.md'],
       operation: 'push',
       trigger: 'save-idle',
     })

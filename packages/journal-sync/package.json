@@ -22,6 +22,10 @@
       "types": "./src/lastWriteWins.ts",
       "default": "./src/lastWriteWins.ts"
     },
+    "./smartMerge": {
+      "types": "./src/smartMerge.ts",
+      "default": "./src/smartMerge.ts"
+    },
     "./scheduler": {
       "types": "./src/scheduler.ts",
       "default": "./src/scheduler.ts"
@@ -33,6 +37,7 @@
   },
   "dependencies": {
     "@journal/core": "file:../journal-core",
+    "diff3": "0.0.3",
     "isomorphic-git": "^1.38.4"
   },
   "devDependencies": {

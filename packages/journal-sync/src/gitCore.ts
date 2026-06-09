@@ -5,10 +5,14 @@ import type {
   MergeResult,
   PushResult,
   ReadCommitResult,
+  ServerRef,
   StatusRow,
 } from 'isomorphic-git'
 import * as defaultGit from 'isomorphic-git'
-import { createLastWriteWinsMergeDriver } from './lastWriteWins'
+import {
+  createJournalMergeDriver,
+  createJournalMergeStats,
+} from './smartMerge'
 
 export type JournalGitCredentials = {
   token: string
@@ -23,11 +27,35 @@ export type JournalGitSyncConfig = {
   remoteUrl?: string
 }
 
+export type JournalGitOperationOptions = {
+  changedPaths?: readonly string[]
+  collectDirtyPathsAfterSync?: boolean
+}
+
+export type JournalGitTraceValue = boolean | null | number | string
+export type JournalGitTraceDetails = Record<string, JournalGitTraceValue>
+export type JournalGitTraceEvent = {
+  details?: JournalGitTraceDetails
+  durationMs: number
+  errorMessage?: string
+  name: string
+  ok: boolean
+}
+export type JournalGitTrace = (event: JournalGitTraceEvent) => void
+
 export type JournalGitRuntime = {
   dir: string
   fs: FsClient
   git?: typeof defaultGit
   http: HttpClient
+  trace?: JournalGitTrace
+}
+
+export type JournalGitRecentCommit = {
+  committedAt: string | null
+  message: string
+  oid: string
+  shortOid: string
 }
 
 export type JournalGitSyncStatus = {
@@ -35,6 +63,7 @@ export type JournalGitSyncStatus = {
   dirtyPaths: string[]
   hasCredentials: boolean
   hasRepository: boolean
+  recentCommits: JournalGitRecentCommit[]
   remoteUrl: string | null
   worktreeDirectory: string
 }
@@ -70,6 +99,11 @@ type PromiseGitFileSystem = {
     stat: (path: string) => Promise<unknown>
     unlink?: (path: string) => Promise<void>
   }
+}
+
+type RemoteFetchDecision = {
+  fetchResult: FetchResult | null
+  skipped: boolean
 }
 
 const defaultAuthorEmail = 'journal-sync@example.invalid'
@@ -127,20 +161,22 @@ export async function getJournalGitSyncStatus(
   credentials: JournalGitCredentials | null = null,
 ): Promise<JournalGitSyncStatus> {
   const configuredBranch = getBranchName(config.branch ?? defaultBranch)
-  const hasRepository = await hasGitRepository(runtime)
+  const hasRepository = await traceGitStep(runtime, 'repo.exists', () => hasGitRepository(runtime))
   const branch = hasRepository
     ? await getCurrentBranch(runtime, configuredBranch)
     : configuredBranch
   const remoteUrl = hasRepository
     ? await getRemoteUrl(runtime, config.remote ?? defaultRemote)
     : config.remoteUrl ?? null
-  const dirtyPaths = hasRepository ? await getDirtyTrackedPaths(runtime) : []
+  const dirtyPaths = hasRepository ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths') : []
+  const recentCommits = hasRepository ? await getRecentCommits(runtime) : []
 
   return {
     branch,
     dirtyPaths,
     hasCredentials: credentials !== null,
     hasRepository,
+    recentCommits,
     remoteUrl,
     worktreeDirectory: runtime.dir,
   }
@@ -184,16 +220,36 @@ export async function commitJournalChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig = {},
   message = 'Sync journal changes',
+  options: JournalGitOperationOptions = {},
 ) {
   await ensureRepository(runtime, config)
 
-  return commitTrackedChanges(runtime, config, message)
+  return commitTrackedChanges(runtime, config, message, options)
 }
 
 export async function pushJournalChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions = {},
+): Promise<JournalGitPushResult> {
+  return traceGitStep(
+    runtime,
+    'push.total',
+    () => pushJournalChangesInternal(runtime, config, credentials, options),
+    (result) => ({
+      changed: Boolean(result.localCommitOid || result.retriedPush),
+      dirty: result.dirtyPathsAfterPush.length,
+      retried: result.retriedPush,
+    }),
+  )
+}
+
+async function pushJournalChangesInternal(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions,
 ): Promise<JournalGitPushResult> {
   if (!config.remoteUrl) {
     throw new Error('GitHub repository URL is required before pushing sync data.')
@@ -208,11 +264,12 @@ export async function pushJournalChanges(
     runtime,
     config,
     'Sync journal changes',
+    options,
   )
 
   if (!(await hasLocalBranchCommit(runtime, branch))) {
     return {
-      dirtyPathsAfterPush: await getDirtyTrackedPaths(runtime),
+      dirtyPathsAfterPush: await getDirtyTrackedPathsAfterOperation(runtime, options, 'push.dirtyPathsAfterPush'),
       localCommitOid,
       pushResult: null,
       retriedPush: false,
@@ -227,7 +284,7 @@ export async function pushJournalChanges(
   })
 
   return {
-    dirtyPathsAfterPush: await getDirtyTrackedPaths(runtime),
+    dirtyPathsAfterPush: await getDirtyTrackedPathsAfterOperation(runtime, options, 'push.dirtyPathsAfterPush'),
     localCommitOid,
     pushResult: pushAttempt.pushResult,
     retriedPush: pushAttempt.retriedPush,
@@ -238,6 +295,25 @@ export async function pullJournalUpdates(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions = {},
+): Promise<JournalGitPullResult> {
+  return traceGitStep(
+    runtime,
+    'pull.total',
+    () => pullJournalUpdatesInternal(runtime, config, credentials, options),
+    (result) => ({
+      changed: result.updatedWorktree,
+      dirty: result.dirtyPathsAfterPull.length,
+      merged: Boolean(result.mergeCommitOid || result.mergeResult),
+    }),
+  )
+}
+
+async function pullJournalUpdatesInternal(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions,
 ): Promise<JournalGitPullResult> {
   if (!config.remoteUrl) {
     throw new Error('GitHub repository URL is required before pulling sync data.')
@@ -249,11 +325,13 @@ export async function pullJournalUpdates(
   let mergeCommitOid: string | null = null
   let mergeResult: MergeResult | null = null
   let updatedWorktree = false
+  let dirtyPathsBeforeMerge: string[] = []
 
   try {
-    const result = await pullRemoteIntoWorktree(runtime, config, credentials)
+    const result = await pullRemoteIntoWorktree(runtime, config, credentials, options)
 
     fetchResult = result.fetchResult
+    dirtyPathsBeforeMerge = result.dirtyPathsBeforeMerge
     mergeCommitOid = result.mergeCommitOid
     mergeResult = result.mergeResult
     updatedWorktree = result.updatedWorktree
@@ -264,7 +342,9 @@ export async function pullJournalUpdates(
   }
 
   return {
-    dirtyPathsAfterPull: await getDirtyTrackedPaths(runtime),
+    dirtyPathsAfterPull: dirtyPathsBeforeMerge.length > 0
+      ? dirtyPathsBeforeMerge
+      : await getDirtyTrackedPathsAfterOperation(runtime, options, 'pull.dirtyPathsAfterPull'),
     fetchResult,
     mergeCommitOid,
     mergeResult,
@@ -276,6 +356,25 @@ export async function syncJournalNow(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions = {},
+): Promise<JournalGitSyncResult> {
+  return traceGitStep(
+    runtime,
+    'sync.total',
+    () => syncJournalNowInternal(runtime, config, credentials, options),
+    (result) => ({
+      changed: Boolean(result.localCommitOid || result.mergeCommitOid || result.mergeResult || result.retriedPush),
+      dirty: result.dirtyPathsAfterSync.length,
+      retried: result.retriedPush,
+    }),
+  )
+}
+
+async function syncJournalNowInternal(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions,
 ): Promise<JournalGitSyncResult> {
   if (!config.remoteUrl) {
     throw new Error('GitHub repository URL is required before syncing.')
@@ -290,6 +389,7 @@ export async function syncJournalNow(
     runtime,
     config,
     'Sync journal changes',
+    options,
   )
   let fetchResult: FetchResult | null = null
   let mergeResult: MergeResult | null = null
@@ -297,7 +397,7 @@ export async function syncJournalNow(
   let skipPush = false
 
   try {
-    const result = await pullRemoteIntoWorktree(runtime, config, credentials)
+    const result = await pullRemoteIntoWorktree(runtime, config, credentials, options)
 
     fetchResult = result.fetchResult
     mergeCommitOid = result.mergeCommitOid
@@ -312,7 +412,7 @@ export async function syncJournalNow(
 
   if (skipPush) {
     return {
-      dirtyPathsAfterSync: await getDirtyTrackedPaths(runtime),
+      dirtyPathsAfterSync: await getDirtyTrackedPathsAfterOperation(runtime, options, 'sync.dirtyPathsAfterSync'),
       fetchResult,
       localCommitOid: localCommitOid ?? mergeCommitOid,
       mergeCommitOid,
@@ -328,12 +428,13 @@ export async function syncJournalNow(
     credentials,
     remote,
   })
+  const resolvedMergeCommitOid = mergeCommitOid ?? pushAttempt.retryMergeCommitOid ?? null
 
   return {
-    dirtyPathsAfterSync: await getDirtyTrackedPaths(runtime),
+    dirtyPathsAfterSync: await getDirtyTrackedPathsAfterOperation(runtime, options, 'sync.dirtyPathsAfterSync'),
     fetchResult,
-    localCommitOid: localCommitOid ?? mergeCommitOid,
-    mergeCommitOid,
+    localCommitOid: localCommitOid ?? resolvedMergeCommitOid,
+    mergeCommitOid: resolvedMergeCommitOid,
     mergeResult,
     pushResult: pushAttempt.pushResult,
     retriedPush: pushAttempt.retriedPush,
@@ -344,29 +445,38 @@ async function ensureRepository(runtime: JournalGitRuntime, config: JournalGitSy
   const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
   const git = getGit(runtime)
+  const hasRepository = await traceGitStep(runtime, 'repo.exists', () => hasGitRepository(runtime))
 
-  if (!(await hasGitRepository(runtime))) {
-    await git.init({
+  if (!hasRepository) {
+    await traceGitStep(runtime, 'repo.init', () => git.init({
       defaultBranch: branch,
       dir: runtime.dir,
       fs: runtime.fs,
+    }), { branch })
+    await traceGitStep(runtime, 'repo.configureAuthor', () => configureAuthor(runtime, config))
+  } else {
+    await traceGitStep(runtime, 'repo.configureAuthor', async () => null, {
+      skipped: true,
     })
   }
 
-  await configureAuthor(runtime, config)
-  await removeStaleShortBranchRef(runtime, branch)
-  await attachHeadToLocalBranchIfSameCommit(runtime, branch)
+  await traceGitStep(runtime, 'repo.repairRefs', async () => {
+    await removeStaleShortBranchRef(runtime, branch)
+    await attachHeadToLocalBranchIfSameCommit(runtime, branch)
+  }, { branch })
 
   if (config.remoteUrl) {
-    assertSafeRemoteUrl(config.remoteUrl)
+    const remoteUrl = config.remoteUrl
 
-    await git.addRemote({
+    assertSafeRemoteUrl(remoteUrl)
+
+    await traceGitStep(runtime, 'repo.addRemote', () => git.addRemote({
       dir: runtime.dir,
       force: true,
       fs: runtime.fs,
       remote,
-      url: config.remoteUrl,
-    })
+      url: remoteUrl,
+    }), { remote })
   }
 }
 
@@ -391,40 +501,61 @@ async function commitTrackedChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   message: string,
+  options: JournalGitOperationOptions = {},
 ) {
   const git = getGit(runtime)
   const branch = getBranchName(config.branch ?? defaultBranch)
-  const rows = await getTrackedStatusRows(runtime)
+  const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
+
+  if (knownChangedPaths && knownChangedPaths.length === 0) {
+    return null
+  }
+
+  const rows = await getTrackedStatusRows(runtime, 'commit.status', knownChangedPaths)
   const changedRows = rows.filter(isDirtyStatusRow)
 
   if (changedRows.length === 0) {
     return null
   }
 
-  for (const [filepath, headStatus, workdirStatus] of changedRows) {
-    if (workdirStatus === 0 && headStatus !== 0) {
-      await git.remove({
-        dir: runtime.dir,
-        filepath,
-        fs: runtime.fs,
-      })
-    } else if (workdirStatus !== 0) {
-      await git.add({
-        dir: runtime.dir,
-        filepath,
-        fs: runtime.fs,
-      })
+  await assertNoConflictMarkersInChangedMarkdown(runtime, changedRows)
+
+  await traceGitStep(runtime, 'commit.stage', async () => {
+    for (const [filepath, headStatus, workdirStatus] of changedRows) {
+      if (workdirStatus === 0 && headStatus !== 0) {
+        await git.remove({
+          dir: runtime.dir,
+          filepath,
+          fs: runtime.fs,
+        })
+      } else if (workdirStatus !== 0) {
+        await git.add({
+          dir: runtime.dir,
+          filepath,
+          fs: runtime.fs,
+        })
+      }
+    }
+  }, {
+    changed: changedRows.length,
+    knownPaths: knownChangedPaths?.length ?? null,
+  })
+
+  if (!knownChangedPaths) {
+    const stagedRows = await getTrackedStatusRows(runtime, 'commit.stagedStatus')
+
+    if (!stagedRows.some(isStagedStatusRow)) {
+      return null
     }
   }
 
-  const stagedRows = await getTrackedStatusRows(runtime)
-
-  if (!stagedRows.some(isStagedStatusRow)) {
-    return null
-  }
-
-  const parentCommitOid = await getLocalBranchCommitOid(runtime, branch)
-  const commitOid = await git.commit({
+  const parentCommitOid = await traceGitStep(
+    runtime,
+    'commit.resolveParent',
+    () => getLocalBranchCommitOid(runtime, branch),
+    (oid) => ({ found: oid !== null }),
+  )
+  const commitOid = await traceGitStep(runtime, 'commit.write', () => git.commit({
     author: {
       email: config.authorEmail ?? defaultAuthorEmail,
       name: config.authorName ?? defaultAuthorName,
@@ -433,9 +564,18 @@ async function commitTrackedChanges(
     fs: runtime.fs,
     message,
     ref: getLocalBranchRef(branch),
-  })
+  }), { branch })
 
-  if (parentCommitOid && await doCommitsHaveSameTree(runtime, commitOid, parentCommitOid)) {
+  const hasSameTree = parentCommitOid
+    ? await traceGitStep(
+      runtime,
+      'commit.treeCheck',
+      () => doCommitsHaveSameTree(runtime, commitOid, parentCommitOid),
+      (sameTree) => ({ sameTree }),
+    )
+    : false
+
+  if (parentCommitOid && hasSameTree) {
     await git.writeRef({
       dir: runtime.dir,
       force: true,
@@ -443,12 +583,12 @@ async function commitTrackedChanges(
       ref: getLocalBranchRef(branch),
       value: parentCommitOid,
     })
-    await checkoutConfiguredBranchIfPossible(runtime, branch)
+    await traceGitStep(runtime, 'commit.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
 
     return null
   }
 
-  await checkoutConfiguredBranchIfPossible(runtime, branch)
+  await traceGitStep(runtime, 'commit.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
 
   return commitOid
 }
@@ -483,51 +623,179 @@ async function fetchRemote(
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
 ) {
-  return getGit(runtime).fetch({
+  return traceGitStep(runtime, 'remote.fetch', () => getGit(runtime).fetch({
     dir: runtime.dir,
     fs: runtime.fs,
     http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
     ref: getBranchName(config.branch ?? defaultBranch),
     remote: config.remote ?? defaultRemote,
     singleBranch: true,
+  }), {
+    branch: getBranchName(config.branch ?? defaultBranch),
+    remote: config.remote ?? defaultRemote,
   })
+}
+
+async function fetchRemoteIfRemoteChanged(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+): Promise<RemoteFetchDecision> {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+  const remoteBranchOid = await getRemoteBranchOid(runtime, config, credentials)
+  const remoteTrackingOid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
+
+  if (remoteBranchOid && remoteTrackingOid && remoteBranchOid === remoteTrackingOid) {
+    await traceGitStep(runtime, 'remote.fetchSkipped', async () => null, {
+      branch,
+      reason: 'remote-unchanged',
+      remote,
+    })
+
+    return {
+      fetchResult: null,
+      skipped: true,
+    }
+  }
+
+  return {
+    fetchResult: await fetchRemote(runtime, config, credentials),
+    skipped: false,
+  }
+}
+
+async function getRemoteBranchOid(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+) {
+  if (!config.remoteUrl) {
+    return null
+  }
+
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remoteBranchRef = getRemoteBranchRef(branch)
+  const refs = await traceGitStep(
+    runtime,
+    'remote.listRefs',
+    () => getGit(runtime).listServerRefs({
+      http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
+      prefix: remoteBranchRef,
+      url: config.remoteUrl!,
+    }),
+    (serverRefs: ServerRef[]) => ({
+      branch,
+      found: serverRefs.some((serverRef) => serverRef.ref === remoteBranchRef),
+      refs: serverRefs.length,
+    }),
+  )
+
+  return refs.find((serverRef) => serverRef.ref === remoteBranchRef)?.oid ?? null
 }
 
 async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
   const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
+  const mergeStats = createJournalMergeStats()
 
-  return getGit(runtime).merge({
-    abortOnConflict: false,
-    allowUnrelatedHistories: true,
-    author: {
-      email: config.authorEmail ?? defaultAuthorEmail,
-      name: config.authorName ?? defaultAuthorName,
-    },
-    dir: runtime.dir,
-    fs: runtime.fs,
-    mergeDriver: createLastWriteWinsMergeDriver('theirs'),
-    ours: getLocalBranchRef(branch),
-    theirs: getRemoteTrackingBranchRef(remote, branch),
-  })
+  try {
+    const mergeResult = await traceGitStep(runtime, 'remote.merge', () => getGit(runtime).merge({
+      abortOnConflict: false,
+      allowUnrelatedHistories: true,
+      author: {
+        email: config.authorEmail ?? defaultAuthorEmail,
+        name: config.authorName ?? defaultAuthorName,
+      },
+      dir: runtime.dir,
+      fs: runtime.fs,
+      mergeDriver: createJournalMergeDriver('theirs', mergeStats),
+      ours: getLocalBranchRef(branch),
+      theirs: getRemoteTrackingBranchRef(remote, branch),
+    }), (result) => ({
+      branch,
+      conflictPaths: mergeStats.conflictPaths,
+      fallbackPaths: mergeStats.fallbackPaths,
+      journalStructurePaths: mergeStats.journalStructurePaths,
+      markdownPaths: mergeStats.markdownPaths,
+      remote,
+      result: getMergeResultKind(result),
+    }))
+
+    await traceGitStep(runtime, 'merge.strategy', async () => null, {
+      clean: mergeStats.conflictPaths === 0,
+      conflictPaths: mergeStats.conflictPaths,
+      fallbackPaths: mergeStats.fallbackPaths,
+      journalStructurePaths: mergeStats.journalStructurePaths,
+      markdownPaths: mergeStats.markdownPaths,
+      result: getMergeResultKind(mergeResult),
+      strategy: 'markdown-diff3-fallback-lww',
+    })
+
+    return mergeResult
+  } catch (error) {
+    if (isMergeConflictError(error)) {
+      const conflictPathCount = getMergeConflictPathCount(error) ?? mergeStats.conflictPaths
+
+      await traceGitStep(runtime, 'merge.strategy', async () => null, {
+        clean: false,
+        conflictPaths: conflictPathCount,
+        fallbackPaths: mergeStats.fallbackPaths,
+        journalStructurePaths: mergeStats.journalStructurePaths,
+        markdownPaths: mergeStats.markdownPaths,
+        result: 'conflict',
+        strategy: 'markdown-diff3-fallback-lww',
+      })
+      await traceGitStep(runtime, 'merge.conflict', async () => null, {
+        conflictPaths: conflictPathCount,
+        fallbackPaths: mergeStats.fallbackPaths,
+        journalStructurePaths: mergeStats.journalStructurePaths,
+        markdownPaths: mergeStats.markdownPaths,
+        strategy: 'markdown-diff3-fallback-lww',
+      })
+    }
+
+    throw error
+  }
 }
 
 async function pullRemoteIntoWorktree(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions,
 ): Promise<{
-  fetchResult: FetchResult
+  dirtyPathsBeforeMerge: string[]
+  fetchResult: FetchResult | null
   mergeCommitOid: string | null
   mergeResult: MergeResult | null
   updatedWorktree: boolean
 }> {
   const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
   const hasLocalCommit = await hasLocalBranchCommit(runtime, branch)
-  const fetchResult = await fetchRemote(runtime, config, credentials)
+  const fetchDecision = await fetchRemoteIfRemoteChanged(runtime, config, credentials)
+  const fetchResult = fetchDecision.fetchResult
 
-  if ((await getDirtyTrackedPaths(runtime)).length > 0) {
+  if (
+    hasLocalCommit &&
+    fetchDecision.skipped &&
+    await isLocalBranchAtRemoteTracking(runtime, remote, branch)
+  ) {
     return {
+      dirtyPathsBeforeMerge: [],
+      fetchResult,
+      mergeCommitOid: null,
+      mergeResult: null,
+      updatedWorktree: false,
+    }
+  }
+
+  const dirtyPathsBeforeMerge = await getDirtyTrackedPathsBeforeMerge(runtime, options)
+
+  if (dirtyPathsBeforeMerge.length > 0) {
+    return {
+      dirtyPathsBeforeMerge,
       fetchResult,
       mergeCommitOid: null,
       mergeResult: null,
@@ -536,23 +804,27 @@ async function pullRemoteIntoWorktree(
   }
 
   if (hasLocalCommit) {
-    const { mergeCommitOid, mergeResult } = await mergeRemoteBranchAndCommitChanges(
+    const { mergeCommitOid, mergeResult, updatedWorktree } = await mergeRemoteBranchAndCommitChanges(
       runtime,
       config,
-      'Resolve journal sync conflicts',
     )
 
     return {
+      dirtyPathsBeforeMerge: [],
       fetchResult,
       mergeCommitOid,
       mergeResult,
-      updatedWorktree: mergeResult !== null,
+      updatedWorktree,
     }
   }
 
-  await checkoutRemoteBranch(runtime, config)
+  await traceGitStep(runtime, 'remote.checkoutRemoteBranch', () => checkoutRemoteBranch(runtime, config), {
+    branch,
+    remote: config.remote ?? defaultRemote,
+  })
 
   return {
+    dirtyPathsBeforeMerge: [],
     fetchResult,
     mergeCommitOid: null,
     mergeResult: null,
@@ -565,37 +837,57 @@ async function checkoutRemoteBranch(runtime: JournalGitRuntime, config: JournalG
   const remote = config.remote ?? defaultRemote
   const git = getGit(runtime)
 
-  await git.branch({
-    checkout: true,
+  await traceGitStep(runtime, 'checkout.branchFromRemote', () => git.branch({
+    checkout: false,
     dir: runtime.dir,
     force: true,
     fs: runtime.fs,
     object: getRemoteTrackingBranchRef(remote, branch),
     ref: branch,
-  })
-  await git.setConfig({
+  }), { branch, remote })
+  await traceGitStep(runtime, 'checkout.setUpstreamRemote', () => git.setConfig({
     dir: runtime.dir,
     fs: runtime.fs,
     path: `branch.${branch}.remote`,
     value: remote,
-  })
-  await git.setConfig({
+  }), { branch, remote })
+  await traceGitStep(runtime, 'checkout.setUpstreamMerge', () => git.setConfig({
     dir: runtime.dir,
     fs: runtime.fs,
     path: `branch.${branch}.merge`,
     value: getRemoteBranchRef(branch),
-  })
-  await checkoutLocalBranch(runtime, branch)
+  }), { branch })
+  await traceGitStep(runtime, 'checkout.localBranch', () => checkoutLocalBranch(
+    runtime,
+    branch,
+    trackedStatusFilepaths,
+  ), { branch, paths: trackedStatusFilepaths.length })
 }
 
-async function checkoutLocalBranch(runtime: JournalGitRuntime, branch: string) {
+async function checkoutLocalBranch(
+  runtime: JournalGitRuntime,
+  branch: string,
+  filepaths?: readonly string[],
+) {
+  const checkoutPaths = filepaths ? normalizeCheckoutFilepaths(filepaths) : null
+
+  if (checkoutPaths && checkoutPaths.length === 0) {
+    return false
+  }
+
   await removeStaleShortBranchRef(runtime, branch)
-  await getGit(runtime).checkout({
+  await traceGitStep(runtime, 'checkout.local', () => getGit(runtime).checkout({
     dir: runtime.dir,
+    filepaths: checkoutPaths ?? undefined,
     force: true,
     fs: runtime.fs,
     ref: getLocalBranchRef(branch),
+  }), {
+    branch: getBranchName(branch),
+    paths: checkoutPaths?.length ?? null,
   })
+
+  return true
 }
 
 async function attachHeadToLocalBranchIfSameCommit(
@@ -673,22 +965,6 @@ async function removeStaleShortBranchRef(runtime: JournalGitRuntime, branch: str
   }
 }
 
-async function checkoutConfiguredBranchIfPossible(runtime: JournalGitRuntime, branch: string) {
-  if (await attachHeadToLocalBranchIfSameCommit(runtime, branch)) {
-    return
-  }
-
-  try {
-    await getGit(runtime).checkout({
-      dir: runtime.dir,
-      fs: runtime.fs,
-      ref: getLocalBranchRef(branch),
-    })
-  } catch {
-    // Keep the current worktree if checkout would risk disturbing local edits.
-  }
-}
-
 async function pushRemoteWithRetry(
   runtime: JournalGitRuntime,
   input: {
@@ -717,16 +993,21 @@ async function pushRemoteWithRetry(
   if (firstPushResult.ok) {
     return {
       pushResult: firstPushResult,
+      retryMergeCommitOid: null,
       retriedPush: false,
     }
   }
 
   await fetchRemote(runtime, input.config, input.credentials)
-  await mergeRemoteBranchAndCommitChanges(
+  const retryMergeResult = await mergeRemoteBranchAndCommitChanges(
     runtime,
     input.config,
-    'Retry journal sync after remote update',
   )
+  await traceGitStep(runtime, 'push.retryMerge', async () => retryMergeResult, (result) => ({
+    mergeCommit: Boolean(result.mergeCommitOid),
+    retryCommit: false,
+    updatedWorktree: result.updatedWorktree,
+  }))
 
   const secondPushResult = await tryPushRemote(runtime, input)
 
@@ -736,6 +1017,7 @@ async function pushRemoteWithRetry(
 
   return {
     pushResult: secondPushResult,
+    retryMergeCommitOid: retryMergeResult.mergeCommitOid,
     retriedPush: true,
   }
 }
@@ -743,36 +1025,102 @@ async function pushRemoteWithRetry(
 async function mergeRemoteBranchAndCommitChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
-  message: string,
 ) {
   const branch = getBranchName(config.branch ?? defaultBranch)
+  const beforeMergeOid = await getLocalBranchCommitOid(runtime, branch)
   const mergeResult = await mergeRemoteBranch(runtime, config)
 
+  if (!mergeResult || isAlreadyMergedMergeResult(mergeResult)) {
+    return {
+      mergeCommitOid: null,
+      mergeResult,
+      updatedWorktree: false,
+    }
+  }
+
   if (isFastForwardMergeResult(mergeResult)) {
-    await checkoutLocalBranch(runtime, branch)
+    const afterMergeOid = getMergeResultOid(mergeResult) ?? await getLocalBranchCommitOid(runtime, branch)
+    const checkoutPaths = beforeMergeOid && afterMergeOid
+      ? await getChangedTrackedPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.fastForwardDiff')
+      : trackedStatusFilepaths
+    const updatedWorktree = await checkoutLocalBranch(runtime, branch, checkoutPaths)
 
     return {
       mergeCommitOid: null,
       mergeResult,
+      updatedWorktree,
     }
   }
 
-  const mergeCommitOid = await commitTrackedChanges(
-    runtime,
-    config,
-    message,
-  )
+  const mergeCommitOid = isMergeCommitMergeResult(mergeResult)
+    ? getMergeResultOid(mergeResult)
+    : null
+  const afterMergeOid = mergeCommitOid ?? getMergeResultOid(mergeResult) ?? await getLocalBranchCommitOid(runtime, branch)
+  const checkoutPaths = beforeMergeOid && afterMergeOid
+    ? await getChangedTrackedPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.mergeDiff')
+    : trackedStatusFilepaths
 
-  await checkoutLocalBranch(runtime, branch)
+  const updatedWorktree = await checkoutLocalBranch(runtime, branch, checkoutPaths)
 
   return {
     mergeCommitOid,
     mergeResult,
+    updatedWorktree,
   }
 }
 
 function isFastForwardMergeResult(mergeResult: MergeResult | null) {
   return Boolean(mergeResult && 'fastForward' in mergeResult && mergeResult.fastForward)
+}
+
+function isAlreadyMergedMergeResult(mergeResult: MergeResult | null) {
+  return Boolean(mergeResult && 'alreadyMerged' in mergeResult && mergeResult.alreadyMerged)
+}
+
+function isMergeCommitMergeResult(mergeResult: MergeResult | null) {
+  return Boolean(mergeResult && 'mergeCommit' in mergeResult && mergeResult.mergeCommit)
+}
+
+function getMergeResultOid(mergeResult: MergeResult | null) {
+  if (!mergeResult || !('oid' in mergeResult)) {
+    return null
+  }
+
+  return typeof mergeResult.oid === 'string' ? mergeResult.oid : null
+}
+
+function getMergeResultKind(mergeResult: MergeResult | null) {
+  if (!mergeResult) {
+    return 'none'
+  }
+
+  if (isAlreadyMergedMergeResult(mergeResult)) {
+    return 'alreadyMerged'
+  }
+
+  if (isFastForwardMergeResult(mergeResult)) {
+    return 'fastForward'
+  }
+
+  if (isMergeCommitMergeResult(mergeResult)) {
+    return 'mergeCommit'
+  }
+
+  return 'merge'
+}
+
+function isMergeConflictError(error: unknown) {
+  return getErrorCode(error) === 'MergeConflictError'
+}
+
+function getMergeConflictPathCount(error: unknown) {
+  if (!isRecord(error) || !isRecord(error.data)) {
+    return null
+  }
+
+  const filepaths = error.data.filepaths
+
+  return Array.isArray(filepaths) ? filepaths.length : null
 }
 
 async function tryPushRemote(
@@ -786,7 +1134,7 @@ async function tryPushRemote(
   const branch = getBranchName(input.branch)
 
   try {
-    return await getGit(runtime).push({
+    return await traceGitStep(runtime, 'remote.push', () => getGit(runtime).push({
       dir: runtime.dir,
       force: false,
       fs: runtime.fs,
@@ -794,6 +1142,9 @@ async function tryPushRemote(
       ref: getLocalBranchRef(branch),
       remote: input.remote,
       remoteRef: getRemoteBranchRef(branch),
+    }), {
+      branch,
+      remote: input.remote,
     })
   } catch (error) {
     const pushResult = getPushResultFromError(error)
@@ -806,20 +1157,175 @@ async function tryPushRemote(
   }
 }
 
-async function getTrackedStatusRows(runtime: JournalGitRuntime) {
-  const rows = await getGit(runtime).statusMatrix({
+async function getTrackedStatusRows(
+  runtime: JournalGitRuntime,
+  traceName = 'status.matrix',
+  filepaths: readonly string[] | null = null,
+) {
+  const statusFilepaths = [...(filepaths ?? trackedStatusFilepaths)]
+  const rows = await traceGitStep(runtime, traceName, () => getGit(runtime).statusMatrix({
     dir: runtime.dir,
-    filepaths: trackedStatusFilepaths,
+    filepaths: statusFilepaths,
     fs: runtime.fs,
+  }), (statusRows) => {
+    const trackedRows = statusRows.filter(([filepath]) => isTrackedJournalPath(filepath))
+
+    return {
+      dirty: trackedRows.filter(isDirtyStatusRow).length,
+      globalFallback: filepaths === null,
+      knownPaths: filepaths?.length ?? null,
+      rows: trackedRows.length,
+    }
   })
 
   return rows.filter(([filepath]) => isTrackedJournalPath(filepath))
 }
 
-async function getDirtyTrackedPaths(runtime: JournalGitRuntime) {
-  const rows = await getTrackedStatusRows(runtime)
+async function getDirtyTrackedPaths(runtime: JournalGitRuntime, traceName = 'status.dirtyPaths') {
+  const rows = await getTrackedStatusRows(runtime, traceName)
 
   return rows.filter(isDirtyStatusRow).map(([filepath]) => filepath)
+}
+
+async function getRecentCommits(
+  runtime: JournalGitRuntime,
+  depth = 3,
+): Promise<JournalGitRecentCommit[]> {
+  try {
+    const commits = await traceGitStep(
+      runtime,
+      'status.recentCommits',
+      () => getGit(runtime).log({
+        depth,
+        dir: runtime.dir,
+        fs: runtime.fs,
+        ref: 'HEAD',
+      }),
+      (results) => ({ commits: results.length }),
+    )
+
+    return commits.map(({ commit, oid }) => {
+      const message = commit.message.trim().split(/\r?\n/, 1)[0] || '(no message)'
+      const timestamp = commit.committer?.timestamp
+
+      return {
+        committedAt: typeof timestamp === 'number'
+          ? new Date(timestamp * 1000).toISOString()
+          : null,
+        message,
+        oid,
+        shortOid: oid.slice(0, 7),
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+async function getDirtyTrackedPathsAfterOperation(
+  runtime: JournalGitRuntime,
+  options: JournalGitOperationOptions,
+  traceName: string,
+) {
+  if (options.collectDirtyPathsAfterSync === false) {
+    return traceGitStep(runtime, traceName, async () => [], {
+      skipped: true,
+    })
+  }
+
+  return getDirtyTrackedPaths(runtime, traceName)
+}
+
+async function getDirtyTrackedPathsBeforeMerge(
+  runtime: JournalGitRuntime,
+  options: JournalGitOperationOptions,
+) {
+  const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
+
+  if (knownChangedPaths) {
+    return traceGitStep(runtime, 'pull.postFetchDirtyStatus', async () => [], {
+      knownPaths: knownChangedPaths.length,
+      skipped: true,
+    })
+  }
+
+  return getDirtyTrackedPaths(runtime, 'pull.postFetchDirtyStatus')
+}
+
+async function getChangedTrackedPathsBetweenRefs(
+  runtime: JournalGitRuntime,
+  beforeRef: string,
+  afterRef: string,
+  traceName: string,
+): Promise<string[]> {
+  if (beforeRef === afterRef) {
+    return []
+  }
+
+  return traceGitStep<string[]>(runtime, traceName, async () => {
+    const git = getGit(runtime)
+    const rawChangedPaths = await git.walk({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      map: async (filepath, entries) => {
+        const [beforeEntry, afterEntry] = entries
+
+        if (filepath === '.') {
+          return undefined
+        }
+
+        const [beforeType, afterType] = await Promise.all([
+          beforeEntry?.type(),
+          afterEntry?.type(),
+        ])
+        const entryType = beforeType ?? afterType
+
+        if (entryType === 'tree') {
+          return shouldWalkTrackedJournalTree(filepath) ? undefined : null
+        }
+
+        if (!isTrackedJournalPath(filepath)) {
+          return undefined
+        }
+
+        const [beforeOid, afterOid] = await Promise.all([
+          beforeEntry?.oid(),
+          afterEntry?.oid(),
+        ])
+
+        return beforeOid !== afterOid ? filepath : undefined
+      },
+      reduce: async (parent, children) => {
+        const flattened: string[] = []
+
+        if (typeof parent === 'string') {
+          flattened.push(parent)
+        }
+
+        for (const child of children) {
+          if (typeof child === 'string') {
+            flattened.push(child)
+          } else if (Array.isArray(child)) {
+            flattened.push(...child.filter((filepath: unknown): filepath is string => typeof filepath === 'string'))
+          }
+        }
+
+        return flattened
+      },
+      trees: [
+        git.TREE({ ref: beforeRef }),
+        git.TREE({ ref: afterRef }),
+      ],
+    })
+
+    const changedPaths: string[] = rawChangedPaths.filter((filepath: unknown): filepath is string => {
+      return typeof filepath === 'string' && isTrackedJournalPath(filepath)
+    })
+
+    return [...new Set(changedPaths)].sort()
+  }, (changedPaths) => ({
+    paths: changedPaths.length,
+  }))
 }
 
 async function hasGitRepository(runtime: JournalGitRuntime) {
@@ -868,6 +1374,35 @@ async function getLocalBranchCommitOid(runtime: JournalGitRuntime, branch: strin
   } catch {
     return null
   }
+}
+
+async function getRemoteTrackingBranchCommitOid(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+) {
+  try {
+    return await getGit(runtime).resolveRef({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      ref: getRemoteTrackingBranchRef(remote, branch),
+    })
+  } catch {
+    return null
+  }
+}
+
+async function isLocalBranchAtRemoteTracking(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+) {
+  const [localBranchOid, remoteTrackingOid] = await Promise.all([
+    getLocalBranchCommitOid(runtime, branch),
+    getRemoteTrackingBranchCommitOid(runtime, remote, branch),
+  ])
+
+  return Boolean(localBranchOid && remoteTrackingOid && localBranchOid === remoteTrackingOid)
 }
 
 async function fileExists(runtime: JournalGitRuntime, path: string) {
@@ -921,6 +1456,56 @@ function normalizePushResult(value: unknown): PushResult | null {
     error: typeof value.error === 'string' ? value.error : null,
     refs: isRecord(value.refs) ? value.refs : {},
   } as PushResult
+}
+
+type JournalGitTraceDetailsInput<T> =
+  | JournalGitTraceDetails
+  | ((result: T) => JournalGitTraceDetails)
+
+async function traceGitStep<T>(
+  runtime: JournalGitRuntime,
+  name: string,
+  operation: () => Promise<T>,
+  details?: JournalGitTraceDetailsInput<T>,
+): Promise<T> {
+  const startedAt = Date.now()
+
+  try {
+    const result = await operation()
+
+    emitGitTrace(runtime, {
+      details: createTraceDetails(details, result),
+      durationMs: Date.now() - startedAt,
+      name,
+      ok: true,
+    })
+
+    return result
+  } catch (error) {
+    emitGitTrace(runtime, {
+      durationMs: Date.now() - startedAt,
+      errorMessage: getErrorMessage(error),
+      name,
+      ok: false,
+    })
+
+    throw error
+  }
+}
+
+function emitGitTrace(runtime: JournalGitRuntime, event: JournalGitTraceEvent) {
+  try {
+    runtime.trace?.(event)
+  } catch {
+    // Tracing is diagnostic only; logging failures must not break sync.
+  }
+}
+
+function createTraceDetails<T>(
+  details: JournalGitTraceDetailsInput<T> | undefined,
+  result: T,
+) {
+  return typeof details === 'function' ? details(result) : details
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -996,11 +1581,111 @@ function isStagedStatusRow([, headStatus, , stageStatus]: StatusRow) {
   return headStatus !== stageStatus
 }
 
+async function assertNoConflictMarkersInChangedMarkdown(
+  runtime: JournalGitRuntime,
+  changedRows: StatusRow[],
+) {
+  const readFile = (runtime.fs as unknown as PromiseGitFileSystem).promises.readFile
+
+  if (!readFile) {
+    return
+  }
+
+  await traceGitStep(runtime, 'commit.conflictMarkerCheck', async () => {
+    let checked = 0
+
+    for (const [filepath, , workdirStatus] of changedRows) {
+      if (workdirStatus === 0 || !journalEntryPathPattern.test(filepath)) {
+        continue
+      }
+
+      checked += 1
+      const content = await readFileIfExists(runtime, filepath, readFile)
+
+      if (content === null) {
+        continue
+      }
+
+      if (hasConflictMarkers(toUtf8String(content))) {
+        throw new Error(`Journal sync conflict markers remain in ${filepath}. Resolve conflicts before syncing.`)
+      }
+    }
+
+    return checked
+  }, (checked) => ({
+    checked,
+  }))
+}
+
+async function readFileIfExists(
+  runtime: JournalGitRuntime,
+  filepath: string,
+  readFile: NonNullable<PromiseGitFileSystem['promises']['readFile']>,
+) {
+  try {
+    return await readFile(joinRuntimePath(runtime.dir, filepath), { encoding: 'utf8' })
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return null
+    }
+
+    throw error
+  }
+}
+
+function hasConflictMarkers(content: string) {
+  return /^(<<<<<<<|>>>>>>>)(?: .*)?$/m.test(content)
+}
+
+function toUtf8String(content: string | Uint8Array) {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  return Array.from(content, (byte) => String.fromCharCode(byte)).join('')
+}
+
+function normalizeKnownChangedPaths(changedPaths: readonly string[] | undefined) {
+  if (!changedPaths) {
+    return null
+  }
+
+  const normalizedPaths = [...new Set(changedPaths.map(normalizeRepositoryPath))].sort()
+
+  for (const filepath of normalizedPaths) {
+    if (!isTrackedJournalPath(filepath)) {
+      throw new Error(`Invalid journal sync changed path: ${filepath}`)
+    }
+  }
+
+  return normalizedPaths
+}
+
+function normalizeCheckoutFilepaths(filepaths: readonly string[]) {
+  return [...new Set(filepaths.map(normalizeRepositoryPath))]
+    .filter((filepath) => trackedPathFiles.has(filepath) || trackedStatusFilepaths.includes(filepath) || isTrackedJournalPath(filepath))
+    .sort()
+}
+
+function normalizeRepositoryPath(filepath: string) {
+  return filepath.trim().replace(/\\/g, '/').replace(/^\.?\//, '')
+}
+
 function isTrackedJournalPath(filepath: string) {
   return trackedPathFiles.has(filepath) ||
     journalEntryPathPattern.test(filepath) ||
     journalAnnotationPathPattern.test(filepath) ||
     isTrackedJournalMediaPath(filepath)
+}
+
+function shouldWalkTrackedJournalTree(filepath: string) {
+  const normalizedPath = normalizeRepositoryPath(filepath)
+
+  return trackedPathPrefixes.some((pathPrefix) => {
+    const treeRoot = pathPrefix.slice(0, -1)
+
+    return normalizedPath === treeRoot || normalizedPath.startsWith(`${treeRoot}/`)
+  })
 }
 
 function isTrackedJournalMediaPath(filepath: string) {
@@ -1025,6 +1710,12 @@ function isEmptyRemoteError(error: unknown) {
   const message = error instanceof Error ? error.message : ''
 
   return /couldn't find remote ref|fatal: couldn't find remote ref/i.test(message)
+}
+
+function isFileNotFoundError(error: unknown) {
+  const code = getErrorCode(error)
+
+  return code === 'ENOENT' || code === 'NotFoundError'
 }
 
 function isRetryablePushError(error: unknown) {

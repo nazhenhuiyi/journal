@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer'
+import { File } from 'expo-file-system'
 import * as FileSystem from 'expo-file-system/legacy'
 import type { FsClient } from 'isomorphic-git'
 
@@ -36,29 +37,43 @@ export function createExpoGitFileSystem(): FsClient {
 
 async function readFile(path: string, options?: ReadFileOptions) {
   const encoding = getEncoding(options)
+  const file = new File(path)
 
   if (encoding === 'utf8' || encoding === 'utf-8') {
-    return FileSystem.readAsStringAsync(path, {
-      encoding: FileSystem.EncodingType.UTF8,
-    })
+    try {
+      return await file.text()
+    } catch {
+      return FileSystem.readAsStringAsync(path, {
+        encoding: FileSystem.EncodingType.UTF8,
+      })
+    }
   }
 
-  const contents = await FileSystem.readAsStringAsync(path, {
-    encoding: FileSystem.EncodingType.Base64,
-  })
+  try {
+    return Buffer.from(await file.bytes())
+  } catch {
+    const contents = await FileSystem.readAsStringAsync(path, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
 
-  return Buffer.from(contents, 'base64')
+    return Buffer.from(contents, 'base64')
+  }
 }
 
 async function writeFile(path: string, data: string | Uint8Array, options?: WriteFileOptions) {
   const encoding = getEncoding(options)
+  const file = new File(path)
 
   await ensureParentDirectory(path)
 
   if (typeof data === 'string' && (!encoding || encoding === 'utf8' || encoding === 'utf-8')) {
-    await FileSystem.writeAsStringAsync(path, data, {
-      encoding: FileSystem.EncodingType.UTF8,
-    })
+    try {
+      await file.write(data)
+    } catch {
+      await FileSystem.writeAsStringAsync(path, data, {
+        encoding: FileSystem.EncodingType.UTF8,
+      })
+    }
     return
   }
 
@@ -66,9 +81,13 @@ async function writeFile(path: string, data: string | Uint8Array, options?: Writ
     ? Buffer.from(data, encoding === 'base64' ? 'base64' : 'utf8')
     : Buffer.from(data)
 
-  await FileSystem.writeAsStringAsync(path, buffer.toString('base64'), {
-    encoding: FileSystem.EncodingType.Base64,
-  })
+  try {
+    await file.write(buffer)
+  } catch {
+    await FileSystem.writeAsStringAsync(path, buffer.toString('base64'), {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+  }
 }
 
 async function ensureParentDirectory(path: string) {
@@ -148,7 +167,7 @@ async function symlink(_target: string, path: string) {
 async function statPath(path: string): Promise<ExpoStats> {
   const info = await getExistingInfo(path)
   const mtimeMs = info.modificationTime * 1000
-  const timestamp = Number.isFinite(mtimeMs) ? mtimeMs : Date.now()
+  const timestamp = typeof mtimeMs === 'number' && Number.isFinite(mtimeMs) ? mtimeMs : Date.now()
   const date = new Date(timestamp)
 
   return {

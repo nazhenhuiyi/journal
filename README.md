@@ -4,7 +4,7 @@
 
 一个桌面优先、正在补移动端的个人日记应用。当前核心只保留写日记、看日记、碎碎念和图片记录。
 
-移动端正在验证 GitHub 私有仓库同步 POC：使用 `isomorphic-git`、Expo FileSystem 和 SecureStore，先支持手动同步和 last-write-wins 冲突策略。
+移动端正在验证 GitHub 私有仓库同步 POC：使用 `isomorphic-git`、Expo FileSystem 和 SecureStore，支持手动同步、保存后延迟同步，以及 Markdown diff3 文本合并。
 
 ## 开发
 

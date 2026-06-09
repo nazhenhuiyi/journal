@@ -84,6 +84,7 @@ describe('mobileJournalStore', () => {
       murmurs: [],
     })
 
+    expect(savedRecord.changedPaths).toEqual([])
     expect(savedRecord.didWrite).toBe(false)
     expect(savedRecord.updatedAt).toBeNull()
     expect(mockFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
@@ -97,6 +98,7 @@ describe('mobileJournalStore', () => {
     })
 
     expect(savedRecord.didWrite).toBe(true)
+    expect(savedRecord.changedPaths).toEqual(['entries/2026/06/2026-06-08.md'])
     expect(savedRecord.updatedAt).not.toBeNull()
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledOnce()
     expect(mockFileSystem.files.get(entryPath)).toContain('今天写一点。')
@@ -120,6 +122,7 @@ updatedAt: 2026-06-08T08:00:00.000Z
     })
 
     expect(savedRecord.didWrite).toBe(false)
+    expect(savedRecord.changedPaths).toEqual([])
     expect(savedRecord.updatedAt).toBe('2026-06-08T08:00:00.000Z')
     expect(mockFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
     await expect(loadDailyJournal('2026-06-08')).resolves.toMatchObject({

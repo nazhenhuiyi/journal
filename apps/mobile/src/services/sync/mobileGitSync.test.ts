@@ -34,12 +34,18 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     fetch: vi.fn(),
     getConfig: vi.fn(),
     init: vi.fn(),
+    listFiles: vi.fn(),
+    listServerRefs: vi.fn(),
+    log: vi.fn(),
     merge: vi.fn(),
     push: vi.fn(),
+    readObject: vi.fn(),
     remove: vi.fn(),
     resolveRef: vi.fn(),
     setConfig: vi.fn(),
     statusMatrix: vi.fn(),
+    TREE: vi.fn(),
+    walk: vi.fn(),
     writeRef: vi.fn(),
   },
 }))
@@ -82,6 +88,24 @@ describe('mobile git sync', () => {
     })
     mockGit.getConfig.mockResolvedValue('https://github.com/example/journal-sync.git')
     mockGit.init.mockResolvedValue(undefined)
+    mockGit.listFiles.mockResolvedValue([])
+    mockGit.listServerRefs.mockResolvedValue([
+      {
+        oid: 'remote-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.log.mockResolvedValue([
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Mobile sync',
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+    ])
     mockGit.merge.mockResolvedValue({
       fastForward: true,
       oid: 'remote-head',
@@ -96,10 +120,18 @@ describe('mobile git sync', () => {
         },
       },
     })
+    mockGit.readObject.mockImplementation(async ({ filepath, oid }: { filepath: string, oid: string }) => ({
+      format: 'content',
+      object: new Uint8Array(),
+      oid: `${oid}:${filepath}`,
+      source: oid,
+    }))
     mockGit.remove.mockResolvedValue(undefined)
     mockGit.resolveRef.mockResolvedValue('local-head')
     mockGit.setConfig.mockResolvedValue(undefined)
     mockGit.statusMatrix.mockResolvedValue([])
+    mockGit.TREE.mockImplementation(({ ref }: { ref: string }) => ({ ref }))
+    mockGit.walk.mockResolvedValue([])
     mockGit.writeRef.mockResolvedValue(undefined)
     mockExpoFetch.mockResolvedValue(new Response('', {
       headers: {
@@ -133,6 +165,12 @@ describe('mobile git sync', () => {
       value: 'Journal Mobile',
     }))
     expect(status.hasRepository).toBe(true)
+    expect(status.recentCommits).toEqual([
+      expect.objectContaining({
+        message: 'Mobile sync',
+        shortOid: '1111111',
+      }),
+    ])
   })
 
   it('commits tracked journal changes, fetches, merges, and pushes', async () => {
@@ -177,6 +215,27 @@ describe('mobile git sync', () => {
     expect(result.retriedPush).toBe(false)
   })
 
+  it('passes known changed paths through to the sync core', async () => {
+    mockGit.statusMatrix.mockResolvedValueOnce([
+      ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+    ])
+
+    await syncMobileJournalWithGitHub({
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    }, {
+      token: 'runtime-token',
+    }, {
+      changedPaths: ['entries/2026/06/2026-06-08.md'],
+      collectDirtyPathsAfterSync: false,
+    })
+
+    expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
+    expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['entries/2026/06/2026-06-08.md'],
+    }))
+  })
+
   it('pushes committed local changes without fetching first', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([
@@ -200,6 +259,8 @@ describe('mobile git sync', () => {
   })
 
   it('pulls remote updates without pushing', async () => {
+    mockGit.walk.mockResolvedValueOnce(['entries/2026/06/2026-06-08.md'])
+
     const result = await pullMobileJournalUpdatesFromGitHub({
       branch: 'main',
       remoteUrl: 'https://github.com/example/journal-sync.git',
@@ -209,6 +270,9 @@ describe('mobile git sync', () => {
 
     expect(mockGit.fetch).toHaveBeenCalledTimes(1)
     expect(mockGit.merge).toHaveBeenCalledTimes(1)
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['entries/2026/06/2026-06-08.md'],
+    }))
     expect(mockGit.push).not.toHaveBeenCalled()
     expect(result.updatedWorktree).toBe(true)
   })
@@ -311,11 +375,12 @@ describe('mobile git sync', () => {
     })
 
     expect(mockGit.branch).toHaveBeenCalledWith(expect.objectContaining({
-      checkout: true,
+      checkout: false,
       object: 'refs/remotes/origin/main',
       ref: 'main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media'],
       force: true,
       ref: 'refs/heads/main',
     }))

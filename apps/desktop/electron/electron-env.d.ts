@@ -32,6 +32,18 @@ type JournalFilePayload = {
 
 type JournalEntryPayload = Omit<JournalFilePayload, 'content'>
 
+type JournalGitRecentCommitPayload = {
+  committedAt: string | null
+  message: string
+  oid: string
+  shortOid: string
+}
+
+type JournalGitOperationOptionsPayload = {
+  changedPaths?: readonly string[]
+  collectDirtyPathsAfterSync?: boolean
+}
+
 // Used in Renderer process, exposed in `preload.ts`.
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
@@ -85,6 +97,7 @@ interface Window {
       dirtyPaths: string[]
       hasCredentials: boolean
       hasRepository: boolean
+      recentCommits: JournalGitRecentCommitPayload[]
       remoteUrl: string
     }>
     pull(): Promise<{
@@ -92,7 +105,7 @@ interface Window {
       dirtyPaths: string[]
       message: string
     }>
-    push(): Promise<{
+    push(options?: JournalGitOperationOptionsPayload): Promise<{
       changed: boolean
       dirtyPaths: string[]
       message: string
@@ -106,9 +119,10 @@ interface Window {
       dirtyPaths: string[]
       hasCredentials: boolean
       hasRepository: boolean
+      recentCommits: JournalGitRecentCommitPayload[]
       remoteUrl: string
     }>
-    syncNow(): Promise<{
+    syncNow(options?: JournalGitOperationOptionsPayload): Promise<{
       changed: boolean
       dirtyPaths: string[]
       message: string

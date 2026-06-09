@@ -211,6 +211,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const lastSavedFrontMatterRef = useRef<DayFrontMatter>({})
   const lastJournalEditedAtRef = useRef(0)
   const saveRequestIdRef = useRef(0)
+  const finalizeAndSyncBeforeUnmountRef = useRef<() => Promise<void>>(async () => undefined)
   const syncConfigRef = useRef({
     branch: 'main',
     hasCredentials: false,
@@ -314,7 +315,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
       if (didJournalFileWrite(refreshedFile)) {
-        coordinatorRef.current?.markLocalSave()
+        coordinatorRef.current?.markLocalSave(getJournalFileTrackedPaths(refreshedFile))
       }
     } catch {
       if (journalFileRef.current?.date === loadedFile.date) {
@@ -436,10 +437,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       }
 
       if ((options.scheduleSync ?? true) && didJournalFileWrite(savedFile)) {
-        coordinatorRef.current?.markLocalSave()
+        coordinatorRef.current?.markLocalSave(getJournalFileTrackedPaths(savedFile))
       }
 
-      setHasPendingJournalEdit(false)
+      if (shouldUpdateState) {
+        setHasPendingJournalEdit(false)
+      } else {
+        hasPendingJournalEditRef.current = false
+      }
 
       return true
     } catch {
@@ -458,7 +463,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         Date.now() - lastJournalEditedAtRef.current < AUTOSAVE_DELAY_MS)
   ), [])
 
-  const runDesktopSyncOperation = useCallback(async ({ operation, trigger }: SyncOperationRequest) => {
+  const runDesktopSyncOperation = useCallback(async ({ changedPaths, operation, trigger }: SyncOperationRequest) => {
     const journalSync = getJournalSyncStore()
 
     if (!journalSync) {
@@ -519,9 +524,15 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       }
     }
 
+    const operationOptions = changedPaths && changedPaths.length > 0
+      ? {
+          changedPaths,
+          collectDirtyPathsAfterSync: false,
+        }
+      : undefined
     const result = operation === 'full'
-      ? await journalSync.syncNow()
-      : await journalSync.push()
+      ? await journalSync.syncNow(operationOptions)
+      : await journalSync.push(operationOptions)
 
     if (operation === 'full' && !isJournalDirtyRef.current) {
       await loadJournalForDate(journalFileRef.current?.date ?? null, () => !isJournalDirtyRef.current)
@@ -580,11 +591,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     coordinatorRef.current = coordinator
 
     return () => {
-      coordinator.dispose()
+      void finalizeAndSyncBeforeUnmountRef.current()
+        .finally(() => {
+          coordinator.dispose()
 
-      if (coordinatorRef.current === coordinator) {
-        coordinatorRef.current = null
-      }
+          if (coordinatorRef.current === coordinator) {
+            coordinatorRef.current = null
+          }
+        })
     }
   }, [])
 
@@ -653,16 +667,16 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   }, [flushPendingSave])
 
   useEffect(() => {
+    finalizeAndSyncBeforeUnmountRef.current = flushAndSyncBeforeLeaving
+  }, [flushAndSyncBeforeLeaving])
+
+  useEffect(() => {
     finalizeJournalRef.current = finalizeJournalBeforeLeaving
   }, [finalizeJournalBeforeLeaving])
 
   useImperativeHandle(ref, () => ({
     flushPendingSave: () => finalizeJournalBeforeLeaving(),
   }), [finalizeJournalBeforeLeaving])
-
-  useEffect(() => () => {
-    void flushPendingSave(false, { scheduleSync: false })
-  }, [flushPendingSave])
 
   useEffect(() => {
     function finalizeOpenJournal() {
@@ -787,7 +801,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           journalFileRef.current = file
           setJournalFile(file)
           if (didJournalFileWrite(file)) {
-            coordinatorRef.current?.markLocalSave()
+            coordinatorRef.current?.markLocalSave(getJournalFileTrackedPaths(file))
           }
           setHasPendingJournalEdit(false)
         })
@@ -992,6 +1006,18 @@ function hasFrontMatterChanged(currentFrontMatter: DayFrontMatter, savedFrontMat
 
 function didJournalFileWrite(file: JournalFile) {
   return file.didWrite === true
+}
+
+function getJournalFileTrackedPaths(file: JournalFile) {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(file.date)
+
+  if (!match) {
+    return []
+  }
+
+  const [, year, month] = match
+
+  return [`entries/${year}/${month}/${file.date}.md`]
 }
 
 function getErrorMessage(error: unknown) {

@@ -42,11 +42,11 @@ contextBridge.exposeInMainWorld('journalSync', {
   pull() {
     return ipcRenderer.invoke('journalSync:pull')
   },
-  push() {
-    return ipcRenderer.invoke('journalSync:push')
+  push(options?: unknown) {
+    return ipcRenderer.invoke('journalSync:push', options)
   },
-  syncNow() {
-    return ipcRenderer.invoke('journalSync:syncNow')
+  syncNow(options?: unknown) {
+    return ipcRenderer.invoke('journalSync:syncNow', options)
   },
 })
 

@@ -32,13 +32,19 @@ const mockGit = {
   fetch: vi.fn(),
   getConfig: vi.fn(),
   init: vi.fn(),
+  listFiles: vi.fn(),
+  listServerRefs: vi.fn(),
+  log: vi.fn(),
   merge: vi.fn(),
   push: vi.fn(),
   readCommit: vi.fn(),
+  readObject: vi.fn(),
   remove: vi.fn(),
   resolveRef: vi.fn(),
   setConfig: vi.fn(),
   statusMatrix: vi.fn(),
+  TREE: vi.fn(),
+  walk: vi.fn(),
   writeRef: vi.fn(),
 }
 const credentials = {
@@ -75,6 +81,40 @@ describe('journal git sync core', () => {
     })
     mockGit.getConfig.mockResolvedValue('https://github.com/example/journal-sync.git')
     mockGit.init.mockResolvedValue(undefined)
+    mockGit.listFiles.mockResolvedValue([])
+    mockGit.listServerRefs.mockResolvedValue([
+      {
+        oid: 'remote-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.log.mockResolvedValue([
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Latest sync\n\nBody',
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_900_000,
+          },
+          message: 'Previous sync',
+        },
+        oid: '2222222222222222222222222222222222222222',
+      },
+      {
+        commit: {
+          committer: {},
+          message: '',
+        },
+        oid: '3333333333333333333333333333333333333333',
+      },
+    ])
     mockGit.merge.mockResolvedValue({
       fastForward: true,
       oid: 'remote-head',
@@ -100,10 +140,18 @@ describe('journal git sync core', () => {
       oid,
       payload: '',
     }))
+    mockGit.readObject.mockImplementation(async ({ filepath, oid }: { filepath: string, oid: string }) => ({
+      format: 'content',
+      object: new Uint8Array(),
+      oid: `${oid}:${filepath}`,
+      source: oid,
+    }))
     mockGit.remove.mockResolvedValue(undefined)
     mockGit.resolveRef.mockResolvedValue('local-head')
     mockGit.setConfig.mockResolvedValue(undefined)
     mockGit.statusMatrix.mockResolvedValue([])
+    mockGit.TREE.mockImplementation(({ ref }: { ref: string }) => ({ ref }))
+    mockGit.walk.mockResolvedValue([])
     mockGit.writeRef.mockResolvedValue(undefined)
   })
 
@@ -275,6 +323,39 @@ describe('journal git sync core', () => {
     ])
   })
 
+  it('includes the latest three local commits in sync status', async () => {
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    }, credentials)
+
+    expect(mockGit.log).toHaveBeenCalledWith(expect.objectContaining({
+      depth: 3,
+      dir: '/journal',
+      fs: mockFs,
+      ref: 'HEAD',
+    }))
+    expect(status.recentCommits).toEqual([
+      {
+        committedAt: new Date(1_780_987_200 * 1000).toISOString(),
+        message: 'Latest sync',
+        oid: '1111111111111111111111111111111111111111',
+        shortOid: '1111111',
+      },
+      {
+        committedAt: new Date(1_780_900_000 * 1000).toISOString(),
+        message: 'Previous sync',
+        oid: '2222222222222222222222222222222222222222',
+        shortOid: '2222222',
+      },
+      {
+        committedAt: null,
+        message: '(no message)',
+        oid: '3333333333333333333333333333333333333333',
+        shortOid: '3333333',
+      },
+    ])
+  })
+
   it('does not stage temporary files left by atomic writes', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([
@@ -296,6 +377,61 @@ describe('journal git sync core', () => {
     }))
     expect(mockGit.add).not.toHaveBeenCalledWith(expect.objectContaining({
       filepath: 'entries/2026/06/2026-06-09.md.91423.tmp',
+    }))
+    expect(commitOid).toBe('commit-oid')
+  })
+
+  it('does not stage or commit journal markdown with unresolved conflict markers', async () => {
+    mockFs.promises.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/entries/2026/06/2026-06-09.md')) {
+        return [
+          '正文',
+          '<<<<<<< main',
+          '桌面内容',
+          '=======',
+          '移动内容',
+          '>>>>>>> origin/main',
+        ].join('\n')
+      }
+
+      throw Object.assign(new Error('missing'), {
+        code: 'ENOENT',
+      })
+    })
+    mockGit.statusMatrix.mockResolvedValueOnce([
+      ['entries/2026/06/2026-06-09.md', 1, 2, 1],
+    ])
+
+    await expect(commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })).rejects.toThrow('Resolve conflicts before syncing')
+
+    expect(mockGit.add).not.toHaveBeenCalled()
+    expect(mockGit.commit).not.toHaveBeenCalled()
+  })
+
+  it('commits known changed paths without scanning the full tracked worktree twice', async () => {
+    mockGit.statusMatrix.mockResolvedValueOnce([
+      ['entries/2026/06/2026-06-09.md', 1, 2, 1],
+    ])
+
+    const commitOid = await commitJournalChanges(
+      createRuntime(),
+      {
+        branch: 'main',
+      },
+      'Sync journal changes',
+      {
+        changedPaths: ['entries/2026/06/2026-06-09.md'],
+      },
+    )
+
+    expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
+    expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['entries/2026/06/2026-06-09.md'],
+    }))
+    expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-09.md',
     }))
     expect(commitOid).toBe('commit-oid')
   })
@@ -353,6 +489,22 @@ describe('journal git sync core', () => {
   })
 
   it('fetches, merges, and retries once when push is rejected by remote updates', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+
+    runtime.trace = trace
+    mockGit.merge
+      .mockResolvedValueOnce({
+        fastForward: true,
+        oid: 'remote-head',
+      })
+      .mockResolvedValueOnce({
+        mergeCommit: true,
+        oid: 'retry-merge-head',
+      })
+    mockGit.walk
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(['entries/2026/06/2026-06-08.md'])
     mockGit.push
       .mockRejectedValueOnce(Object.assign(new Error('remote changed'), {
         code: 'PushRejectedError',
@@ -369,7 +521,7 @@ describe('journal git sync core', () => {
       })
 
     const result = await syncJournalNow(
-      createRuntime(),
+      runtime,
       {
         branch: 'main',
         remoteUrl: 'https://github.com/example/journal-sync.git',
@@ -383,7 +535,170 @@ describe('journal git sync core', () => {
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
       force: false,
     }))
+    expect(result.mergeCommitOid).toBe('retry-merge-head')
     expect(result.retriedPush).toBe(true)
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        mergeCommit: true,
+        retryCommit: false,
+      }),
+      name: 'push.retryMerge',
+      ok: true,
+    }))
+  })
+
+  it('does not retry push when the retry merge leaves a true conflict', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+    const conflictError = Object.assign(new Error('Automatic merge failed'), {
+      code: 'MergeConflictError',
+      data: {
+        bothModified: ['entries/2026/06/2026-06-08.md'],
+        deleteByTheirs: [],
+        deleteByUs: [],
+        filepaths: ['entries/2026/06/2026-06-08.md'],
+      },
+    })
+
+    runtime.trace = trace
+    mockGit.merge
+      .mockResolvedValueOnce({
+        fastForward: true,
+        oid: 'remote-head',
+      })
+      .mockRejectedValueOnce(conflictError)
+    mockGit.walk.mockResolvedValueOnce([])
+    mockGit.push.mockRejectedValueOnce(Object.assign(new Error('remote changed'), {
+      code: 'PushRejectedError',
+    }))
+
+    await expect(syncJournalNow(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )).rejects.toMatchObject({
+      code: 'MergeConflictError',
+    })
+
+    expect(mockGit.push).toHaveBeenCalledTimes(1)
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        conflictPaths: 1,
+      }),
+      name: 'merge.conflict',
+      ok: true,
+    }))
+  })
+
+  it('skips fetch and merge when the remote branch matches the local tracking ref', async () => {
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main' || ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+
+    const result = await syncJournalNow(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    expect(mockGit.listServerRefs).toHaveBeenCalledWith(expect.objectContaining({
+      prefix: 'refs/heads/main',
+      url: 'https://github.com/example/journal-sync.git',
+    }))
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.push).toHaveBeenCalledTimes(1)
+    expect(result.fetchResult).toBeNull()
+    expect(result.mergeResult).toBeNull()
+  })
+
+  it('merges when fetch is skipped but the local branch is behind the tracking ref', async () => {
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.merge).toHaveBeenCalledTimes(1)
+    expect(result.fetchResult).toBeNull()
+    expect(result.mergeResult).toEqual({
+      fastForward: true,
+      oid: 'remote-head',
+    })
+  })
+
+  it('skips pull dirty scans when the remote branch is unchanged and dirty collection is disabled', async () => {
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main' || ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.statusMatrix).not.toHaveBeenCalled()
+    expect(result.dirtyPathsAfterPull).toEqual([])
+    expect(result.updatedWorktree).toBe(false)
   })
 
   it('treats a successful push result carried by GitPushError as success', async () => {
@@ -429,6 +744,8 @@ describe('journal git sync core', () => {
   })
 
   it('refreshes the worktree after merging remote updates', async () => {
+    mockGit.walk.mockResolvedValueOnce(['entries/2026/06/2026-06-08.md'])
+
     await pullJournalUpdates(
       createRuntime(),
       {
@@ -443,15 +760,19 @@ describe('journal git sync core', () => {
       theirs: 'refs/remotes/origin/main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['entries/2026/06/2026-06-08.md'],
       force: true,
       ref: 'refs/heads/main',
     }))
+    expect(mockGit.listFiles).not.toHaveBeenCalled()
+    expect(mockGit.readObject).not.toHaveBeenCalled()
   })
 
-  it('does not commit stale worktree contents after a fast-forward pull', async () => {
+  it('does not checkout after a fast-forward pull when tracked journal files did not change', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
+    mockGit.walk.mockResolvedValueOnce([])
     mockGit.merge.mockResolvedValueOnce({
       fastForward: true,
       oid: 'remote-head',
@@ -467,28 +788,21 @@ describe('journal git sync core', () => {
     )
 
     expect(mockGit.merge).toHaveBeenCalledTimes(1)
-    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
-      force: true,
-      ref: 'refs/heads/main',
-    }))
+    expect(mockGit.checkout).not.toHaveBeenCalled()
     expect(mockGit.add).not.toHaveBeenCalled()
     expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.listFiles).not.toHaveBeenCalled()
+    expect(mockGit.readObject).not.toHaveBeenCalled()
     expect(result.mergeCommitOid).toBeNull()
-    expect(result.updatedWorktree).toBe(true)
+    expect(result.updatedWorktree).toBe(false)
   })
 
-  it('commits resolved journal changes after a non-fast-forward merge', async () => {
-    mockGit.statusMatrix
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        ['entries/2026/06/2026-06-08.md', 1, 2, 1],
-      ])
-      .mockResolvedValueOnce([
-        ['entries/2026/06/2026-06-08.md', 1, 2, 2],
-      ])
-      .mockResolvedValueOnce([])
+  it('uses the merge commit after a non-fast-forward merge without committing worktree changes', async () => {
+    mockGit.statusMatrix.mockResolvedValueOnce([])
+    mockGit.walk.mockResolvedValueOnce(['entries/2026/06/2026-06-08.md'])
     mockGit.merge.mockResolvedValueOnce({
       fastForward: false,
+      mergeCommit: true,
       oid: 'merge-head',
     })
 
@@ -501,14 +815,56 @@ describe('journal git sync core', () => {
       credentials,
     )
 
-    expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
-      filepath: 'entries/2026/06/2026-06-08.md',
-    }))
-    expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'Resolve journal sync conflicts',
+    expect(mockGit.add).not.toHaveBeenCalled()
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['entries/2026/06/2026-06-08.md'],
+      force: true,
       ref: 'refs/heads/main',
     }))
-    expect(result.mergeCommitOid).toBe('commit-oid')
+    expect(result.mergeCommitOid).toBe('merge-head')
+  })
+
+  it('emits trace events for full sync phases', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+
+    runtime.trace = trace
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 2],
+      ])
+      .mockResolvedValue([])
+
+    await syncJournalNow(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+    )
+
+    const eventNames = trace.mock.calls.map(([event]) => event.name)
+
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'commit.status',
+      'commit.stage',
+      'commit.write',
+      'remote.fetch',
+      'remote.merge',
+      'remote.push',
+      'merge.strategy',
+      'sync.total',
+    ]))
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({
+      durationMs: expect.any(Number),
+      name: 'sync.total',
+      ok: true,
+    }))
   })
 
   it('allows the first push when an empty remote cannot be fetched yet', async () => {
@@ -554,7 +910,7 @@ describe('journal git sync core', () => {
     )
 
     expect(mockGit.branch).toHaveBeenCalledWith(expect.objectContaining({
-      checkout: true,
+      checkout: false,
       object: 'refs/remotes/origin/main',
       ref: 'main',
     }))
@@ -567,6 +923,7 @@ describe('journal git sync core', () => {
       value: 'refs/heads/main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media'],
       force: true,
       ref: 'refs/heads/main',
     }))
@@ -636,6 +993,32 @@ describe('journal git sync core', () => {
     expect(mockGit.fetch).toHaveBeenCalledTimes(1)
     expect(mockGit.merge).not.toHaveBeenCalled()
     expect(mockGit.checkout).not.toHaveBeenCalled()
+    expect(result.updatedWorktree).toBe(false)
+    expect(result.dirtyPathsAfterPull).toEqual([
+      'entries/2026/06/2026-06-08.md',
+    ])
+  })
+
+  it('returns pre-merge dirty paths when pull post-scan collection is disabled', async () => {
+    mockGit.statusMatrix.mockResolvedValueOnce([
+      ['entries/2026/06/2026-06-08.md', 1, 2, 1],
+    ])
+
+    const result = await pullJournalUpdates(
+      createRuntime(),
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.checkout).not.toHaveBeenCalled()
+    expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
     expect(result.updatedWorktree).toBe(false)
     expect(result.dirtyPathsAfterPull).toEqual([
       'entries/2026/06/2026-06-08.md',

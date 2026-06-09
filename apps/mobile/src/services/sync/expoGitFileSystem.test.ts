@@ -2,7 +2,40 @@ import { Buffer } from 'buffer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createExpoGitFileSystem } from './expoGitFileSystem'
 
-const mockFileSystem = vi.hoisted(() => ({
+const mockModernFileSystem = vi.hoisted(() => {
+  const state = {
+    fileBytes: vi.fn(),
+    fileText: vi.fn(),
+    fileWrite: vi.fn(),
+  }
+
+  class MockFile {
+    readonly uri: string
+
+    constructor(path: string) {
+      this.uri = path
+    }
+
+    async bytes() {
+      return state.fileBytes(this.uri)
+    }
+
+    async text() {
+      return state.fileText(this.uri)
+    }
+
+    write(content: string | Uint8Array) {
+      return state.fileWrite(this.uri, content)
+    }
+  }
+
+  return {
+    File: MockFile,
+    state,
+  }
+})
+
+const mockLegacyFileSystem = vi.hoisted(() => ({
   EncodingType: {
     Base64: 'base64',
     UTF8: 'utf8',
@@ -15,7 +48,8 @@ const mockFileSystem = vi.hoisted(() => ({
   writeAsStringAsync: vi.fn(),
 }))
 
-vi.mock('expo-file-system/legacy', () => mockFileSystem)
+vi.mock('expo-file-system', () => mockModernFileSystem)
+vi.mock('expo-file-system/legacy', () => mockLegacyFileSystem)
 
 type TestFs = ReturnType<typeof createExpoGitFileSystem> & {
   promises: {
@@ -47,13 +81,18 @@ type TestFs = ReturnType<typeof createExpoGitFileSystem> & {
 describe('createExpoGitFileSystem', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFileSystem.getInfoAsync.mockResolvedValue({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValue({
       exists: true,
       isDirectory: true,
       modificationTime: 1700000000,
       size: 0,
       uri: '/repo',
     })
+    mockLegacyFileSystem.readAsStringAsync.mockResolvedValue('')
+    mockLegacyFileSystem.readDirectoryAsync.mockResolvedValue([])
+    mockLegacyFileSystem.writeAsStringAsync.mockResolvedValue(undefined)
+    mockModernFileSystem.state.fileBytes.mockResolvedValue(new Uint8Array())
+    mockModernFileSystem.state.fileText.mockResolvedValue('')
   })
 
   it('provides the promise methods that isomorphic-git binds during setup', () => {
@@ -76,17 +115,30 @@ describe('createExpoGitFileSystem', () => {
     }
   })
 
-  it('reads binary files as Buffer values', async () => {
+  it('reads binary files as Buffer values through the modern bytes API', async () => {
     const fs = createTestFileSystem()
-    const binary = Buffer.from([0, 1, 254, 255])
+    const binary = new Uint8Array([0, 1, 254, 255])
 
-    mockFileSystem.readAsStringAsync.mockResolvedValue(binary.toString('base64'))
+    mockModernFileSystem.state.fileBytes.mockResolvedValue(binary)
 
     const result = await fs.promises.readFile('/repo/.git/index')
 
     expect(Buffer.isBuffer(result)).toBe(true)
+    expect(Buffer.from(result).equals(Buffer.from(binary))).toBe(true)
+    expect(mockModernFileSystem.state.fileBytes).toHaveBeenCalledWith('/repo/.git/index')
+  })
+
+  it('falls back to legacy base64 reads when the modern bytes API throws at runtime', async () => {
+    const fs = createTestFileSystem()
+    const binary = Buffer.from([1, 2, 3])
+
+    mockModernFileSystem.state.fileBytes.mockRejectedValue(new Error('native bridge failed'))
+    mockLegacyFileSystem.readAsStringAsync.mockResolvedValue(binary.toString('base64'))
+
+    const result = await fs.promises.readFile('/repo/.git/index')
+
     expect(Buffer.from(result).equals(binary)).toBe(true)
-    expect(mockFileSystem.readAsStringAsync).toHaveBeenCalledWith('/repo/.git/index', {
+    expect(mockLegacyFileSystem.readAsStringAsync).toHaveBeenCalledWith('/repo/.git/index', {
       encoding: 'base64',
     })
   })
@@ -94,20 +146,36 @@ describe('createExpoGitFileSystem', () => {
   it('reads UTF-8 files as strings when encoding is requested', async () => {
     const fs = createTestFileSystem()
 
-    mockFileSystem.readAsStringAsync.mockResolvedValue('hello')
+    mockModernFileSystem.state.fileText.mockResolvedValue('hello')
 
     await expect(fs.promises.readFile('/repo/README.md', 'utf8')).resolves.toBe('hello')
-    expect(mockFileSystem.readAsStringAsync).toHaveBeenCalledWith('/repo/README.md', {
-      encoding: 'utf8',
-    })
+    expect(mockModernFileSystem.state.fileText).toHaveBeenCalledWith('/repo/README.md')
   })
 
-  it('writes Uint8Array values through base64 encoding', async () => {
+  it('writes Uint8Array values through the modern binary write API', async () => {
     const fs = createTestFileSystem()
 
     await fs.promises.writeFile('/repo/.git/objects/blob', new Uint8Array([1, 2, 3]))
 
-    expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
+      '/repo/.git/objects/blob',
+      expect.any(Buffer),
+    )
+    const [, writtenBytes] = mockModernFileSystem.state.fileWrite.mock.calls[0]
+
+    expect(Buffer.from(writtenBytes).equals(Buffer.from([1, 2, 3]))).toBe(true)
+  })
+
+  it('falls back to legacy base64 writes when the modern binary write API throws at runtime', async () => {
+    const fs = createTestFileSystem()
+
+    mockModernFileSystem.state.fileWrite.mockImplementationOnce(() => {
+      throw new Error('native bridge failed')
+    })
+
+    await fs.promises.writeFile('/repo/.git/objects/blob', new Uint8Array([1, 2, 3]))
+
+    expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
       '/repo/.git/objects/blob',
       Buffer.from([1, 2, 3]).toString('base64'),
       { encoding: 'base64' },
@@ -117,7 +185,7 @@ describe('createExpoGitFileSystem', () => {
   it('creates a missing parent directory before writing Git object files', async () => {
     const fs = createTestFileSystem()
 
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: false,
       isDirectory: false,
       uri: '/repo/.git/objects/78',
@@ -125,28 +193,27 @@ describe('createExpoGitFileSystem', () => {
 
     await fs.promises.writeFile('/repo/.git/objects/78/blob', new Uint8Array([1, 2, 3]))
 
-    expect(mockFileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+    expect(mockLegacyFileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
       '/repo/.git/objects/78',
       { intermediates: true },
     )
-    expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
       '/repo/.git/objects/78/blob',
-      Buffer.from([1, 2, 3]).toString('base64'),
-      { encoding: 'base64' },
+      expect.any(Buffer),
     )
   })
 
   it('returns file and directory stat shims compatible with isomorphic-git', async () => {
     const fs = createTestFileSystem()
 
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: true,
       isDirectory: false,
       modificationTime: 1700000000,
       size: 12,
       uri: '/repo/entry.md',
     })
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: true,
       isDirectory: true,
       modificationTime: 1700000001,
@@ -170,7 +237,7 @@ describe('createExpoGitFileSystem', () => {
   it('maps common filesystem error cases to Node-style error codes', async () => {
     const fs = createTestFileSystem()
 
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: false,
       isDirectory: false,
       uri: '/missing',
@@ -180,7 +247,7 @@ describe('createExpoGitFileSystem', () => {
       path: '/missing',
     })
 
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: true,
       isDirectory: true,
       modificationTime: 1700000000,
@@ -192,14 +259,14 @@ describe('createExpoGitFileSystem', () => {
       path: '/repo/entries',
     })
 
-    mockFileSystem.getInfoAsync.mockResolvedValueOnce({
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
       exists: true,
       isDirectory: true,
       modificationTime: 1700000000,
       size: 0,
       uri: '/repo',
     })
-    mockFileSystem.readDirectoryAsync.mockResolvedValueOnce(['entries'])
+    mockLegacyFileSystem.readDirectoryAsync.mockResolvedValueOnce(['entries'])
     await expect(fs.promises.rmdir('/repo')).rejects.toMatchObject({
       code: 'ENOTEMPTY',
       path: '/repo',

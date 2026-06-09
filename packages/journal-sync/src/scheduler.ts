@@ -28,6 +28,7 @@ export type SyncSnapshot = {
 }
 
 export type SyncOperationRequest = {
+  changedPaths?: readonly string[]
   operation: SyncOperation
   trigger: SyncTrigger
 }
@@ -49,6 +50,7 @@ export type SyncTimerApi = {
 export type JournalSyncCoordinatorOptions = {
   leaveFlushTimeoutMs?: number
   now?: () => Date
+  onPendingChangedPathsChange?: (changedPaths: readonly string[]) => void
   onSnapshot?: (snapshot: SyncSnapshot) => void
   pullIntervalMs?: number
   pushDebounceMs?: number
@@ -72,6 +74,7 @@ const defaultTimers: SyncTimerApi = {
 export class JournalSyncCoordinator {
   private activeRun: Promise<SyncSnapshot> | null = null
   private leaveFlushTimeoutHandle: unknown | null = null
+  private pendingChangedPaths = new Set<string>()
   private pendingPullAfterRun: SyncTrigger | null = null
   private pendingPushAfterRun: SyncTrigger | null = null
   private pullIntervalHandle: unknown | null = null
@@ -91,7 +94,8 @@ export class JournalSyncCoordinator {
     return this.snapshot
   }
 
-  markLocalSave() {
+  markLocalSave(changedPaths: readonly string[] = []) {
+    this.addPendingChangedPaths(changedPaths)
     this.markLocalChangesPending()
   }
 
@@ -100,8 +104,13 @@ export class JournalSyncCoordinator {
       return false
     }
 
+    this.addPendingChangedPaths(dirtyPaths)
     this.markLocalChangesPending()
     return true
+  }
+
+  recordPendingChangedPaths(changedPaths: readonly string[]) {
+    this.addPendingChangedPaths(changedPaths)
   }
 
   private markLocalChangesPending() {
@@ -249,7 +258,8 @@ export class JournalSyncCoordinator {
     const isBackgroundPull = operation === 'pull' && trigger !== 'manual'
 
     try {
-      const result = await this.options.runOperation({ operation, trigger })
+      const request = this.createOperationRequest(operation, trigger)
+      const result = await this.options.runOperation(request)
 
       if (result.needsAuth) {
         this.clearRetryTimer()
@@ -271,10 +281,11 @@ export class JournalSyncCoordinator {
           pendingReason: null,
           status: this.snapshot.lastSyncedAt ? 'synced' : 'idle',
         })
-      } else if (isBackgroundPull && !result.changed) {
+      } else if (isBackgroundPull && !result.changed && this.snapshot.lastSyncedAt) {
         return this.snapshot
       } else {
         this.clearRetryTimer()
+        this.clearCompletedLocalChanges(operation)
         this.updateSnapshot({
           lastError: null,
           lastSyncedAt: this.now().toISOString(),
@@ -304,6 +315,7 @@ export class JournalSyncCoordinator {
       })
 
       if (operation !== 'pull') {
+        this.clearPushTimer()
         this.scheduleRetry()
       }
     }
@@ -332,6 +344,55 @@ export class JournalSyncCoordinator {
       this.timers.clearTimeout(this.retryTimeoutHandle)
       this.retryTimeoutHandle = null
     }
+  }
+
+  private createOperationRequest(operation: SyncOperation, trigger: SyncTrigger): SyncOperationRequest {
+    const changedPaths = operation === 'pull' ? [] : this.getPendingChangedPaths()
+
+    if (changedPaths.length === 0) {
+      return { operation, trigger }
+    }
+
+    return {
+      changedPaths,
+      operation,
+      trigger,
+    }
+  }
+
+  private addPendingChangedPaths(changedPaths: readonly string[]) {
+    let didChange = false
+
+    for (const changedPath of changedPaths) {
+      if (!changedPath || this.pendingChangedPaths.has(changedPath)) {
+        continue
+      }
+
+      this.pendingChangedPaths.add(changedPath)
+      didChange = true
+    }
+
+    if (didChange) {
+      this.emitPendingChangedPaths()
+    }
+  }
+
+  private clearCompletedLocalChanges(operation: SyncOperation) {
+    if (operation === 'pull' || this.pendingChangedPaths.size === 0) {
+      return
+    }
+
+    this.pendingChangedPaths.clear()
+    this.clearPushTimer()
+    this.emitPendingChangedPaths()
+  }
+
+  private emitPendingChangedPaths() {
+    this.options.onPendingChangedPathsChange?.(this.getPendingChangedPaths())
+  }
+
+  private getPendingChangedPaths() {
+    return [...this.pendingChangedPaths].sort()
   }
 
   private scheduleRetry() {

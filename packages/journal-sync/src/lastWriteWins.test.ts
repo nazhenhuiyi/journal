@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { chooseLastWriteWinsContent } from './lastWriteWins'
+import { chooseFallbackMergeContent } from './lastWriteWins'
 
-describe('chooseLastWriteWinsContent', () => {
-  it('chooses the journal markdown with the later updatedAt value', () => {
+describe('chooseFallbackMergeContent', () => {
+  it('does not use journal markdown updatedAt to choose a whole-file winner', () => {
     const ours = [
       '---',
       'date: "2026-06-08"',
@@ -20,14 +20,15 @@ describe('chooseLastWriteWinsContent', () => {
       'theirs',
     ].join('\n')
 
-    expect(chooseLastWriteWinsContent({
+    expect(chooseFallbackMergeContent({
+      fallbackSide: 'ours',
       ours,
       path: 'entries/2026/06/2026-06-08.md',
       theirs,
     })).toEqual({
-      content: theirs,
-      reason: 'updatedAt',
-      side: 'theirs',
+      content: ours,
+      reason: 'fallback',
+      side: 'ours',
     })
   })
 
@@ -57,7 +58,7 @@ describe('chooseLastWriteWinsContent', () => {
       version: 1,
     })
 
-    expect(chooseLastWriteWinsContent({
+    expect(chooseFallbackMergeContent({
       ours,
       path: 'annotations/2026/06/2026-06-08.json',
       theirs,
@@ -65,7 +66,7 @@ describe('chooseLastWriteWinsContent', () => {
   })
 
   it('uses the configured fallback when no timestamp is available', () => {
-    expect(chooseLastWriteWinsContent({
+    expect(chooseFallbackMergeContent({
       fallbackSide: 'ours',
       ours: 'local',
       path: 'media/2026/06/img.txt',

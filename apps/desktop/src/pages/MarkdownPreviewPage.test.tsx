@@ -301,6 +301,7 @@ describe('MarkdownPreviewPage', () => {
         dirtyPaths: ['entries/2026/06/2026-06-08.md'],
         hasCredentials: true,
         hasRepository: true,
+        recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
         worktreeDirectory: '/Users/zilin/.journal',
       }),
@@ -324,6 +325,79 @@ describe('MarkdownPreviewPage', () => {
 
     await waitFor(() => {
       expect(push).toHaveBeenCalledOnce()
+    })
+    expect(push).toHaveBeenCalledWith({
+      changedPaths: ['entries/2026/06/2026-06-08.md'],
+      collectDirtyPathsAfterSync: false,
+    })
+  })
+
+  it('flushes pending push when leaving the writing page before the debounce fires', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-09\n---\n\n开头。',
+      date: '2026-06-09',
+      fileName: '2026-06-09.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-09.md',
+      updatedAt: null,
+    }
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...storedJournal,
+      content,
+      date,
+      didWrite: true,
+      updatedAt: '2026-06-09T03:16:05.000Z',
+    }))
+    const push = vi.fn(async () => ({
+      changed: true,
+      dirtyPaths: [],
+    }))
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveDate,
+      saveToday: vi.fn(),
+    })
+    vi.stubGlobal('journalSync', {
+      loadStatus: vi.fn().mockResolvedValue({
+        branch: 'main',
+        dirtyPaths: [],
+        hasCredentials: true,
+        hasRepository: true,
+        recentCommits: [],
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+        worktreeDirectory: '/Users/zilin/.journal',
+      }),
+      pull: vi.fn().mockResolvedValue({
+        changed: false,
+        dirtyPaths: [],
+      }),
+      push,
+      syncNow: vi.fn(),
+    })
+
+    const view = render(<MarkdownPreviewPage />)
+
+    await screen.findByRole('textbox', { name: '日记正文' })
+    insertEditorText('\n准备切到设置页。')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledOnce()
+    })
+
+    view.unmount()
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledOnce()
+    })
+    expect(push).toHaveBeenCalledWith({
+      changedPaths: ['entries/2026/06/2026-06-09.md'],
+      collectDirtyPathsAfterSync: false,
     })
   })
 
@@ -367,6 +441,7 @@ describe('MarkdownPreviewPage', () => {
         dirtyPaths: [],
         hasCredentials: true,
         hasRepository: true,
+        recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
         worktreeDirectory: '/Users/zilin/.journal',
       }),
@@ -424,6 +499,7 @@ describe('MarkdownPreviewPage', () => {
         dirtyPaths: [],
         hasCredentials: true,
         hasRepository: true,
+        recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
         worktreeDirectory: '/Users/zilin/.journal',
       }),

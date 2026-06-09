@@ -35,6 +35,7 @@ function SettingsPage() {
   const [isLoadingSyncSettings, setIsLoadingSyncSettings] = useState(true)
   const [isSavingSyncSettings, setIsSavingSyncSettings] = useState(false)
   const [isSyncingNow, setIsSyncingNow] = useState(false)
+  const [recentCommits, setRecentCommits] = useState<JournalSyncStatus['recentCommits']>([])
   const [syncBranch, setSyncBranch] = useState('main')
   const [syncMessage, setSyncMessage] = useState('')
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
@@ -110,6 +111,7 @@ function SettingsPage() {
   function applySyncStatus(status: JournalSyncStatus) {
     setDirtyPaths(status.dirtyPaths)
     setHasStoredSyncToken(status.hasCredentials)
+    setRecentCommits(status.recentCommits)
     setSyncBranch(status.branch)
     setSyncRemoteUrl(status.remoteUrl)
     setSyncSnapshot(createSyncSnapshotFromStatus(status))
@@ -210,14 +212,17 @@ function SettingsPage() {
       })
 
       const result = await journalSync.syncNow()
+      const refreshedStatus = await journalSync.loadStatus()
 
-      setDirtyPaths(result.dirtyPaths)
+      applySyncStatus(refreshedStatus)
       setSyncMessage(result.changed ? '同步完成' : '已经是最新')
-      setSyncSnapshot({
-        ...initialSyncSnapshot,
-        lastSyncedAt: new Date().toISOString(),
-        status: 'synced',
-      })
+      setSyncSnapshot(refreshedStatus.dirtyPaths.length > 0
+        ? createSyncSnapshotFromStatus(refreshedStatus)
+        : {
+            ...initialSyncSnapshot,
+            lastSyncedAt: new Date().toISOString(),
+            status: 'synced',
+          })
     } catch (error) {
       setSyncSnapshot({
         ...initialSyncSnapshot,
@@ -271,6 +276,44 @@ function SettingsPage() {
                 {dirtyPathLabel}
               </p>
             ) : null}
+          </div>
+
+          <div className="settings-git-inspector" aria-label="Git 状态">
+            <section className="settings-git-section">
+              <h2>最近 commit</h2>
+              {recentCommits.length > 0 ? (
+                <ol className="settings-git-list">
+                  {recentCommits.map((commit) => (
+                    <li className="settings-commit-row" key={commit.oid}>
+                      <span className="settings-commit-meta">
+                        <code title={commit.oid}>{commit.shortOid}</code>
+                        <time dateTime={commit.committedAt ?? undefined}>
+                          {formatCommitTime(commit.committedAt)}
+                        </time>
+                      </span>
+                      <span className="settings-commit-message">{commit.message}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="settings-empty-note">还没有本地 commit。</p>
+              )}
+            </section>
+
+            <section className="settings-git-section">
+              <h2>未提交文件</h2>
+              {dirtyPaths.length > 0 ? (
+                <ul className="settings-git-list settings-file-list">
+                  {dirtyPaths.map((filepath) => (
+                    <li key={filepath}>
+                      <code>{filepath}</code>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="settings-empty-note">没有未提交文件。</p>
+              )}
+            </section>
           </div>
 
           <form
@@ -380,6 +423,25 @@ function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+}
+
+function formatCommitTime(value: string | null) {
+  if (!value) {
+    return '时间未知'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('zh-CN', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
+  })
 }
 
 export default SettingsPage

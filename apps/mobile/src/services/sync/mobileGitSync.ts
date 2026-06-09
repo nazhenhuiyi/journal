@@ -10,12 +10,14 @@ import {
   pushJournalChanges,
   syncJournalNow,
   type JournalGitCredentials,
+  type JournalGitOperationOptions,
   type JournalGitPullResult,
   type JournalGitPushResult,
   type JournalGitRuntime,
   type JournalGitSyncConfig,
   type JournalGitSyncResult,
   type JournalGitSyncStatus,
+  type JournalGitTrace,
 } from '@journal/sync'
 import { ensureJournalWorktreeDirectory } from '../mobileJournalStore'
 import { createExpoGitFileSystem } from './expoGitFileSystem'
@@ -25,6 +27,7 @@ import {
 } from './secureSyncCredentials'
 
 export type MobileGitSyncConfig = JournalGitSyncConfig
+export type MobileGitOperationOptions = JournalGitOperationOptions
 export type MobileGitSyncStatus = JournalGitSyncStatus
 export type MobileGitSyncResult = JournalGitSyncResult
 export type MobileGitPushResult = JournalGitPushResult
@@ -76,15 +79,17 @@ export async function cloneMobileGitSyncRepository(
 export async function commitMobileJournalChanges(
   config: MobileGitSyncConfig = {},
   message = 'Sync mobile journal changes',
+  options: MobileGitOperationOptions = {},
 ): Promise<string | null> {
   const runtime = await createMobileGitRuntime()
 
-  return commitJournalChanges(runtime, withMobileAuthorDefaults(config), message)
+  return commitJournalChanges(runtime, withMobileAuthorDefaults(config), message, options)
 }
 
 export async function pushMobileJournalChangesToGitHub(
   config: MobileGitSyncConfig,
   credentials?: GitHubSyncCredentials,
+  options: MobileGitOperationOptions = {},
 ): Promise<MobileGitPushResult> {
   const resolvedCredentials = await requireCredentials(credentials)
   const runtime = await createMobileGitRuntime()
@@ -93,12 +98,14 @@ export async function pushMobileJournalChangesToGitHub(
     runtime,
     withMobileAuthorDefaults(config),
     resolvedCredentials,
+    options,
   )
 }
 
 export async function pullMobileJournalUpdatesFromGitHub(
   config: MobileGitSyncConfig,
   credentials?: GitHubSyncCredentials,
+  options: MobileGitOperationOptions = {},
 ): Promise<MobileGitPullResult> {
   const resolvedCredentials = await requireCredentials(credentials)
   const runtime = await createMobileGitRuntime()
@@ -107,12 +114,14 @@ export async function pullMobileJournalUpdatesFromGitHub(
     runtime,
     withMobileAuthorDefaults(config),
     resolvedCredentials,
+    options,
   )
 }
 
 export async function syncMobileJournalWithGitHub(
   config: MobileGitSyncConfig,
   credentials?: GitHubSyncCredentials,
+  options: MobileGitOperationOptions = {},
 ): Promise<MobileGitSyncResult> {
   const resolvedCredentials = await requireCredentials(credentials)
   const runtime = await createMobileGitRuntime()
@@ -121,30 +130,54 @@ export async function syncMobileJournalWithGitHub(
     runtime,
     withMobileAuthorDefaults(config),
     resolvedCredentials,
+    options,
   )
 }
 
 async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
   ;(globalThis as typeof globalThis & { Buffer?: typeof Buffer }).Buffer = Buffer
+  const trace = createMobileGitTraceLogger()
 
   return {
     dir: await ensureJournalWorktreeDirectory(),
     fs: createExpoGitFileSystem(),
-    http: createMobileGitHttpClient(),
+    http: createMobileGitHttpClient(trace),
+    trace,
   }
 }
 
-function createMobileGitHttpClient(): typeof http {
+function createMobileGitHttpClient(trace?: JournalGitTrace): typeof http {
   return {
     ...http,
     request: async (request) => {
-      const response = await withTimeout(
-        requestGitHttpWithExpoFetch(request),
-        gitHttpRequestTimeoutMs,
-        `GitHub request timed out: ${request.method ?? 'GET'} ${request.url}`,
-      )
+      const startedAt = Date.now()
 
-      return response
+      try {
+        const response = await withTimeout(
+          requestGitHttpWithExpoFetch(request),
+          gitHttpRequestTimeoutMs,
+          `GitHub request timed out: ${request.method ?? 'GET'} ${request.url}`,
+        )
+
+        trace?.({
+          details: createGitHttpTraceDetails(request, response.statusCode),
+          durationMs: Date.now() - startedAt,
+          name: 'http.gitRequest',
+          ok: true,
+        })
+
+        return response
+      } catch (error) {
+        trace?.({
+          details: createGitHttpTraceDetails(request),
+          durationMs: Date.now() - startedAt,
+          errorMessage: getErrorMessage(error),
+          name: 'http.gitRequest',
+          ok: false,
+        })
+
+        throw error
+      }
     },
   }
 }
@@ -211,6 +244,71 @@ function withMobileAuthorDefaults(config: MobileGitSyncConfig): MobileGitSyncCon
     authorEmail: config.authorEmail ?? defaultAuthorEmail,
     authorName: config.authorName ?? defaultAuthorName,
   }
+}
+
+function createMobileGitTraceLogger(): JournalGitTrace | undefined {
+  const nodeEnv = (globalThis as typeof globalThis & {
+    process?: { env?: { NODE_ENV?: string } }
+  }).process?.env?.NODE_ENV
+
+  if (nodeEnv === 'test') {
+    return undefined
+  }
+
+  return (event) => {
+    const details = event.details ? ` ${JSON.stringify(event.details)}` : ''
+    const error = event.errorMessage ? ` error=${event.errorMessage}` : ''
+    const status = event.ok ? 'ok' : 'error'
+
+    console.info(`[journal-sync] ${event.name} ${status} ${event.durationMs}ms${details}${error}`)
+  }
+}
+
+function createGitHttpTraceDetails(
+  request: Parameters<typeof http.request>[0],
+  statusCode: number | null = null,
+) {
+  return {
+    host: getGitHttpHost(request.url),
+    method: request.method ?? 'GET',
+    service: getGitHttpService(request.url),
+    statusCode,
+  }
+}
+
+function getGitHttpHost(url: string) {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return 'unknown'
+  }
+}
+
+function getGitHttpService(url: string) {
+  try {
+    const parsedUrl = new URL(url)
+    const service = parsedUrl.searchParams.get('service')
+
+    if (service) {
+      return service
+    }
+
+    if (parsedUrl.pathname.endsWith('/git-upload-pack')) {
+      return 'git-upload-pack'
+    }
+
+    if (parsedUrl.pathname.endsWith('/git-receive-pack')) {
+      return 'git-receive-pack'
+    }
+  } catch {
+    // Keep trace details intentionally non-fatal.
+  }
+
+  return 'unknown'
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'GitHub sync request failed.'
 }
 
 function parseResponseHeaders(headers: Headers) {

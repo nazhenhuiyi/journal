@@ -79,8 +79,12 @@ ipcMain.handle('journalSync:saveSettings', (_event, payload: unknown) =>
   saveJournalGitSyncSettings(getJournalDirectory(), payload),
 )
 ipcMain.handle('journalSync:pull', () => pullJournalUpdates(getJournalDirectory()))
-ipcMain.handle('journalSync:push', () => pushJournalChanges(getJournalDirectory()))
-ipcMain.handle('journalSync:syncNow', () => syncJournalNow(getJournalDirectory()))
+ipcMain.handle('journalSync:push', (_event, options: unknown) =>
+  pushJournalChanges(getJournalDirectory(), options),
+)
+ipcMain.handle('journalSync:syncNow', (_event, options: unknown) =>
+  syncJournalNow(getJournalDirectory(), options),
+)
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))
 ipcMain.handle('journal:listEntries', () => listJournalEntries())

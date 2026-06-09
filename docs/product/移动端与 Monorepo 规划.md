@@ -32,7 +32,7 @@
 | 移动端技术栈 | Expo SDK 54 + React Native + TypeScript，优先兼容 Play Store 版 Expo Go |
 | 移动端同步候选 | 第一候选是 `isomorphic-git`，先做 POC |
 | 同步远端 | GitHub 私有仓库，不自建后端服务 |
-| 冲突策略 | 第一版使用 last-write-wins，后写入的覆盖先写入的 |
+| 冲突策略 | 日记 Markdown 使用 diff3 文本合并；批注 JSON 和无法文本合并的文件保留 fallback 选边；真实冲突保留冲突标记并停止自动 push |
 | 加密策略 | 第一版接受 GitHub 私有仓库权限和 HTTPS 传输加密，不做端到端加密 |
 | 批注 | 保留 schema，不做移动端批注界面 |
 
@@ -185,7 +185,7 @@ git push
 
 移动端不能假设系统里有 `git` 命令，也不依赖 shell 调用。
 
-移动端第一候选是 `isomorphic-git` POC。当前已经在移动端新增同步服务边界、Expo 文件系统适配层、SecureStore 凭据存储、last-write-wins merge driver 和手动同步入口。
+移动端第一候选是 `isomorphic-git` POC。当前已经在移动端新增同步服务边界、Expo 文件系统适配层、SecureStore 凭据存储、Markdown diff3 merge driver、fallback merge driver 和手动同步入口。
 
 POC 代码路径：
 
@@ -223,27 +223,26 @@ POC 需要覆盖：
   -> 把本地未提交改动写成 commit
   -> fetch 远端
   -> 如果可以 fast-forward，则直接更新本地
-  -> 如果出现分叉或同文件冲突，则按 last-write-wins 生成结果
-  -> commit 合并后的结果
+  -> 如果出现分叉，则对日记 Markdown 做 diff3 文本合并
+  -> clean merge 直接使用 isomorphic-git 生成的 merge commit
+  -> true conflict 保留冲突标记并停止自动 push
   -> push
   -> 如果 push 被远端新提交拒绝，则 fetch 后重试一次
 ```
 
 ### 7.4 冲突策略
 
-第一版使用 last-write-wins，不做复杂冲突处理，也不做逐段合并 UI。
+第一版从整文件 last-write-wins 调整为保守的文本合并：优先不丢内容，无法自动判断时显式暴露冲突。
 
 规则：
 
-- 以文件为单位处理冲突。
-- 后写入的版本覆盖先写入的版本。
-- 日记文件优先比较 front matter 里的 `updatedAt`。
-- 如果没有可靠 `updatedAt`，再使用本地编辑时间。
-- 如果本地编辑时间也不可用，最后退回使用同步 commit 时间。
+- 日记 Markdown 使用 `isomorphic-git` merge driver 中的 diff3 文本合并，非重叠段落/行的双端修改会自动保留。
+- 同一行或相邻区域无法 clean merge 时，保留冲突标记在文件里，并停止自动 push，等待用户处理。
+- front matter `updatedAt` 不决定整篇日记的取舍，避免正文被时间戳带着整文件覆盖。
 - 图片文件使用稳定 id 或 hash 命名，尽量避免同名冲突。
-- 如果图片或批注出现同路径冲突，也使用后写入版本。
+- 批注 JSON 和无法文本合并的文件保留 fallback 选边：JSON 优先比较文件内更新时间，缺少可靠时间时使用配置的 fallback side。
 
-这个策略可能覆盖较旧设备上的离线修改。这个风险第一版先接受，用来换取更低的实现复杂度和更顺滑的同步体验。
+这个策略可能让少量 true conflict 需要手动处理，但比静默覆盖任意一端内容更安全。
 
 ### 7.5 第一版暂不做
 
@@ -390,8 +389,8 @@ POC 需要覆盖：
 - [x] 支持 HTTPS + GitHub token。
 - [x] 使用 Expo SecureStore 保存 token 和 repo 配置。
 - [x] 增加手动同步入口。
-- [x] 增加 last-write-wins merge driver。
-- [x] 为 last-write-wins 规则增加单元测试。
+- [x] 增加 Markdown diff3 merge driver，并保留 JSON/非文本 fallback driver。
+- [x] 为 Markdown clean merge、true conflict 和 fallback 规则增加单元测试。
 - [x] 为 init、commit/fetch/merge/push、空远端首同步、空本地空远端、已有远端首拉取、push reject retry 增加同步流程单元测试。
 - [x] 为 Expo 文件系统适配层增加二进制读写、UTF-8 读写、stat shim 和 Node-style 错误码测试。
 - [x] 为 SecureStore 凭据和仓库配置增加归一化、读取和坏数据清理测试。
@@ -409,14 +408,14 @@ POC 需要覆盖：
 - 同步服务可以初始化本地 repo、提交本地 Markdown、fetch 远端、合并远端、push，并在 push 被拒绝后重试一次。
 - 新设备首次同步已有远端时，本地没有 commit 的情况下会 checkout 远端分支并建立 tracking。
 - 本地和空远端都没有 commit 时，同步不会强行 push 一个不存在的分支。
-- 同文件冲突时，日记 Markdown 优先比较 front matter `updatedAt`，批注 JSON 优先比较文件内最新批注时间；缺少可靠时间时使用 fallback。
+- 同文件分叉时，日记 Markdown 优先做 diff3 文本合并；true conflict 保留冲突标记并停止自动 push；批注 JSON 和非文本文件使用 fallback。
 
 真实远端验收标志：
 
 - 移动端同步服务能把一篇日记 commit 并 push 到 GitHub 私有仓库。
 - 桌面端能 pull 到这篇日记并正确解析。
 - 桌面端修改后 push，移动端同步服务能 fetch/pull 并正确解析。
-- 遇到非 fast-forward 或同文件冲突时，能按 last-write-wins 完成同步。
+- 遇到非 fast-forward 时，能保留非重叠 Markdown 修改；遇到 true conflict 时不会静默覆盖任意一端。
 - 同步失败时不会导致本地日记丢失。
 
 真实远端 POC 记录：
@@ -427,8 +426,8 @@ POC 需要覆盖：
 - 远端拉取：另一个本地模拟移动端通过 `isomorphic-git` `clone` 拉到 Markdown 和 `media/` 图片。
 - 桌面验收：系统 Git clone 仓库，读取 `entries/2026/06/2026-06-08.md` 和 `media/2026/06/img_poc_1.png`。
 - 桌面修改：系统 Git 修改同一天日记并 push。
-- 冲突重试：旧移动端 worktree 离线修改同文件，首次 push 被远端拒绝后，执行 fetch、last-write-wins merge、retry push 成功。
-- 最终验收：桌面端 `git pull --ff-only` 拉到 last-write-wins 后的移动端版本，图片文件仍存在。
+- 冲突重试：旧移动端 worktree 离线修改同文件，首次 push 被远端拒绝后，执行 fetch、Markdown diff3 merge、retry push；非重叠修改自动保留，true conflict 停止自动 push。
+- 最终验收：桌面端 `git pull --ff-only` 拉到 diff3 clean merge 后的版本，双端非重叠正文都存在，图片文件仍存在。
 
 限制：
 
