@@ -2,7 +2,7 @@
   "expo": {
     "name": "Journal",
     "slug": "journal-mobile",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -10,10 +10,18 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.zilin.journal",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2574fbfa-faae-4559-9981-653a0b7a907f"
+      }
+    },
+    "owner": "zilinr"
   }
 }

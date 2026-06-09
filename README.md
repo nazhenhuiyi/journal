@@ -32,6 +32,29 @@ npm run build
 
 `npm test` 会跑桌面端、`journal-core` 和移动端同步规则测试。
 
+## Android 打包
+
+移动端使用 EAS Build 打包。第一次打包前先登录并把本地 Expo 项目关联到你的 Expo 账号：
+
+```sh
+npm --workspace @journal/mobile run eas:login
+npm --workspace @journal/mobile run eas:init
+```
+
+打可直接安装的 Android APK：
+
+```sh
+npm run build:mobile:android
+```
+
+如果以后要上架 Google Play，打 AAB：
+
+```sh
+npm run build:mobile:android:aab
+```
+
+Android 包名现在是 `com.zilin.journal`，配置在 `apps/mobile/app.json`。这个值决定安卓是否把新版识别为同一个应用，第一次安装后不要随意修改。
+
 ## 目录
 
 - `apps/desktop/`: Electron + Vite 桌面端。
