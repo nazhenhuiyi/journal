@@ -81,6 +81,57 @@ test('desktop creates, persists, and reviews a murmur', async () => {
   }
 })
 
+test('desktop deletes a murmur and persists the removal', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'journal-desktop-e2e-'))
+  const journalDir = path.join(rootDir, 'journal')
+  const today = getLocalDateKey()
+  const murmurText = `Playwright murmur deletion ${Date.now()}`
+
+  await writeJournalEntry(journalDir, today, [
+    '# 正文',
+    '',
+    '保留长日记正文。',
+    '',
+    ':::murmur',
+    'id: m_e2e_delete',
+    `time: ${today}T12:00:00.000Z`,
+    '---',
+    murmurText,
+    ':::',
+  ].join('\n'))
+
+  const context = await createIsolatedDesktopApp(rootDir, journalDir)
+
+  try {
+    const page = await waitForPreviewPage(context.app)
+
+    await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveValue(murmurText)
+    await page.getByRole('button', { name: '删掉这条' }).click()
+
+    await expect(page.getByText('可以先留一条碎碎念，再给它放照片。')).toBeVisible()
+    await expect.poll(
+      async () => (await readJournalEntry(context.journalDir, today)).includes(murmurText),
+      { timeout: 12_000 },
+    ).toBe(false)
+    await expect.poll(
+      async () => (await readJournalEntry(context.journalDir, today)).includes(':::murmur'),
+      { timeout: 12_000 },
+    ).toBe(false)
+
+    await page.reload()
+    await waitForJournalEditor(page)
+
+    await expect(page.getByText('可以先留一条碎碎念，再给它放照片。')).toBeVisible()
+    await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveCount(0)
+
+    await page.getByRole('button', { name: '回看' }).click()
+    await expect(page.getByText('保留长日记正文。')).toBeVisible()
+    await expect(page.locator('.journal-murmur')).toHaveCount(0)
+  } finally {
+    await closeIsolatedDesktopApp(context)
+  }
+})
+
 test('desktop calendar opens historical entries and saves edits for a selected date', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'journal-desktop-e2e-'))
   const journalDir = path.join(rootDir, 'journal')
@@ -116,11 +167,7 @@ test('desktop calendar opens historical entries and saves edits for a selected d
 
     await editor.click()
     await page.keyboard.insertText(`\n${appendedText}`)
-
-    await expect.poll(
-      async () => readJournalEntry(context.journalDir, editedDate).catch(() => ''),
-      { timeout: 12_000 },
-    ).toContain(appendedText)
+    await expect(editor).toContainText(appendedText)
 
     await page.getByRole('button', { name: '上一天' }).click()
     await waitForJournalEditor(page)
@@ -128,19 +175,19 @@ test('desktop calendar opens historical entries and saves edits for a selected d
 
     await expect(page.getByRole('heading', { name: formatJournalHeading(previousDate) })).toBeVisible()
     await expect(editor).toContainText('前一天')
+    await expect.poll(
+      async () => readJournalEntry(context.journalDir, editedDate).catch(() => ''),
+      { timeout: 12_000 },
+    ).toContain(appendedText)
 
     await page.getByRole('button', { name: '返回日历' }).click()
     await expect(page.getByRole('heading', { name: '日历书架' })).toBeVisible()
-    await expect.poll(
-      async () => readJournalEntry(context.journalDir, editedDate).catch(() => ''),
-      { timeout: 5_000 },
-    ).toContain(appendedText)
   } finally {
     await closeIsolatedDesktopApp(context)
   }
 })
 
-test('desktop settings reports unconfigured Git sync state', async () => {
+test('desktop settings reports unconfigured Git sync state and validates unsafe remotes', async () => {
   const context = await createIsolatedDesktopApp()
 
   try {
@@ -154,6 +201,12 @@ test('desktop settings reports unconfigured Git sync state', async () => {
     await expect(page.locator('.settings-sync-status')).toContainText('Git 同步未配置')
     await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible()
     await expect(page.getByRole('button', { name: '立即同步' })).toBeVisible()
+
+    await page.getByLabel('仓库地址').fill('https://secret-token@github.com/example/journal-sync.git')
+    await page.getByLabel('GitHub Token').fill('secret-token')
+    await page.getByRole('button', { name: '保存配置' }).click()
+
+    await expect(page.locator('.settings-sync-error')).toContainText('不能包含用户名或 token')
   } finally {
     await closeIsolatedDesktopApp(context)
   }

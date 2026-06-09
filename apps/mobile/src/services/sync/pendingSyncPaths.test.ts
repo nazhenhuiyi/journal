@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   loadPendingMobileSyncPaths,
   savePendingMobileSyncPaths,
@@ -18,6 +18,7 @@ const pendingPath = 'file:///app/journal-mobile-sync-pending-paths.json'
 
 describe('pendingSyncPaths', () => {
   beforeEach(() => {
+    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', '')
     vi.clearAllMocks()
     mockFileSystem.files.clear()
     mockFileSystem.getInfoAsync.mockImplementation(async (path: string) => ({
@@ -39,6 +40,10 @@ describe('pendingSyncPaths', () => {
     mockFileSystem.writeAsStringAsync.mockImplementation(async (path: string, content: string) => {
       mockFileSystem.files.set(path, content)
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('persists safe pending sync paths outside the worktree', async () => {

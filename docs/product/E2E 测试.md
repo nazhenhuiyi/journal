@@ -1,6 +1,6 @@
 # E2E 测试
 
-本项目测试分为 unit、integration 和 E2E 三层。E2E 分成三类：桌面端本地核心路径、桌面应用层真实同步、共享同步核心真实 GitHub 回归。默认 E2E 命令会跑所有 E2E；没有 GitHub token/remote 时，真实同步测试会自动跳过。
+本项目测试分为 unit、integration 和 E2E 三层。E2E 目前分成四类：桌面端本地核心路径、移动端原生核心路径、桌面应用层真实同步、共享同步核心真实 GitHub 回归。默认 E2E 命令仍只跑已有桌面和 GitHub 同步链路；移动端 Maestro E2E 需要本机安装 Maestro CLI 和可用的 iOS Simulator、Android Emulator 或真机，因此单独运行。
 
 推荐分层：
 
@@ -35,6 +35,12 @@ npm run test:desktop:integration
 npm run e2e
 ```
 
+移动端原生 E2E 单独运行：
+
+```sh
+npm run e2e:mobile
+```
+
 ## Desktop local app E2E
 
 运行：
@@ -57,8 +63,9 @@ npm run e2e:desktop
 - 切到回看模式后能渲染已保存正文。
 - 新建碎碎念后会自动保存到隔离 journal 目录。
 - 刷新后能重新加载碎碎念，回看模式能渲染碎碎念。
-- 日历能列出历史日记、打开指定日期、编辑旧日并保存到对应日期文件。
-- 设置页同步面板和关键按钮存在，未配置 Git 同步状态可见。
+- 删除碎碎念后会自动保存，刷新和回看模式都不会重新出现已删除内容。
+- 日历能列出历史日记、打开指定日期，并在切换日期前保存未落盘编辑到对应日期文件。
+- 设置页同步面板和关键按钮存在，未配置 Git 同步状态可见，危险远端地址会显示错误。
 - 损坏 Markdown 会显示 diagnostics banner。
 
 ## Desktop sync app E2E
@@ -122,12 +129,64 @@ npm run e2e:sync:github
 
 失败排查时可以临时设置 `JOURNAL_E2E_GITHUB_KEEP_BRANCH=1` 保留分支。
 
+## Mobile native E2E
+
+移动端 E2E 使用 [Maestro](https://docs.maestro.dev/platform-support/react-native)，目标是真机或模拟器里的 React Native / Expo Go，而不是 Expo Web。Expo 官方 EAS 文档也以 [Maestro 作为 E2E 示例](https://docs.expo.dev/eas/workflows/reference/e2e-tests)。
+
+运行前安装 Maestro CLI，并确保至少有一个 iOS Simulator、Android Emulator 或真机可用。默认命令会启动 Expo native dev server，并通过 Expo Go 开发 URL 打开应用：
+
+```sh
+npm run e2e:mobile
+```
+
+如果 `maestro` 或 Java 17 没有出现在当前 shell 的 `PATH`，runner 会优先尝试 `~/.maestro/bin/maestro` 和 Homebrew `openjdk@17`；也可以显式设置 `MAESTRO_CLI` 或 `JAVA_HOME`。
+
+默认使用：
+
+- `JOURNAL_MOBILE_E2E_EXPO_PORT=8081`
+- `JOURNAL_MOBILE_E2E_EXPO_URL=exp://127.0.0.1:8081`
+- `JOURNAL_MOBILE_E2E_APP_ID=host.exp.Exponent`（iOS Expo Go；Android Expo Go 可改为 `host.exp.exponent`）
+
+默认命令没有 GitHub 配置时会跳过移动端同步 flow，只跑不访问外网的移动端核心路径和同步配置校验。要运行真实 GitHub 同步 flow，提供移动端专用 env，或复用共享 GitHub E2E env：
+
+```sh
+JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL=https://github.com/you/journal-sync.git \
+JOURNAL_MOBILE_E2E_SYNC_TOKEN=ghp_xxx \
+npm run e2e:mobile
+```
+
+可选项：
+
+- `JOURNAL_MOBILE_E2E_SYNC_BRANCH=mobile-e2e/manual`：指定同步分支；不指定时默认使用 `mobile-e2e/<runId>` 临时分支。
+- `JOURNAL_MOBILE_E2E_SYNC_BRANCH_PREFIX=mobile-e2e`：修改自动临时分支前缀。
+- `JOURNAL_MOBILE_E2E_SYNC_KEEP_BRANCH=1`：保留自动创建的临时分支用于排查；默认会在运行后清理。
+- `JOURNAL_E2E_GITHUB_REMOTE_URL` / `JOURNAL_E2E_GITHUB_TOKEN`：如果没有移动端专用 env，runner 会复用这两个共享同步 E2E env。
+
+如果你已经自己启动了 Expo，可以跳过自动启动：
+
+```sh
+JOURNAL_MOBILE_E2E_SKIP_EXPO_START=1 \
+JOURNAL_MOBILE_E2E_EXPO_URL=exp://127.0.0.1:8081 \
+npm run e2e:mobile
+```
+
+当前覆盖：
+
+- 打开移动端今日页，定位真实 React Native 正文输入框。
+- 输入长日记正文，通过设置页“保存当前”强制本地保存，并验证保存状态。
+- 新增碎碎念，验证碎碎念列表出现新内容。
+- 进入日记列表，验证今天的长日记内容出现在列表预览中。
+- 进入回顾页，验证长日记和碎碎念摘要入口可见。
+- 提供 GitHub env 时，输入未保存正文后进入设置页，填写真实 GitHub 同步配置和 token，点击“立即同步”，验证同步触发会先保存本地内容、完成真实 GitHub 同步状态，并在回到今日后显示已同步。
+- 进入设置页，填写包含凭据的危险远端地址，验证同步配置保存失败状态。
+
 ## 脚本速查
 
 ```sh
 npm run e2e                 # desktop local app + desktop app sync + sync core
 npm run e2e:desktop         # 只跑不访问外网的 Electron 本地核心路径
 npm run e2e:desktop:sync    # 跑桌面应用层真实 GitHub 同步
+npm run e2e:mobile          # 跑移动端 Maestro 原生 E2E，需要模拟器/真机和 Maestro CLI
 npm run e2e:sync:github     # 跑共享 sync core 真实 GitHub 同步
 npm test                    # unit + integration
 npm run test:unit           # 所有 workspace unit

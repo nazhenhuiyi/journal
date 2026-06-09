@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   listDailyJournals,
   loadDailyJournal,
@@ -22,6 +22,7 @@ const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
 
 describe('mobileJournalStore', () => {
   beforeEach(() => {
+    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', '')
     vi.clearAllMocks()
     mockFileSystem.directories.clear()
     mockFileSystem.files.clear()
@@ -75,6 +76,10 @@ describe('mobileJournalStore', () => {
     mockFileSystem.writeAsStringAsync.mockImplementation(async (path: string, content: string) => {
       mockFileSystem.files.set(path, content)
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('does not create a file for an empty save', async () => {

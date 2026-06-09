@@ -8,6 +8,7 @@ import {
   type MarkdownDiagnostic,
   type MurmurBlock,
 } from '@journal/core'
+import { getMobileE2eRunId } from './e2eEnvironment'
 
 export type MobileJournalRecord = {
   date: string
@@ -181,7 +182,10 @@ export function getJournalWorktreeDirectory() {
     throw new Error('File system document directory is unavailable.')
   }
 
-  return `${FileSystem.documentDirectory}${worktreeDirectoryName}/`
+  const e2eRunId = getMobileE2eRunId()
+  const directoryName = e2eRunId ? `journal-e2e-worktree-${e2eRunId}` : worktreeDirectoryName
+
+  return `${FileSystem.documentDirectory}${directoryName}/`
 }
 
 async function readDirectoryIfExists(path: string) {

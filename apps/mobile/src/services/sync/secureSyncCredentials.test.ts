@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   loadGitHubSyncCredentials,
   loadGitHubSyncSettings,
@@ -16,7 +16,12 @@ vi.mock('expo-secure-store', () => mockSecureStore)
 
 describe('secure sync credentials', () => {
   beforeEach(() => {
+    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', '')
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('stores trimmed GitHub credentials in SecureStore', async () => {

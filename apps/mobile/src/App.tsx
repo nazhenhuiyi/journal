@@ -166,22 +166,26 @@ export default function App() {
                       icon="calendar-outline"
                       label="日记列表"
                       onPress={() => navigation.navigate('JournalList')}
+                      testID="journal-list-button"
                     />
                     <TopNavButton
                       icon="sparkles-outline"
                       label="回顾"
                       onPress={() => navigation.navigate('Review')}
+                      testID="review-button"
                     />
                   </View>
                   <View className="flex-row items-center gap-1">
                     <InlineStatusButton
                       status={headerStatus}
                       onPress={() => navigation.navigate('Settings')}
+                      testID="sync-status-button"
                     />
                     <HeaderIconButton
                       icon="settings-outline"
                       label="设置"
                       onPress={() => navigation.navigate('Settings')}
+                      testID="settings-button"
                     />
                   </View>
                 </View>
@@ -203,6 +207,7 @@ export default function App() {
                     <MurmurCountButton
                       count={murmurs.length}
                       onPress={openMurmurPanel}
+                      testID="murmur-count-button"
                     />
                   </View>
                   {markdownDiagnosticSummary ? (
@@ -211,6 +216,7 @@ export default function App() {
                     </Text>
                   ) : null}
                   <TextInput
+                    accessibilityLabel="日记正文"
                     autoCapitalize="none"
                     autoCorrect={false}
                     className="flex-1 text-[18px] leading-8 text-ink"
@@ -236,6 +242,7 @@ export default function App() {
                     }}
                     textAlignVertical="top"
                     textContentType="none"
+                    testID="long-entry-input"
                     value={longEntryMarkdown}
                   />
                 </View>
@@ -262,6 +269,7 @@ export default function App() {
                         </Text>
                       ) : null}
                       <TextInput
+                        accessibilityLabel="碎碎念正文"
                         autoFocus={murmurs.length === 0}
                         className="min-h-32 text-base leading-6 text-ink"
                         multiline
@@ -274,6 +282,7 @@ export default function App() {
                           padding: 0,
                         }}
                         textAlignVertical="top"
+                        testID="murmur-draft-input"
                         value={murmurDraft}
                       />
                     </View>
@@ -283,6 +292,7 @@ export default function App() {
                         disabled={!murmurDraft.trim() || isBusy}
                         icon="add"
                         onPress={() => void handleAddMurmur()}
+                        testID="add-murmur-button"
                         variant="secondary"
                       >
                         加入今天
@@ -368,9 +378,11 @@ export default function App() {
 function MurmurCountButton({
   count,
   onPress,
+  testID,
 }: {
   count: number
   onPress: () => void
+  testID?: string
 }) {
   return (
     <Pressable
@@ -381,6 +393,7 @@ function MurmurCountButton({
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 1,
       })}
+      testID={testID}
     >
       <Text className="text-sm font-semibold text-moss">碎碎念</Text>
       <Text className="text-sm font-semibold text-mossMuted">· {count} 条</Text>
@@ -392,10 +405,12 @@ function TopNavButton({
   icon,
   label,
   onPress,
+  testID,
 }: {
   icon: IconName
   label: string
   onPress: () => void
+  testID?: string
 }) {
   return (
     <Pressable
@@ -406,6 +421,7 @@ function TopNavButton({
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 1,
       })}
+      testID={testID}
     >
       <Ionicons color="#254f43" name={icon} size={19} />
     </Pressable>
@@ -416,10 +432,12 @@ function HeaderIconButton({
   icon,
   label,
   onPress,
+  testID,
 }: {
   icon: IconName
   label: string
   onPress: () => void
+  testID?: string
 }) {
   return (
     <Pressable
@@ -430,6 +448,7 @@ function HeaderIconButton({
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 0.9,
       })}
+      testID={testID}
     >
       <Ionicons color="#4f7469" name={icon} size={15} />
     </Pressable>
@@ -439,9 +458,11 @@ function HeaderIconButton({
 function InlineStatusButton({
   onPress,
   status,
+  testID,
 }: {
   onPress: () => void
   status: HeaderStatus
+  testID?: string
 }) {
   return (
     <Pressable
@@ -454,6 +475,7 @@ function InlineStatusButton({
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 1,
       })}
+      testID={testID}
     >
       <Text className={cn('text-xs font-semibold', headerStatusTextClasses[status.tone])}>
         {status.label}

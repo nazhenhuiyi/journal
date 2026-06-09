@@ -22,6 +22,7 @@ export function PageShell({ children, icon, onBack, title }: PageShellProps) {
             accessibilityRole="button"
             className="h-9 w-9 items-center justify-center rounded-full bg-cloud"
             onPress={onBack}
+            testID="back-to-today-button"
           >
             <Ionicons color="#254f43" name="chevron-back" size={22} />
           </Pressable>

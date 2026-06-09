@@ -1,0 +1,45 @@
+appId: ${APP_ID}
+env:
+  EXPO_URL: exp://127.0.0.1:8081
+  ENTRY_TEXT: Mobile E2E long entry saved from Maestro
+  MURMUR_TEXT: Mobile E2E murmur saved from Maestro
+---
+- runFlow: _open-expo.yaml
+- tapOn:
+    id: long-entry-input
+- inputText: ${ENTRY_TEXT}
+- tapOn:
+    id: settings-button
+- assertVisible: 设置
+- tapOn:
+    id: save-current-button
+    enabled: true
+- extendedWaitUntil:
+    visible: 已保存
+    timeout: 12000
+- tapOn:
+    id: back-to-today-button
+- tapOn:
+    id: murmur-count-button
+- tapOn:
+    id: murmur-draft-input
+- inputText: ${MURMUR_TEXT}
+- tapOn:
+    id: add-murmur-button
+    enabled: true
+- assertVisible: ${MURMUR_TEXT}
+- tapOn:
+    point: "50%,12%"
+- tapOn:
+    point: "50%,12%"
+- tapOn:
+    id: journal-list-button
+- assertVisible: 日记列表
+- assertVisible: ${ENTRY_TEXT}
+- tapOn:
+    id: back-to-today-button
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- assertVisible: 长日记
+- assertVisible: 碎碎念

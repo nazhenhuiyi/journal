@@ -1,0 +1,23 @@
+appId: ${APP_ID}
+---
+- stopApp
+- openLink:
+    link: ${EXPO_URL}
+- runFlow:
+    when:
+      visible: 'Open'
+    commands:
+      - tapOn: 'Open'
+- runFlow:
+    when:
+      visible: '打开'
+    commands:
+      - tapOn: '打开'
+- runFlow:
+    when:
+      visible: '返回今日'
+    commands:
+      - tapOn: 返回今日
+- extendedWaitUntil:
+    visible: 日记列表
+    timeout: 60000

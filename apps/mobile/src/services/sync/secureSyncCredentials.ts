@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store'
 import { assertSafeRemoteUrl } from '@journal/sync'
+import { appendMobileE2eSuffix } from '../e2eEnvironment'
 
 export type GitHubSyncCredentials = {
   token: string
@@ -35,14 +36,14 @@ const credentialsKey = 'journal.githubSyncCredentials.v1'
 const settingsKey = 'journal.githubSyncSettings.v1'
 
 export async function saveGitHubSyncCredentials(credentials: GitHubSyncCredentials) {
-  await SecureStore.setItemAsync(credentialsKey, JSON.stringify({
+  await SecureStore.setItemAsync(getCredentialsKey(), JSON.stringify({
     token: credentials.token.trim(),
     username: credentials.username?.trim() || undefined,
   }))
 }
 
 export async function loadGitHubSyncCredentials(): Promise<GitHubSyncCredentialsState> {
-  const raw = await SecureStore.getItemAsync(credentialsKey)
+  const raw = await SecureStore.getItemAsync(getCredentialsKey())
 
   if (!raw) {
     return { status: 'missing' }
@@ -64,20 +65,20 @@ export async function loadGitHubSyncCredentials(): Promise<GitHubSyncCredentials
 }
 
 export async function clearGitHubSyncCredentials() {
-  await SecureStore.deleteItemAsync(credentialsKey)
+  await SecureStore.deleteItemAsync(getCredentialsKey())
 }
 
 export async function saveGitHubSyncSettings(settings: GitHubSyncSettings) {
   assertSafeRemoteUrl(settings.remoteUrl)
 
-  await SecureStore.setItemAsync(settingsKey, JSON.stringify({
+  await SecureStore.setItemAsync(getSettingsKey(), JSON.stringify({
     branch: settings.branch.trim() || 'main',
     remoteUrl: settings.remoteUrl.trim(),
   }))
 }
 
 export async function loadGitHubSyncSettings(): Promise<GitHubSyncSettingsState> {
-  const raw = await SecureStore.getItemAsync(settingsKey)
+  const raw = await SecureStore.getItemAsync(getSettingsKey())
 
   if (!raw) {
     return { status: 'missing' }
@@ -99,7 +100,15 @@ export async function loadGitHubSyncSettings(): Promise<GitHubSyncSettingsState>
 }
 
 export async function clearGitHubSyncSettings() {
-  await SecureStore.deleteItemAsync(settingsKey)
+  await SecureStore.deleteItemAsync(getSettingsKey())
+}
+
+function getCredentialsKey() {
+  return appendMobileE2eSuffix(credentialsKey)
+}
+
+function getSettingsKey() {
+  return appendMobileE2eSuffix(settingsKey)
 }
 
 function parseCredentials(value: string): GitHubSyncCredentials | null {

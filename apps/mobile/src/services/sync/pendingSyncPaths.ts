@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy'
+import { appendMobileE2eSuffix } from '../e2eEnvironment'
 
 const pendingSyncPathsFileName = 'journal-mobile-sync-pending-paths.json'
 
@@ -64,5 +65,5 @@ function getPendingSyncPathsFilePath() {
     throw new Error('File system document directory is unavailable.')
   }
 
-  return `${FileSystem.documentDirectory}${pendingSyncPathsFileName}`
+  return `${FileSystem.documentDirectory}${appendMobileE2eSuffix(pendingSyncPathsFileName)}`
 }

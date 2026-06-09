@@ -100,6 +100,7 @@ export function SettingsPage({
               icon="save-outline"
               loading={saveState === 'saving'}
               onPress={onSaveCurrent}
+              testID="save-current-button"
               variant="secondary"
             >
               保存当前
@@ -117,27 +118,33 @@ export function SettingsPage({
 
           <View className="gap-3">
             <Input
+              accessibilityLabel="同步仓库地址"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
               onChangeText={setSyncRemoteUrl}
               placeholder="https://github.com/you/journal-sync.git"
+              testID="sync-remote-url-input"
               value={syncRemoteUrl}
             />
             <Input
+              accessibilityLabel="同步分支"
               autoCapitalize="none"
               autoCorrect={false}
               onChangeText={setSyncBranch}
               placeholder="main"
+              testID="sync-branch-input"
               value={syncBranch}
             />
             <View className="gap-1">
               <Input
+                accessibilityLabel="GitHub token"
                 autoCapitalize="none"
                 autoCorrect={false}
                 onChangeText={setSyncTokenDraft}
                 placeholder={hasStoredSyncToken ? 'Token 已保存，留空不改' : 'GitHub token'}
                 secureTextEntry
+                testID="sync-token-input"
                 value={syncTokenDraft}
               />
               {hasStoredSyncToken ? (
@@ -153,6 +160,7 @@ export function SettingsPage({
                 icon="key-outline"
                 loading={isSavingSyncConfiguration}
                 onPress={() => void onSaveSyncConfiguration()}
+                testID="save-sync-config-button"
                 variant="secondary"
               >
                 保存配置
@@ -163,6 +171,7 @@ export function SettingsPage({
                 icon="sync-outline"
                 loading={syncSnapshot.status === 'syncing'}
                 onPress={() => void onSyncNow()}
+                testID="sync-now-button"
               >
                 立即同步
               </Button>
