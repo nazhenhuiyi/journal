@@ -1,41 +1,60 @@
-import { type ComponentProps, type ReactNode } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { type ReactNode } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { semanticColors } from '@journal/theme'
 import { Screen } from '../ui/Screen'
 
-export type MobileIconName = ComponentProps<typeof Ionicons>['name']
-
 type PageShellProps = {
   children: ReactNode
-  icon: MobileIconName
   onBack: () => void
   title: string
 }
 
-export function PageShell({ children, icon, onBack, title }: PageShellProps) {
+export function PageShell({ children, onBack, title }: PageShellProps) {
   return (
     <Screen>
       <View className="flex-1 px-5 pb-5 pt-4">
-        <View className="mb-5 flex-row items-center gap-3">
+        <View style={styles.nav}>
           <Pressable
             accessibilityLabel="返回今日"
             accessibilityRole="button"
-            className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft"
             onPress={onBack}
+            style={styles.backButton}
             testID="back-to-today-button"
           >
-            <Ionicons color={semanticColors.primary} name="chevron-back" size={22} />
+            <Ionicons color={semanticColors['muted-fg']} name="chevron-back" size={24} />
           </Pressable>
-          <View className="flex-row items-center gap-2">
-            <View className="h-8 w-8 items-center justify-center rounded-lg bg-primary-soft">
-              <Ionicons color={semanticColors.primary} name={icon} size={18} />
-            </View>
-            <Text className="text-lg font-semibold text-foreground">{title}</Text>
-          </View>
+          <Text
+            className="text-lg font-semibold text-foreground"
+            style={styles.title}
+          >
+            {title}
+          </Text>
+          <View style={styles.navSpacer} />
         </View>
         {children}
       </View>
     </Screen>
   )
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+  },
+  nav: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 40,
+    marginBottom: 28,
+  },
+  navSpacer: {
+    width: 32,
+  },
+  title: {
+    flex: 1,
+    textAlign: 'center',
+  },
+})

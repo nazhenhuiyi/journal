@@ -220,6 +220,7 @@ export function useMobileSync({
         setSyncCredentialStatus('available')
       }
 
+      const hasTokenAfterSave = token ? true : hasStoredSyncToken
       const nextCredentialStatus = token ? 'available' : syncCredentialStatus
       const nextConfigurationError = nextCredentialStatus === 'corrupt'
         ? 'GitHub token 无法读取，请重新保存。'
@@ -227,12 +228,15 @@ export function useMobileSync({
 
       syncConfigRef.current = {
         branch,
-        hasStoredSyncToken: token ? true : hasStoredSyncToken,
+        hasStoredSyncToken: hasTokenAfterSave,
         remoteUrl,
       }
       setSyncBranch(branch)
       setSyncRemoteUrl(remoteUrl)
-      setSyncMessage(nextConfigurationError ?? '同步配置已保存')
+      setSyncMessage(
+        nextConfigurationError
+          ?? (hasTokenAfterSave ? '同步配置已保存' : '仓库已保存，继续保存 GitHub token'),
+      )
       setSyncSnapshot((currentSnapshot) => ({
         ...currentSnapshot,
         lastError: nextConfigurationError,

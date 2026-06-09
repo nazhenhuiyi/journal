@@ -1195,12 +1195,31 @@ async function getRecentCommits(
     const commits = await traceGitStep(
       runtime,
       'status.recentCommits',
-      () => getGit(runtime).log({
-        depth,
-        dir: runtime.dir,
-        fs: runtime.fs,
-        ref: 'HEAD',
-      }),
+      async () => {
+        const git = getGit(runtime)
+        const results: Array<Awaited<ReturnType<typeof git.readCommit>>> = []
+        const seenOids = new Set<string>()
+        let nextOid: string | null = await git.resolveRef({
+          dir: runtime.dir,
+          fs: runtime.fs,
+          ref: 'HEAD',
+        })
+
+        while (nextOid && results.length < depth && !seenOids.has(nextOid)) {
+          seenOids.add(nextOid)
+
+          const result = await git.readCommit({
+            dir: runtime.dir,
+            fs: runtime.fs,
+            oid: nextOid,
+          })
+
+          results.push(result)
+          nextOid = result.commit.parent[0] ?? null
+        }
+
+        return results
+      },
       (results) => ({ commits: results.length }),
     )
 

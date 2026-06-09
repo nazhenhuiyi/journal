@@ -28,6 +28,7 @@ import { cn } from './ui/cn'
 import { JournalListPage } from './pages/JournalListPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { SyncSettingsPage } from './pages/SyncSettingsPage'
 import { Screen } from './ui/Screen'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
@@ -41,6 +42,7 @@ type RootStackParamList = {
   JournalList: undefined
   Review: undefined
   Settings: undefined
+  SyncSettings: undefined
 }
 
 const weatherPlaceholder = '晴 24℃'
@@ -108,7 +110,6 @@ export default function App() {
     saveCurrentJournalRef,
     saveStateRef,
   })
-  const statusLabel = getStatusLabel(saveState, record?.updatedAt ?? null)
   const markdownDiagnostics = record?.diagnostics ?? []
   const markdownErrorDiagnostics = markdownDiagnostics.filter((diagnostic) => diagnostic.severity === 'error')
   const markdownDiagnosticSummary = formatMarkdownDiagnosticSummary(markdownErrorDiagnostics.length)
@@ -179,7 +180,7 @@ export default function App() {
                   <View className="flex-row items-center gap-1">
                     <InlineStatusButton
                       status={headerStatus}
-                      onPress={() => navigation.navigate('Settings')}
+                      onPress={() => navigation.navigate('SyncSettings')}
                       testID="sync-status-button"
                     />
                     <HeaderIconButton
@@ -201,7 +202,7 @@ export default function App() {
                 >
                   <View className="mb-5 flex-row items-center justify-between gap-4">
                     <View className="shrink">
-                      <Text className="text-sm font-semibold text-primary">
+                      <Text className="text-sm font-semibold text-foreground">
                         {formatPaperDateLine(today)} · {weatherPlaceholder}
                       </Text>
                     </View>
@@ -345,29 +346,40 @@ export default function App() {
           {({ navigation }) => (
             <SettingsPage
               hasStoredSyncToken={hasStoredSyncToken}
-              isBusy={isBusy}
-              isLoadingGitStatus={isLoadingGitStatus}
               isSavingSyncConfiguration={isSavingSyncConfiguration}
-              isSyncBusy={isSyncBusy}
-              gitStatus={mobileGitStatus}
-              gitStatusError={gitStatusError}
-              markdownDiagnosticSummary={markdownDiagnosticSummary}
-              murmursCount={murmurs.length}
               onBack={() => returnToToday(navigation)}
-              onRefreshGitStatus={refreshMobileGitStatus}
-              onSaveCurrent={() => void saveCurrentJournal()}
               onSaveSyncConfiguration={saveSyncConfiguration}
-              onSyncNow={handleSyncNow}
-              saveState={saveState}
               setSyncBranch={setSyncBranch}
               setSyncRemoteUrl={setSyncRemoteUrl}
               setSyncTokenDraft={setSyncTokenDraft}
-              statusLabel={statusLabel}
               syncBranch={syncBranch}
+              syncRemoteUrl={syncRemoteUrl}
+              syncTokenDraft={syncTokenDraft}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="SyncSettings">
+          {({ navigation }) => (
+            <SyncSettingsPage
+              gitStatus={mobileGitStatus}
+              gitStatusError={gitStatusError}
+              hasStoredSyncToken={hasStoredSyncToken}
+              isLoadingGitStatus={isLoadingGitStatus}
+              isSyncBusy={isSyncBusy}
+              onBack={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack()
+                  return
+                }
+
+                navigation.replace('Settings')
+              }}
+              onOpenSyncConfiguration={() => navigation.navigate('Settings')}
+              onRefreshGitStatus={refreshMobileGitStatus}
+              onSyncNow={handleSyncNow}
               syncRemoteUrl={syncRemoteUrl}
               syncSnapshot={syncSnapshot}
               syncStatusLabel={syncStatusLabel}
-              syncTokenDraft={syncTokenDraft}
             />
           )}
         </Stack.Screen>
@@ -396,7 +408,7 @@ function MurmurCountButton({
       })}
       testID={testID}
     >
-      <Text className="text-sm font-semibold text-primary">碎碎念</Text>
+      <Text className="text-sm font-semibold text-foreground">碎碎念</Text>
       <Text className="text-sm font-semibold text-muted-fg">· {count} 条</Text>
     </Pressable>
   )
@@ -424,7 +436,7 @@ function TopNavButton({
       })}
       testID={testID}
     >
-      <Ionicons color={semanticColors.primary} name={icon} size={19} />
+      <Ionicons color={semanticColors['muted-fg']} name={icon} size={19} />
     </Pressable>
   )
 }
@@ -521,30 +533,6 @@ function formatTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function getStatusLabel(saveState: SaveState, updatedAt: string | null) {
-  if (saveState === 'loading') {
-    return '正在打开'
-  }
-
-  if (saveState === 'saving') {
-    return '正在保存'
-  }
-
-  if (saveState === 'saved') {
-    return '已保存'
-  }
-
-  if (saveState === 'dirty') {
-    return '有未保存更改'
-  }
-
-  if (saveState === 'error') {
-    return '保存失败'
-  }
-
-  return updatedAt ? `上次保存 ${formatTime(updatedAt)}` : '还没有保存'
 }
 
 function getHeaderStatus(

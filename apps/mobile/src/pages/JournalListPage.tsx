@@ -69,7 +69,7 @@ export function JournalListPage({
   }, [today])
 
   return (
-    <PageShell icon="calendar-outline" onBack={onBack} title="日记列表">
+    <PageShell onBack={onBack} title="日记列表">
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
         <View className="gap-3">
           {isLoading ? (

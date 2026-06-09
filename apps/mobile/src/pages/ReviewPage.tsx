@@ -11,18 +11,18 @@ export function ReviewPage({ longEntryMarkdown, murmurCount, onBack }: ReviewPag
   const trimmedEntry = longEntryMarkdown.trim()
 
   return (
-    <PageShell icon="sparkles-outline" onBack={onBack} title="回顾">
+    <PageShell onBack={onBack} title="回顾">
       <View className="gap-3">
         <View className="rounded-lg border border-border bg-surface px-4 py-4">
           <Text className="mb-3 text-base font-semibold text-foreground">今天</Text>
           <View className="flex-row gap-3">
-            <View className="flex-1 rounded-lg bg-primary-soft px-3 py-3">
+            <View className="flex-1 rounded-lg bg-surface-muted px-3 py-3">
               <Text className="text-xs font-medium text-muted-fg">长日记</Text>
-              <Text className="mt-1 text-lg font-semibold text-primary">{trimmedEntry.length} 字</Text>
+              <Text className="mt-1 text-lg font-semibold text-foreground">{trimmedEntry.length} 字</Text>
             </View>
-            <View className="flex-1 rounded-lg bg-primary-soft px-3 py-3">
+            <View className="flex-1 rounded-lg bg-surface-muted px-3 py-3">
               <Text className="text-xs font-medium text-muted-fg">碎碎念</Text>
-              <Text className="mt-1 text-lg font-semibold text-primary">{murmurCount} 条</Text>
+              <Text className="mt-1 text-lg font-semibold text-foreground">{murmurCount} 条</Text>
             </View>
           </View>
         </View>

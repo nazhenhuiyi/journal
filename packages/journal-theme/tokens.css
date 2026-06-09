@@ -1,27 +1,27 @@
 @theme {
-  --color-paper-50: #fffdf8;
-  --color-paper-100: #fffaf0;
-  --color-paper-200: #f2e6cf;
-  --color-paper-300: #e3cfaa;
-  --color-paper-500: #b98f55;
-  --color-paper-700: #7a4f32;
-  --color-paper-900: #2f261f;
+  --color-paper-50: #fffdf9;
+  --color-paper-100: #f6f5f2;
+  --color-paper-200: #e5e2dc;
+  --color-paper-300: #cec8bf;
+  --color-paper-500: #9e9182;
+  --color-paper-700: #6a5f54;
+  --color-paper-900: #2a2825;
 
-  --color-ink-50: #f7f4f1;
-  --color-ink-100: #ebe3dc;
-  --color-ink-200: #d5c5b8;
-  --color-ink-300: #ad998b;
-  --color-ink-500: #5f5248;
-  --color-ink-700: #3f332b;
-  --color-ink-900: #2f261f;
+  --color-ink-50: #f7f7f5;
+  --color-ink-100: #eceae7;
+  --color-ink-200: #d8d4ce;
+  --color-ink-300: #aaa39a;
+  --color-ink-500: #625d55;
+  --color-ink-700: #3c3934;
+  --color-ink-900: #272523;
 
-  --color-moss-50: #f2fbf7;
-  --color-moss-100: #ddf7ea;
-  --color-moss-200: #b9ecd4;
-  --color-moss-300: #7edcaf;
-  --color-moss-500: #36b985;
-  --color-moss-700: #168766;
-  --color-moss-900: #0e5f4b;
+  --color-moss-50: #f6faf7;
+  --color-moss-100: #e8f2ed;
+  --color-moss-200: #d0e1d8;
+  --color-moss-300: #a9cabc;
+  --color-moss-500: #6f9f8b;
+  --color-moss-700: #3f7d6b;
+  --color-moss-900: #244f45;
 
   --color-brass-50: #fff8e6;
   --color-brass-100: #fff0c2;

@@ -324,16 +324,62 @@ describe('journal git sync core', () => {
   })
 
   it('includes the latest three local commits in sync status', async () => {
+    const commitChain = [
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Latest sync\n\nBody',
+          parent: ['2222222222222222222222222222222222222222'],
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_900_000,
+          },
+          message: 'Previous sync',
+          parent: ['3333333333333333333333333333333333333333'],
+        },
+        oid: '2222222222222222222222222222222222222222',
+      },
+      {
+        commit: {
+          committer: {},
+          message: '',
+          parent: [],
+        },
+        oid: '3333333333333333333333333333333333333333',
+      },
+    ]
+
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => {
+      const entry = commitChain.find((commit) => commit.oid === oid)
+
+      if (!entry) {
+        throw new Error(`missing commit ${oid}`)
+      }
+
+      return {
+        ...entry,
+        payload: '',
+      }
+    })
+
     const status = await getJournalGitSyncStatus(createRuntime(), {
       branch: 'main',
     }, credentials)
 
-    expect(mockGit.log).toHaveBeenCalledWith(expect.objectContaining({
-      depth: 3,
+    expect(mockGit.log).not.toHaveBeenCalled()
+    expect(mockGit.resolveRef).toHaveBeenCalledWith(expect.objectContaining({
       dir: '/journal',
       fs: mockFs,
       ref: 'HEAD',
     }))
+    expect(mockGit.readCommit).toHaveBeenCalledTimes(3)
     expect(status.recentCommits).toEqual([
       {
         committedAt: new Date(1_780_987_200 * 1000).toISOString(),
