@@ -79,6 +79,20 @@ const initialSyncSnapshot: SyncSnapshot = {
   pendingReason: null,
   status: 'idle',
 }
+type TodayFallbackNavigation = {
+  canGoBack: () => boolean
+  goBack: () => void
+  replace: (routeName: 'Today') => void
+}
+
+function returnToToday(navigation: TodayFallbackNavigation) {
+  if (navigation.canGoBack()) {
+    navigation.goBack()
+    return
+  }
+
+  navigation.replace('Today')
+}
 
 export default function App() {
   const [today, setToday] = useState(() => getLocalDateKey())
@@ -890,7 +904,7 @@ export default function App() {
             <JournalListPage
               longEntryMarkdown={longEntryMarkdown}
               murmurCount={murmurs.length}
-              onBack={navigation.goBack}
+              onBack={() => returnToToday(navigation)}
               today={today}
             />
           )}
@@ -900,7 +914,7 @@ export default function App() {
             <ReviewPage
               longEntryMarkdown={longEntryMarkdown}
               murmurCount={murmurs.length}
-              onBack={navigation.goBack}
+              onBack={() => returnToToday(navigation)}
             />
           )}
         </Stack.Screen>
@@ -912,7 +926,7 @@ export default function App() {
               isSavingSyncConfiguration={isSavingSyncConfiguration}
               isSyncBusy={isSyncBusy}
               murmursCount={murmurs.length}
-              onBack={navigation.goBack}
+              onBack={() => returnToToday(navigation)}
               onSaveCurrent={() => void saveCurrentJournal()}
               onSaveSyncConfiguration={() => void saveSyncConfiguration()}
               onSyncNow={() => void handleSyncNow()}
