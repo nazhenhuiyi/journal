@@ -4,6 +4,7 @@ import {
   listDailyJournals,
   loadDailyJournal,
   saveDailyJournal,
+  updateDailyJournalFrontMatter,
 } from './mobileJournalStore'
 
 const mockFileSystem = vi.hoisted(() => ({
@@ -267,6 +268,86 @@ updatedAt: 2026-06-08T08:00:00.000Z
       longEntryMarkdown: '今天写一点。',
       updatedAt: '2026-06-08T08:00:00.000Z',
     })
+  })
+
+  it('loads parsed front matter for mobile records', async () => {
+    mockFileSystem.files.set(entryPath, `---
+date: 2026-06-08
+weather:
+  text: 小雨
+  temperature: 18
+---
+
+今天写一点。`)
+
+    await expect(loadDailyJournal('2026-06-08')).resolves.toMatchObject({
+      frontMatter: {
+        date: '2026-06-08',
+        weather: {
+          text: '小雨',
+          temperature: 18,
+        },
+      },
+      longEntryMarkdown: '今天写一点。',
+    })
+  })
+
+  it('updates weather front matter without changing journal content', async () => {
+    mockFileSystem.files.set(entryPath, `---
+date: 2026-06-08
+createdAt: 2026-06-08T08:00:00.000Z
+updatedAt: 2026-06-08T08:00:00.000Z
+---
+
+今天写一点。
+
+:::murmur
+id: m_20260608_213800
+time: 2026-06-08T21:38:00.000Z
+---
+窗边在下雨。
+:::`)
+
+    const savedRecord = await updateDailyJournalFrontMatter('2026-06-08', {
+      weather: {
+        text: '小雨',
+        temperature: 18,
+        updatedAt: '2026-06-08T09:00:00.000Z',
+      },
+      location: {
+        name: '成都',
+        region: '四川',
+        country: '中国',
+      },
+    })
+
+    expect(savedRecord.didWrite).toBe(true)
+    expect(savedRecord.changedPaths).toEqual(['entries/2026/06/2026-06-08.md'])
+    expect(savedRecord.longEntryMarkdown).toBe('今天写一点。')
+    expect(savedRecord.murmurs[0]).toMatchObject({
+      body: '窗边在下雨。',
+      id: 'm_20260608_213800',
+    })
+    expect(mockFileSystem.files.get(entryPath)).toContain('weather:')
+    expect(mockFileSystem.files.get(entryPath)).toContain('location:')
+  })
+
+  it('keeps weather front matter in memory without writing an empty journal', async () => {
+    const savedRecord = await updateDailyJournalFrontMatter('2026-06-08', {
+      weather: {
+        text: '晴',
+        temperature: 24,
+        updatedAt: '2026-06-08T09:00:00.000Z',
+      },
+    })
+
+    expect(savedRecord.didWrite).toBe(false)
+    expect(savedRecord.changedPaths).toEqual([])
+    expect(savedRecord.frontMatter.weather).toMatchObject({
+      text: '晴',
+      temperature: 24,
+    })
+    expect(mockFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
   })
 
   it('returns markdown diagnostics for malformed journal files', async () => {

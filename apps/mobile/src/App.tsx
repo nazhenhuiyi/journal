@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
-import type { ImageBlock, MurmurBlock } from '@journal/core'
+import type { DayFrontMatter, ImageBlock, MurmurBlock } from '@journal/core'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
@@ -24,6 +24,7 @@ import {
   type SaveState,
 } from './hooks/useMobileJournal'
 import { useMobileSync } from './hooks/useMobileSync'
+import { useMobileWeather } from './hooks/useMobileWeather'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
 import { cn } from './ui/cn'
@@ -52,7 +53,6 @@ type RootStackParamList = {
 }
 type ImageImportSource = 'camera' | 'library'
 
-const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const murmurDraftInputMinHeight = 92
 
@@ -93,6 +93,7 @@ export default function App() {
     saveStateRef,
     removeMurmurImage,
     today,
+    updateTodayFrontMatter,
     updateMurmurImageCaption,
   } = useMobileJournal()
   const {
@@ -138,6 +139,19 @@ export default function App() {
     hasStoredSyncToken,
     syncRemoteUrl,
   )
+  const paperDateLine = formatPaperDateLine(today)
+  const weatherLineLabel = formatWeatherLineLabel(record?.frontMatter.weather)
+  const paperHeaderLine = [paperDateLine, weatherLineLabel].filter(Boolean).join(' · ')
+
+  useMobileWeather({
+    frontMatter: record?.frontMatter ?? null,
+    isLongEntryInputUnstable,
+    record,
+    saveState,
+    saveStateRef,
+    today,
+    updateTodayFrontMatter,
+  })
 
   const openMurmurPanel = useCallback(() => {
     setIsMurmurPanelVisible(true)
@@ -285,7 +299,7 @@ export default function App() {
                   <View className="mb-5 flex-row items-center justify-between gap-4">
                     <View className="shrink">
                       <Text className="text-sm font-semibold text-foreground">
-                        {formatPaperDateLine(today)} · {weatherPlaceholder}
+                        {paperHeaderLine}
                       </Text>
                     </View>
                     <MurmurCountButton
@@ -750,6 +764,18 @@ function formatPaperDateLine(dateKey: string) {
   const month = date.getMonth() + 1
   const day = date.getDate()
   return `${month}月${day}日 · ${weekday}`
+}
+
+function formatWeatherLineLabel(weather: DayFrontMatter['weather']) {
+  if (!weather?.text) {
+    return ''
+  }
+
+  const temperature = typeof weather.temperature === 'number'
+    ? `${Math.round(weather.temperature)}℃`
+    : ''
+
+  return [weather.text, temperature].filter(Boolean).join(' ')
 }
 
 function formatTime(value: string) {
