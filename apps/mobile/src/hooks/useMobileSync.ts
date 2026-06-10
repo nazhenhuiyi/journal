@@ -27,6 +27,7 @@ import type {
 } from './useMobileJournal'
 
 const mobilePullIntervalMs = 30_000
+const mobileRecentCommitLimit = 3
 
 const initialSyncSnapshot: SyncSnapshot = {
   lastError: null,
@@ -81,9 +82,11 @@ export function useMobileSync({
 
   const refreshMobileGitStatus = useCallback(async (input?: {
     branch?: string
+    includeDirtyPaths?: boolean
     remoteUrl?: string
   }) => {
     const branch = input?.branch ?? syncConfigRef.current.branch
+    const includeDirtyPaths = input?.includeDirtyPaths ?? false
     const remoteUrl = input?.remoteUrl ?? syncConfigRef.current.remoteUrl
 
     setIsLoadingGitStatus(true)
@@ -93,6 +96,9 @@ export function useMobileSync({
       const status = await getMobileGitSyncStatus({
         branch: branch.trim() || 'main',
         remoteUrl: remoteUrl.trim(),
+      }, {
+        includeDirtyPaths,
+        recentCommitLimit: mobileRecentCommitLimit,
       })
 
       setMobileGitStatus(status)
@@ -220,6 +226,7 @@ export function useMobileSync({
         setSyncCredentialStatus('available')
       }
 
+      const hasTokenAfterSave = token ? true : hasStoredSyncToken
       const nextCredentialStatus = token ? 'available' : syncCredentialStatus
       const nextConfigurationError = nextCredentialStatus === 'corrupt'
         ? 'GitHub token 无法读取，请重新保存。'
@@ -227,12 +234,15 @@ export function useMobileSync({
 
       syncConfigRef.current = {
         branch,
-        hasStoredSyncToken: token ? true : hasStoredSyncToken,
+        hasStoredSyncToken: hasTokenAfterSave,
         remoteUrl,
       }
       setSyncBranch(branch)
       setSyncRemoteUrl(remoteUrl)
-      setSyncMessage(nextConfigurationError ?? '同步配置已保存')
+      setSyncMessage(
+        nextConfigurationError
+          ?? (hasTokenAfterSave ? '同步配置已保存' : '仓库已保存，继续保存 GitHub token'),
+      )
       setSyncSnapshot((currentSnapshot) => ({
         ...currentSnapshot,
         lastError: nextConfigurationError,

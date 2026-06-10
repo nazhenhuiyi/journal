@@ -12,7 +12,6 @@ import {
 import {
   renderJournalMarkdown,
 } from '../domain/markdown'
-import { brand } from '../brand'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
 import JournalWeatherHeader from './markdown-preview/JournalWeatherHeader'
@@ -204,7 +203,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     updateLastSavedJournalSnapshot,
   })
   const isReviewing = journalMode === 'review'
-  const journalStorageLabel = journalFile ? `~/.journal/${journalFile.fileName}` : brand.storageFallback
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
   const parsedJournalEntry = useMemo(() => parseJournalMarkdown(journalMarkdown), [journalMarkdown])
@@ -578,7 +576,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         initial={{ opacity: 0, y: -8 }}
         transition={{ ...panelTransition, delay: 0.05 }}
       >
-        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-ink">{topbarTitle}</h1>
+        <h1 className="min-w-0 truncate font-display text-xl font-semibold text-foreground">{topbarTitle}</h1>
         {showDaySwitchNudge && isViewingAnotherDay ? (
           <div className="journal-day-nudge" role="status">
             <span>
@@ -624,9 +622,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             <div className="journal-paper">
               <div className="journal-paper-meta">
                 <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
-                <span className="journal-storage-label" title={journalFile?.filePath}>
-                  {journalStorageLabel}
-                </span>
               </div>
               <JournalMarkdownEditor
                 onChange={handleJournalMarkdownChange}

@@ -23,6 +23,7 @@ export type JournalGitSyncConfig = {
   authorEmail?: string
   authorName?: string
   branch?: string
+  commitMessage?: string
   remote?: string
   remoteUrl?: string
 }
@@ -44,6 +45,7 @@ export type JournalGitTraceEvent = {
 export type JournalGitTrace = (event: JournalGitTraceEvent) => void
 
 export type JournalGitRuntime = {
+  cache: object
   dir: string
   fs: FsClient
   git?: typeof defaultGit
@@ -66,6 +68,12 @@ export type JournalGitSyncStatus = {
   recentCommits: JournalGitRecentCommit[]
   remoteUrl: string | null
   worktreeDirectory: string
+}
+
+export type JournalGitSyncStatusOptions = {
+  includeDirtyPaths?: boolean
+  includeRecentCommits?: boolean
+  recentCommitLimit?: number
 }
 
 export type JournalGitSyncResult = {
@@ -101,6 +109,18 @@ type PromiseGitFileSystem = {
   }
 }
 
+type Base64Buffer = {
+  toString: (encoding: 'base64') => string
+}
+
+type Base64BufferConstructor = {
+  from: (value: string, encoding: 'utf8') => Base64Buffer
+}
+
+type Base64RuntimeGlobals = {
+  Buffer?: Base64BufferConstructor
+}
+
 type RemoteFetchDecision = {
   fetchResult: FetchResult | null
   skipped: boolean
@@ -109,6 +129,7 @@ type RemoteFetchDecision = {
 const defaultAuthorEmail = 'journal-sync@example.invalid'
 const defaultAuthorName = 'Journal Sync'
 const defaultBranch = 'main'
+const defaultCommitMessage = 'Sync journal changes'
 const defaultRemote = 'origin'
 const trackedPathPrefixes = [
   'annotations/',
@@ -159,7 +180,11 @@ export async function getJournalGitSyncStatus(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig = {},
   credentials: JournalGitCredentials | null = null,
+  options: JournalGitSyncStatusOptions = {},
 ): Promise<JournalGitSyncStatus> {
+  const includeDirtyPaths = options.includeDirtyPaths ?? true
+  const includeRecentCommits = options.includeRecentCommits ?? true
+  const recentCommitLimit = normalizeRecentCommitLimit(options.recentCommitLimit)
   const configuredBranch = getBranchName(config.branch ?? defaultBranch)
   const hasRepository = await traceGitStep(runtime, 'repo.exists', () => hasGitRepository(runtime))
   const branch = hasRepository
@@ -168,8 +193,12 @@ export async function getJournalGitSyncStatus(
   const remoteUrl = hasRepository
     ? await getRemoteUrl(runtime, config.remote ?? defaultRemote)
     : config.remoteUrl ?? null
-  const dirtyPaths = hasRepository ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths') : []
-  const recentCommits = hasRepository ? await getRecentCommits(runtime) : []
+  const dirtyPaths = hasRepository && includeDirtyPaths
+    ? await getDirtyTrackedPaths(runtime, 'status.dirtyPaths')
+    : []
+  const recentCommits = hasRepository && includeRecentCommits && recentCommitLimit > 0
+    ? await getRecentCommits(runtime, branch, recentCommitLimit)
+    : []
 
   return {
     branch,
@@ -205,6 +234,7 @@ export async function cloneJournalGitSyncRepository(
   assertSafeRemoteUrl(config.remoteUrl)
 
   await getGit(runtime).clone({
+    cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
     http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
@@ -219,7 +249,7 @@ export async function cloneJournalGitSyncRepository(
 export async function commitJournalChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig = {},
-  message = 'Sync journal changes',
+  message = getSyncCommitMessage(config),
   options: JournalGitOperationOptions = {},
 ) {
   await ensureRepository(runtime, config)
@@ -263,7 +293,7 @@ async function pushJournalChangesInternal(
   const localCommitOid = await commitTrackedChanges(
     runtime,
     config,
-    'Sync journal changes',
+    getSyncCommitMessage(config),
     options,
   )
 
@@ -388,7 +418,7 @@ async function syncJournalNowInternal(
   const localCommitOid = await commitTrackedChanges(
     runtime,
     config,
-    'Sync journal changes',
+    getSyncCommitMessage(config),
     options,
   )
   let fetchResult: FetchResult | null = null
@@ -524,12 +554,14 @@ async function commitTrackedChanges(
     for (const [filepath, headStatus, workdirStatus] of changedRows) {
       if (workdirStatus === 0 && headStatus !== 0) {
         await git.remove({
+          cache: runtime.cache,
           dir: runtime.dir,
           filepath,
           fs: runtime.fs,
         })
       } else if (workdirStatus !== 0) {
         await git.add({
+          cache: runtime.cache,
           dir: runtime.dir,
           filepath,
           fs: runtime.fs,
@@ -560,6 +592,7 @@ async function commitTrackedChanges(
       email: config.authorEmail ?? defaultAuthorEmail,
       name: config.authorName ?? defaultAuthorName,
     },
+    cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
     message,
@@ -612,6 +645,7 @@ async function doCommitsHaveSameTree(
 
 async function readCommit(runtime: JournalGitRuntime, oid: string): Promise<ReadCommitResult> {
   return getGit(runtime).readCommit({
+    cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
     oid,
@@ -624,6 +658,7 @@ async function fetchRemote(
   credentials: JournalGitCredentials,
 ) {
   return traceGitStep(runtime, 'remote.fetch', () => getGit(runtime).fetch({
+    cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
     http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
@@ -707,6 +742,7 @@ async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitS
         email: config.authorEmail ?? defaultAuthorEmail,
         name: config.authorName ?? defaultAuthorName,
       },
+      cache: runtime.cache,
       dir: runtime.dir,
       fs: runtime.fs,
       mergeDriver: createJournalMergeDriver('theirs', mergeStats),
@@ -877,6 +913,7 @@ async function checkoutLocalBranch(
 
   await removeStaleShortBranchRef(runtime, branch)
   await traceGitStep(runtime, 'checkout.local', () => getGit(runtime).checkout({
+    cache: runtime.cache,
     dir: runtime.dir,
     filepaths: checkoutPaths ?? undefined,
     force: true,
@@ -1135,6 +1172,7 @@ async function tryPushRemote(
 
   try {
     return await traceGitStep(runtime, 'remote.push', () => getGit(runtime).push({
+      cache: runtime.cache,
       dir: runtime.dir,
       force: false,
       fs: runtime.fs,
@@ -1164,6 +1202,7 @@ async function getTrackedStatusRows(
 ) {
   const statusFilepaths = [...(filepaths ?? trackedStatusFilepaths)]
   const rows = await traceGitStep(runtime, traceName, () => getGit(runtime).statusMatrix({
+    cache: runtime.cache,
     dir: runtime.dir,
     filepaths: statusFilepaths,
     fs: runtime.fs,
@@ -1189,30 +1228,61 @@ async function getDirtyTrackedPaths(runtime: JournalGitRuntime, traceName = 'sta
 
 async function getRecentCommits(
   runtime: JournalGitRuntime,
+  branch: string,
   depth = 3,
 ): Promise<JournalGitRecentCommit[]> {
+  const reflogCommits = await getRecentCommitsFromReflog(runtime, branch, depth)
+
+  if (reflogCommits.length > 0) {
+    await traceGitStep(runtime, 'status.recentCommits', async () => reflogCommits, {
+      commits: reflogCommits.length,
+      source: 'reflog',
+    })
+
+    return reflogCommits
+  }
+
   try {
     const commits = await traceGitStep(
       runtime,
       'status.recentCommits',
-      () => getGit(runtime).log({
-        depth,
-        dir: runtime.dir,
-        fs: runtime.fs,
-        ref: 'HEAD',
-      }),
+      async () => {
+        const git = getGit(runtime)
+        const results: Array<Awaited<ReturnType<typeof git.readCommit>>> = []
+        const seenOids = new Set<string>()
+        let nextOid: string | null = await git.resolveRef({
+          dir: runtime.dir,
+          fs: runtime.fs,
+          ref: 'HEAD',
+        })
+
+        while (nextOid && results.length < depth && !seenOids.has(nextOid)) {
+          seenOids.add(nextOid)
+
+          const result = await git.readCommit({
+            cache: runtime.cache,
+            dir: runtime.dir,
+            fs: runtime.fs,
+            oid: nextOid,
+          })
+
+          results.push(result)
+          nextOid = result.commit.parent[0] ?? null
+        }
+
+        return results
+      },
       (results) => ({ commits: results.length }),
     )
 
     return commits.map(({ commit, oid }) => {
-      const message = commit.message.trim().split(/\r?\n/, 1)[0] || '(no message)'
       const timestamp = commit.committer?.timestamp
 
       return {
         committedAt: typeof timestamp === 'number'
           ? new Date(timestamp * 1000).toISOString()
           : null,
-        message,
+        message: normalizeRecentCommitMessage(commit.message),
         oid,
         shortOid: oid.slice(0, 7),
       }
@@ -1220,6 +1290,121 @@ async function getRecentCommits(
   } catch {
     return []
   }
+}
+
+async function getRecentCommitsFromReflog(
+  runtime: JournalGitRuntime,
+  branch: string,
+  depth: number,
+): Promise<JournalGitRecentCommit[]> {
+  const readFile = (runtime.fs as unknown as PromiseGitFileSystem).promises.readFile
+  const reflogPath = getLocalBranchReflogPath(runtime, branch)
+
+  if (!readFile || !reflogPath) {
+    return []
+  }
+
+  try {
+    const contents = await readFile(reflogPath, { encoding: 'utf8' })
+    const text = typeof contents === 'string'
+      ? contents
+      : new TextDecoder().decode(contents)
+    const seenOids = new Set<string>()
+    const commits: JournalGitRecentCommit[] = []
+
+    for (const line of text.split(/\r?\n/).reverse()) {
+      if (!line.trim()) {
+        continue
+      }
+
+      const commit = parseReflogCommitLine(line)
+
+      if (!commit || seenOids.has(commit.oid)) {
+        continue
+      }
+
+      seenOids.add(commit.oid)
+      commits.push(commit)
+
+      if (commits.length >= depth) {
+        break
+      }
+    }
+
+    return commits
+  } catch {
+    return []
+  }
+}
+
+function parseReflogCommitLine(line: string): JournalGitRecentCommit | null {
+  const [meta, rawMessage = ''] = line.split('\t', 2)
+  const fields = meta.trim().split(/\s+/)
+  const oid = fields[1]
+  const timestamp = Number(fields.at(-2))
+
+  if (!oid || !/^[0-9a-f]{40}$/i.test(oid) || /^0+$/.test(oid)) {
+    return null
+  }
+
+  return {
+    committedAt: Number.isFinite(timestamp)
+      ? new Date(timestamp * 1000).toISOString()
+      : null,
+    message: normalizeReflogMessage(rawMessage),
+    oid,
+    shortOid: oid.slice(0, 7),
+  }
+}
+
+function normalizeReflogMessage(message: string) {
+  return normalizeRecentCommitMessage(
+    message
+      .replace(/^commit(?: \(initial\))?:\s*/i, '')
+      .replace(/^merge .*?:\s*/i, ''),
+  )
+}
+
+function normalizeRecentCommitMessage(message: string) {
+  return message.trim().split(/\r?\n/, 1)[0] || '(no message)'
+}
+
+function normalizeRecentCommitLimit(limit: number | undefined) {
+  if (limit === undefined) {
+    return 3
+  }
+
+  if (!Number.isFinite(limit)) {
+    return 3
+  }
+
+  return Math.max(0, Math.floor(limit))
+}
+
+function getSyncCommitMessage(config: JournalGitSyncConfig) {
+  return config.commitMessage?.trim() || defaultCommitMessage
+}
+
+function getLocalBranchReflogPath(runtime: JournalGitRuntime, branch: string) {
+  const branchName = getBranchName(branch)
+
+  if (!isSafeBranchPath(branchName)) {
+    return null
+  }
+
+  return joinRuntimePath(
+    joinRuntimePath(runtime.dir, '.git/logs/refs/heads'),
+    branchName,
+  )
+}
+
+function isSafeBranchPath(branch: string) {
+  return branch.split('/').every((segment) => (
+    segment !== '' &&
+    segment !== '.' &&
+    segment !== '..' &&
+    /^[A-Za-z0-9._-]+$/.test(segment)
+  ))
 }
 
 async function getDirtyTrackedPathsAfterOperation(
@@ -1265,6 +1450,7 @@ async function getChangedTrackedPathsBetweenRefs(
   return traceGitStep<string[]>(runtime, traceName, async () => {
     const git = getGit(runtime)
     const rawChangedPaths = await git.walk({
+      cache: runtime.cache,
       dir: runtime.dir,
       fs: runtime.fs,
       map: async (filepath, entries) => {
@@ -1517,60 +1703,13 @@ function hasAuthorizationHeader(headers: Record<string, string>) {
 }
 
 function encodeBase64(value: string) {
-  const bytes = encodeUtf8(value)
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-  let result = ''
+  const runtimeGlobals = globalThis as Base64RuntimeGlobals
 
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index]
-    const second = bytes[index + 1]
-    const third = bytes[index + 2]
-
-    result += alphabet[first >> 2]
-    result += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)]
-    result += second === undefined
-      ? '='
-      : alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)]
-    result += third === undefined ? '=' : alphabet[third & 0x3f]
+  if (!runtimeGlobals.Buffer) {
+    throw new Error('Base64 encoding requires a runtime Buffer implementation.')
   }
 
-  return result
-}
-
-function encodeUtf8(value: string) {
-  const bytes: number[] = []
-
-  for (let index = 0; index < value.length; index += 1) {
-    const codePoint = value.codePointAt(index) ?? 0
-
-    if (codePoint > 0xffff) {
-      index += 1
-    }
-
-    if (codePoint <= 0x7f) {
-      bytes.push(codePoint)
-    } else if (codePoint <= 0x7ff) {
-      bytes.push(
-        0xc0 | (codePoint >> 6),
-        0x80 | (codePoint & 0x3f),
-      )
-    } else if (codePoint <= 0xffff) {
-      bytes.push(
-        0xe0 | (codePoint >> 12),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      )
-    } else {
-      bytes.push(
-        0xf0 | (codePoint >> 18),
-        0x80 | ((codePoint >> 12) & 0x3f),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      )
-    }
-  }
-
-  return bytes
+  return runtimeGlobals.Buffer.from(value, 'utf8').toString('base64')
 }
 
 function isDirtyStatusRow([, headStatus, workdirStatus, stageStatus]: StatusRow) {

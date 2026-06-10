@@ -124,7 +124,7 @@ const journalEditorTheme = EditorView.theme({
   '.cm-content': {
     minHeight: '34rem',
     padding: '3.1rem 2.8rem 2.4rem 4.2rem',
-    caretColor: 'var(--color-walnut)',
+    caretColor: 'var(--color-primary)',
   },
   '.cm-line': {
     borderRadius: '8px 6px 9px 6px',
@@ -134,23 +134,23 @@ const journalEditorTheme = EditorView.theme({
     display: 'none',
   },
   '.cm-activeLine': {
-    backgroundColor: 'rgba(215, 166, 75, 0.08)',
+    backgroundColor: 'color-mix(in srgb, var(--color-accent) 9%, transparent)',
   },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'rgba(215, 166, 75, 0.28)',
+    backgroundColor: 'color-mix(in srgb, var(--color-accent) 28%, transparent)',
   },
   '&.cm-focused': {
     outline: 'none',
   },
   '.cm-cursor': {
-    borderLeftColor: 'var(--color-walnut)',
+    borderLeftColor: 'var(--color-primary)',
   },
   '.cm-matchingBracket, .cm-nonmatchingBracket': {
-    backgroundColor: 'rgba(111, 126, 99, 0.16)',
-    outline: '1px solid rgba(111, 126, 99, 0.28)',
+    backgroundColor: 'color-mix(in srgb, var(--color-primary-soft) 62%, transparent)',
+    outline: '1px solid color-mix(in srgb, var(--color-primary) 16%, transparent)',
   },
   '.tok-heading': {
-    color: 'var(--color-walnut)',
+    color: 'var(--color-foreground)',
     fontWeight: '650',
   },
   '.tok-heading-1': {
@@ -168,11 +168,11 @@ const journalEditorTheme = EditorView.theme({
     color: 'rgba(122, 79, 50, 0.42)',
   },
   '.tok-emphasis': {
-    color: '#526848',
+    color: 'var(--color-primary)',
     fontStyle: 'italic',
   },
   '.tok-strong': {
-    color: '#293d34',
+    color: 'var(--color-primary-hover)',
     fontWeight: '700',
   },
   '.tok-strikethrough': {
@@ -184,18 +184,18 @@ const journalEditorTheme = EditorView.theme({
     textDecorationThickness: '0.08em',
   },
   '.tok-quote': {
-    color: '#526848',
+    color: 'var(--color-primary)',
   },
   '.tok-list': {
     color: 'rgba(122, 79, 50, 0.78)',
     fontWeight: '550',
   },
   '.tok-monospace': {
-    border: '1px solid rgba(111, 126, 99, 0.15)',
+    border: '1px solid var(--journal-line-control)',
     borderRadius: '5px',
     padding: '0.04rem 0.24rem',
-    color: '#3d5149',
-    backgroundColor: 'rgba(111, 126, 99, 0.09)',
+    color: 'var(--color-primary-hover)',
+    backgroundColor: 'color-mix(in srgb, var(--color-primary-soft) 42%, transparent)',
     fontFamily: '"SFMono-Regular", "Menlo", "Consolas", monospace',
     fontSize: '0.9em',
   },
@@ -205,7 +205,7 @@ const journalEditorTheme = EditorView.theme({
     textUnderlineOffset: '0.16em',
   },
   '.tok-url': {
-    color: 'rgba(47, 112, 112, 0.66)',
+    color: 'color-mix(in srgb, var(--color-info) 72%, var(--color-muted-fg))',
   },
   '.tok-content-separator': {
     color: 'rgba(122, 79, 50, 0.38)',
@@ -226,16 +226,16 @@ const journalEditorTheme = EditorView.theme({
     marginTop: '0.4rem',
   },
   '.cm-md-quote-line': {
-    borderLeft: '3px solid rgba(111, 126, 99, 0.3)',
+    borderLeft: '2px solid color-mix(in srgb, var(--color-primary) 24%, transparent)',
     borderRadius: '0 8px 8px 0',
     paddingLeft: '0.9rem',
     color: 'rgba(47, 38, 31, 0.76)',
-    backgroundColor: 'rgba(111, 126, 99, 0.06)',
+    backgroundColor: 'color-mix(in srgb, var(--color-primary-soft) 34%, transparent)',
   },
   '.cm-md-code-line': {
     borderRadius: '0',
     paddingLeft: '0.85rem',
-    color: '#34473f',
+    color: 'var(--color-primary-hover)',
     backgroundColor: 'rgba(122, 79, 50, 0.045)',
     fontFamily: '"SFMono-Regular", "Menlo", "Consolas", monospace',
     fontSize: '0.9em',

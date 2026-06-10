@@ -203,6 +203,70 @@ describe('createExpoGitFileSystem', () => {
     )
   })
 
+  it('caches existing parent directories between writes in the same filesystem instance', async () => {
+    const fs = createTestFileSystem()
+
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValue({
+      exists: true,
+      isDirectory: true,
+      modificationTime: 1700000000,
+      size: 0,
+      uri: '/repo/.git/objects/78',
+    })
+
+    await fs.promises.writeFile('/repo/.git/objects/78/blob-a', new Uint8Array([1]))
+    await fs.promises.writeFile('/repo/.git/objects/78/blob-b', new Uint8Array([2]))
+
+    expect(mockLegacyFileSystem.getInfoAsync).toHaveBeenCalledTimes(1)
+    expect(mockLegacyFileSystem.getInfoAsync).toHaveBeenCalledWith('/repo/.git/objects/78')
+    expect(mockLegacyFileSystem.makeDirectoryAsync).not.toHaveBeenCalled()
+  })
+
+  it('caches newly created parent directories between object writes', async () => {
+    const fs = createTestFileSystem()
+
+    mockLegacyFileSystem.getInfoAsync.mockResolvedValueOnce({
+      exists: false,
+      isDirectory: false,
+      uri: '/repo/.git/objects/9a',
+    })
+
+    await fs.promises.writeFile('/repo/.git/objects/9a/blob-a', new Uint8Array([1]))
+    await fs.promises.writeFile('/repo/.git/objects/9a/blob-b', new Uint8Array([2]))
+
+    expect(mockLegacyFileSystem.getInfoAsync).toHaveBeenCalledTimes(1)
+    expect(mockLegacyFileSystem.makeDirectoryAsync).toHaveBeenCalledTimes(1)
+    expect(mockLegacyFileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+      '/repo/.git/objects/9a',
+      { intermediates: true },
+    )
+  })
+
+  it('rechecks a parent directory after the cached directory is removed', async () => {
+    const fs = createTestFileSystem()
+
+    mockLegacyFileSystem.getInfoAsync
+      .mockResolvedValueOnce({
+        exists: false,
+        isDirectory: false,
+        uri: '/repo/.git/objects/9b',
+      })
+      .mockResolvedValue({
+        exists: true,
+        isDirectory: true,
+        modificationTime: 1700000000,
+        size: 0,
+        uri: '/repo/.git/objects/9b',
+      })
+
+    await fs.promises.mkdir('/repo/.git/objects/9b')
+    await fs.promises.rmdir('/repo/.git/objects/9b')
+    await fs.promises.writeFile('/repo/.git/objects/9b/blob', new Uint8Array([1]))
+
+    expect(mockLegacyFileSystem.getInfoAsync).toHaveBeenCalledWith('/repo/.git/objects/9b')
+    expect(mockLegacyFileSystem.getInfoAsync).toHaveBeenCalledTimes(3)
+  })
+
   it('returns file and directory stat shims compatible with isomorphic-git', async () => {
     const fs = createTestFileSystem()
 

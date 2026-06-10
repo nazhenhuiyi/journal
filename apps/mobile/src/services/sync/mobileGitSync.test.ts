@@ -39,6 +39,7 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     log: vi.fn(),
     merge: vi.fn(),
     push: vi.fn(),
+    readCommit: vi.fn(),
     readObject: vi.fn(),
     remove: vi.fn(),
     resolveRef: vi.fn(),
@@ -123,6 +124,19 @@ describe('mobile git sync', () => {
         },
       },
     })
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => ({
+      commit: {
+        author: {},
+        committer: {
+          timestamp: 1_780_987_200,
+        },
+        message: 'Mobile sync',
+        parent: [],
+        tree: `tree-${oid}`,
+      },
+      oid,
+      payload: '',
+    }))
     mockGit.readObject.mockImplementation(async ({ filepath, oid }: { filepath: string, oid: string }) => ({
       format: 'content',
       object: new Uint8Array(),
@@ -148,6 +162,7 @@ describe('mobile git sync', () => {
     mockFs.promises.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), {
       code: 'ENOENT',
     }))
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
 
     const status = await initMobileGitSyncRepository({
       branch: 'main',
@@ -165,7 +180,11 @@ describe('mobile git sync', () => {
     }))
     expect(mockGit.setConfig).toHaveBeenCalledWith(expect.objectContaining({
       path: 'user.name',
-      value: 'Journal Mobile',
+      value: 'Journal Mobile Sync',
+    }))
+    expect(mockGit.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      path: 'user.email',
+      value: 'journal-mobile-sync@example.invalid',
     }))
     expect(status.hasRepository).toBe(true)
     expect(status.recentCommits).toEqual([
@@ -197,7 +216,7 @@ describe('mobile git sync', () => {
       filepath: 'entries/2026/06/2026-06-08.md',
     }))
     expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'Sync journal changes',
+      message: 'Sync mobile journal changes',
       ref: 'refs/heads/main',
     }))
     expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
@@ -214,6 +233,14 @@ describe('mobile git sync', () => {
       remote: 'origin',
       remoteRef: 'refs/heads/main',
     }))
+    const runtimeCache = mockGit.statusMatrix.mock.calls[0][0].cache
+
+    expect(runtimeCache).toEqual(expect.any(Object))
+    expect(mockGit.add.mock.calls[0][0].cache).toBe(runtimeCache)
+    expect(mockGit.commit.mock.calls[0][0].cache).toBe(runtimeCache)
+    expect(mockGit.fetch.mock.calls[0][0].cache).toBe(runtimeCache)
+    expect(mockGit.merge.mock.calls[0][0].cache).toBe(runtimeCache)
+    expect(mockGit.push.mock.calls[0][0].cache).toBe(runtimeCache)
     expect(result.localCommitOid).toBe('commit-oid')
     expect(result.retriedPush).toBe(false)
   })

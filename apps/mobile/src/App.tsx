@@ -8,6 +8,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { MurmurBlock } from '@journal/core'
+import { semanticColors } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusTone,
@@ -27,10 +28,11 @@ import { cn } from './ui/cn'
 import { JournalListPage } from './pages/JournalListPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { SyncSettingsPage } from './pages/SyncSettingsPage'
 import { Screen } from './ui/Screen'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
-type HeaderStatusTone = 'blue' | 'green' | 'plain' | 'soil'
+type HeaderStatusTone = 'blue' | 'danger' | 'green' | 'plain'
 type HeaderStatus = {
   label: string
   tone: HeaderStatusTone
@@ -40,6 +42,7 @@ type RootStackParamList = {
   JournalList: undefined
   Review: undefined
   Settings: undefined
+  SyncSettings: undefined
 }
 
 const weatherPlaceholder = '晴 24℃'
@@ -107,7 +110,6 @@ export default function App() {
     saveCurrentJournalRef,
     saveStateRef,
   })
-  const statusLabel = getStatusLabel(saveState, record?.updatedAt ?? null)
   const markdownDiagnostics = record?.diagnostics ?? []
   const markdownErrorDiagnostics = markdownDiagnostics.filter((diagnostic) => diagnostic.severity === 'error')
   const markdownDiagnosticSummary = formatMarkdownDiagnosticSummary(markdownErrorDiagnostics.length)
@@ -151,14 +153,14 @@ export default function App() {
       <Stack.Navigator
         screenOptions={{
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#f4f5ef' },
+          contentStyle: { backgroundColor: semanticColors.background },
           gestureEnabled: true,
           headerShown: false,
         }}
       >
         <Stack.Screen name="Today">
           {({ navigation }) => (
-            <Screen bottomColor="#fffdf8">
+            <Screen bottomColor={semanticColors.surface}>
               <View className="flex-1 gap-1.5 pt-4">
                 <View className="flex-row items-center justify-between px-5">
                   <View className="flex-row items-center gap-1">
@@ -178,7 +180,7 @@ export default function App() {
                   <View className="flex-row items-center gap-1">
                     <InlineStatusButton
                       status={headerStatus}
-                      onPress={() => navigation.navigate('Settings')}
+                      onPress={() => navigation.navigate('SyncSettings')}
                       testID="sync-status-button"
                     />
                     <HeaderIconButton
@@ -191,7 +193,7 @@ export default function App() {
                 </View>
 
                 <View
-                  className="flex-1 rounded-lg bg-paper"
+                  className="flex-1 rounded-lg bg-surface"
                   style={{
                     paddingBottom: 22,
                     paddingHorizontal: 24,
@@ -200,7 +202,7 @@ export default function App() {
                 >
                   <View className="mb-5 flex-row items-center justify-between gap-4">
                     <View className="shrink">
-                      <Text className="text-sm font-semibold text-moss">
+                      <Text className="text-sm font-semibold text-foreground">
                         {formatPaperDateLine(today)} · {weatherPlaceholder}
                       </Text>
                     </View>
@@ -211,7 +213,7 @@ export default function App() {
                     />
                   </View>
                   {markdownDiagnosticSummary ? (
-                    <Text className="mb-4 text-sm leading-5 text-soil">
+                    <Text className="mb-4 text-sm leading-5 text-danger">
                       {markdownDiagnosticSummary}
                     </Text>
                   ) : null}
@@ -219,7 +221,7 @@ export default function App() {
                     accessibilityLabel="日记正文"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    className="flex-1 text-[18px] leading-8 text-ink"
+                    className="flex-1 text-[18px] leading-8 text-foreground"
                     importantForAutofill="no"
                     keyboardType="default"
                     multiline
@@ -231,7 +233,7 @@ export default function App() {
                       isLongEntryFocusedRef.current = true
                     }}
                     placeholder="写一点今天真正留下来的东西。"
-                    placeholderTextColor="#9aa69f"
+                    placeholderTextColor={semanticColors['muted-fg']}
                     scrollEnabled
                     spellCheck={false}
                     style={{
@@ -256,7 +258,7 @@ export default function App() {
                 <View style={{ flex: 1 }}>
                   <View>
                     <View
-                      className="border border-reed bg-paper"
+                      className="border border-border bg-surface"
                       style={{
                         borderRadius: 20,
                         paddingHorizontal: 20,
@@ -264,18 +266,18 @@ export default function App() {
                       }}
                     >
                       {murmurs.length === 0 ? (
-                        <Text className="mb-4 text-sm leading-5 text-mossMuted">
+                        <Text className="mb-4 text-sm leading-5 text-muted-fg">
                           今天还没有碎碎念。
                         </Text>
                       ) : null}
                       <TextInput
                         accessibilityLabel="碎碎念正文"
                         autoFocus={murmurs.length === 0}
-                        className="min-h-32 text-base leading-6 text-ink"
+                        className="min-h-32 text-base leading-6 text-foreground"
                         multiline
                         onChangeText={setMurmurDraft}
                         placeholder={murmurs.length === 0 ? '比如：刚刚想到的一句话。' : '再补一句碎碎念。'}
-                        placeholderTextColor="#9aa69f"
+                        placeholderTextColor={semanticColors['muted-fg']}
                         style={{
                           margin: 0,
                           minHeight: 136,
@@ -302,7 +304,7 @@ export default function App() {
 
                   {murmurs.length > 0 ? (
                     <View style={{ flex: 1, marginTop: 38 }}>
-                      <Text className="mb-4 text-xs font-semibold text-mossMuted">今天</Text>
+                      <Text className="mb-4 text-xs font-semibold text-muted-fg">今天</Text>
                       <ScrollView
                         className="flex-1"
                         contentContainerStyle={{ paddingBottom: 24 }}
@@ -344,29 +346,40 @@ export default function App() {
           {({ navigation }) => (
             <SettingsPage
               hasStoredSyncToken={hasStoredSyncToken}
-              isBusy={isBusy}
-              isLoadingGitStatus={isLoadingGitStatus}
               isSavingSyncConfiguration={isSavingSyncConfiguration}
-              isSyncBusy={isSyncBusy}
-              gitStatus={mobileGitStatus}
-              gitStatusError={gitStatusError}
-              markdownDiagnosticSummary={markdownDiagnosticSummary}
-              murmursCount={murmurs.length}
               onBack={() => returnToToday(navigation)}
-              onRefreshGitStatus={refreshMobileGitStatus}
-              onSaveCurrent={() => void saveCurrentJournal()}
               onSaveSyncConfiguration={saveSyncConfiguration}
-              onSyncNow={handleSyncNow}
-              saveState={saveState}
               setSyncBranch={setSyncBranch}
               setSyncRemoteUrl={setSyncRemoteUrl}
               setSyncTokenDraft={setSyncTokenDraft}
-              statusLabel={statusLabel}
               syncBranch={syncBranch}
+              syncRemoteUrl={syncRemoteUrl}
+              syncTokenDraft={syncTokenDraft}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="SyncSettings">
+          {({ navigation }) => (
+            <SyncSettingsPage
+              gitStatus={mobileGitStatus}
+              gitStatusError={gitStatusError}
+              hasStoredSyncToken={hasStoredSyncToken}
+              isLoadingGitStatus={isLoadingGitStatus}
+              isSyncBusy={isSyncBusy}
+              onBack={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack()
+                  return
+                }
+
+                navigation.replace('Settings')
+              }}
+              onOpenSyncConfiguration={() => navigation.navigate('Settings')}
+              onRefreshGitStatus={refreshMobileGitStatus}
+              onSyncNow={handleSyncNow}
               syncRemoteUrl={syncRemoteUrl}
               syncSnapshot={syncSnapshot}
               syncStatusLabel={syncStatusLabel}
-              syncTokenDraft={syncTokenDraft}
             />
           )}
         </Stack.Screen>
@@ -395,8 +408,8 @@ function MurmurCountButton({
       })}
       testID={testID}
     >
-      <Text className="text-sm font-semibold text-moss">碎碎念</Text>
-      <Text className="text-sm font-semibold text-mossMuted">· {count} 条</Text>
+      <Text className="text-sm font-semibold text-foreground">碎碎念</Text>
+      <Text className="text-sm font-semibold text-muted-fg">· {count} 条</Text>
     </Pressable>
   )
 }
@@ -423,7 +436,7 @@ function TopNavButton({
       })}
       testID={testID}
     >
-      <Ionicons color="#254f43" name={icon} size={19} />
+      <Ionicons color={semanticColors['muted-fg']} name={icon} size={19} />
     </Pressable>
   )
 }
@@ -450,7 +463,7 @@ function HeaderIconButton({
       })}
       testID={testID}
     >
-      <Ionicons color="#4f7469" name={icon} size={15} />
+      <Ionicons color={semanticColors['muted-fg']} name={icon} size={15} />
     </Pressable>
   )
 }
@@ -469,7 +482,7 @@ function InlineStatusButton({
       accessibilityRole="button"
       className={cn(
         'min-h-8 shrink-0 flex-row items-center justify-center rounded-full px-2',
-        status.tone === 'soil' ? 'opacity-95' : 'opacity-90',
+        status.tone === 'danger' ? 'opacity-95' : 'opacity-90',
       )}
       onPress={onPress}
       style={({ pressed }) => ({
@@ -487,11 +500,11 @@ function InlineStatusButton({
 function MurmurItem({ murmur }: { murmur: MurmurBlock }) {
   return (
     <View
-      className="border border-reed bg-paper px-4 py-4"
+      className="border border-border bg-surface px-4 py-4"
       style={{ borderRadius: 18 }}
     >
-      <Text className="mb-3 text-xs font-semibold text-sage">{formatTime(murmur.time)}</Text>
-      <Text className="text-base leading-6 text-ink">{murmur.body}</Text>
+      <Text className="mb-3 text-xs font-semibold text-muted-fg">{formatTime(murmur.time)}</Text>
+      <Text className="text-base leading-6 text-foreground">{murmur.body}</Text>
     </View>
   )
 }
@@ -520,30 +533,6 @@ function formatTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function getStatusLabel(saveState: SaveState, updatedAt: string | null) {
-  if (saveState === 'loading') {
-    return '正在打开'
-  }
-
-  if (saveState === 'saving') {
-    return '正在保存'
-  }
-
-  if (saveState === 'saved') {
-    return '已保存'
-  }
-
-  if (saveState === 'dirty') {
-    return '有未保存更改'
-  }
-
-  if (saveState === 'error') {
-    return '保存失败'
-  }
-
-  return updatedAt ? `上次保存 ${formatTime(updatedAt)}` : '还没有保存'
 }
 
 function getHeaderStatus(
@@ -589,7 +578,7 @@ function getSyncStatusLabel(
 
 function getHeaderTone(tone: JournalSyncStatusTone): HeaderStatusTone {
   if (tone === 'danger' || tone === 'warning') {
-    return 'soil'
+    return 'danger'
   }
 
   if (tone === 'active' || tone === 'pending') {
@@ -612,8 +601,8 @@ function formatMarkdownDiagnosticSummary(errorCount: number) {
 }
 
 const headerStatusTextClasses: Record<HeaderStatusTone, string> = {
-  blue: 'text-mossMuted',
-  green: 'text-mossMuted',
-  plain: 'text-mossMuted',
-  soil: 'text-soil',
+  blue: 'text-muted-fg',
+  danger: 'text-danger',
+  green: 'text-muted-fg',
+  plain: 'text-muted-fg',
 }

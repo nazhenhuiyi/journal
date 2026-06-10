@@ -3,6 +3,7 @@ import * as git from 'isomorphic-git'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   assertSafeRemoteUrl,
+  cloneJournalGitSyncRepository,
   commitJournalChanges,
   createJournalGitAuthenticatedHttpClient,
   createJournalGitAuthHeaders,
@@ -53,6 +54,7 @@ const credentials = {
 
 function createRuntime(): JournalGitRuntime {
   return {
+    cache: {},
     dir: '/journal',
     fs: mockFs as unknown as FsClient,
     git: mockGit as unknown as typeof git,
@@ -212,6 +214,15 @@ describe('journal git sync core', () => {
     })
   })
 
+  it('encodes non-ASCII Git Basic auth credentials as UTF-8 base64', () => {
+    expect(createJournalGitAuthHeaders(undefined, {
+      token: '令牌🔑',
+      username: '张三',
+    })).toEqual({
+      Authorization: `Basic ${Buffer.from('张三:令牌🔑', 'utf8').toString('base64')}`,
+    })
+  })
+
   it('preserves an explicitly provided Authorization header', () => {
     expect(createJournalGitAuthHeaders({
       authorization: 'Bearer existing-token',
@@ -290,6 +301,28 @@ describe('journal git sync core', () => {
     }))
   })
 
+  it('passes the runtime cache to clone operations', async () => {
+    const runtime = createRuntime()
+
+    mockFs.promises.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), {
+      code: 'ENOENT',
+    }))
+
+    await cloneJournalGitSyncRepository(runtime, {
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    }, credentials)
+
+    expect(mockGit.clone).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      dir: '/journal',
+      fs: mockFs,
+      ref: 'main',
+      singleBranch: true,
+      url: 'https://github.com/example/journal-sync.git',
+    }))
+  })
+
   it('does not commit when no tracked journal file changed', async () => {
     mockGit.statusMatrix.mockResolvedValue([
       ['settings.json', 1, 2, 1],
@@ -324,16 +357,101 @@ describe('journal git sync core', () => {
   })
 
   it('includes the latest three local commits in sync status', async () => {
+    mockFs.promises.readFile.mockResolvedValue([
+      '0000000000000000000000000000000000000000 3333333333333333333333333333333333333333 Journal <journal@example.invalid> 1780800000 +0000\tcommit (initial): First sync',
+      '3333333333333333333333333333333333333333 2222222222222222222222222222222222222222 Journal <journal@example.invalid> 1780900000 +0000\tcommit: Previous sync',
+      '2222222222222222222222222222222222222222 1111111111111111111111111111111111111111 Journal <journal@example.invalid> 1780987200 +0000\tcommit: Latest sync',
+    ].join('\n'))
+
     const status = await getJournalGitSyncStatus(createRuntime(), {
       branch: 'main',
     }, credentials)
 
-    expect(mockGit.log).toHaveBeenCalledWith(expect.objectContaining({
-      depth: 3,
+    expect(mockFs.promises.readFile).toHaveBeenCalledWith(
+      '/journal/.git/logs/refs/heads/main',
+      { encoding: 'utf8' },
+    )
+    expect(mockGit.log).not.toHaveBeenCalled()
+    expect(mockGit.readCommit).not.toHaveBeenCalled()
+    expect(status.recentCommits).toEqual([
+      {
+        committedAt: new Date(1_780_987_200 * 1000).toISOString(),
+        message: 'Latest sync',
+        oid: '1111111111111111111111111111111111111111',
+        shortOid: '1111111',
+      },
+      {
+        committedAt: new Date(1_780_900_000 * 1000).toISOString(),
+        message: 'Previous sync',
+        oid: '2222222222222222222222222222222222222222',
+        shortOid: '2222222',
+      },
+      {
+        committedAt: new Date(1_780_800_000 * 1000).toISOString(),
+        message: 'First sync',
+        oid: '3333333333333333333333333333333333333333',
+        shortOid: '3333333',
+      },
+    ])
+  })
+
+  it('falls back to commit objects when the local reflog is unavailable', async () => {
+    const commitChain = [
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Latest sync\n\nBody',
+          parent: ['2222222222222222222222222222222222222222'],
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_900_000,
+          },
+          message: 'Previous sync',
+          parent: ['3333333333333333333333333333333333333333'],
+        },
+        oid: '2222222222222222222222222222222222222222',
+      },
+      {
+        commit: {
+          committer: {},
+          message: '',
+          parent: [],
+        },
+        oid: '3333333333333333333333333333333333333333',
+      },
+    ]
+
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => {
+      const entry = commitChain.find((commit) => commit.oid === oid)
+
+      if (!entry) {
+        throw new Error(`missing commit ${oid}`)
+      }
+
+      return {
+        ...entry,
+        payload: '',
+      }
+    })
+
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    }, credentials)
+
+    expect(mockGit.log).not.toHaveBeenCalled()
+    expect(mockGit.resolveRef).toHaveBeenCalledWith(expect.objectContaining({
       dir: '/journal',
       fs: mockFs,
       ref: 'HEAD',
     }))
+    expect(mockGit.readCommit).toHaveBeenCalledTimes(3)
     expect(status.recentCommits).toEqual([
       {
         committedAt: new Date(1_780_987_200 * 1000).toISOString(),
@@ -352,6 +470,61 @@ describe('journal git sync core', () => {
         message: '(no message)',
         oid: '3333333333333333333333333333333333333333',
         shortOid: '3333333',
+      },
+    ])
+  })
+
+  it('limits recent commit object reads when requested', async () => {
+    const commitChain = [
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_987_200,
+          },
+          message: 'Latest sync\n\nBody',
+          parent: ['2222222222222222222222222222222222222222'],
+        },
+        oid: '1111111111111111111111111111111111111111',
+      },
+      {
+        commit: {
+          committer: {
+            timestamp: 1_780_900_000,
+          },
+          message: 'Previous sync',
+          parent: [],
+        },
+        oid: '2222222222222222222222222222222222222222',
+      },
+    ]
+
+    mockGit.resolveRef.mockResolvedValueOnce('1111111111111111111111111111111111111111')
+    mockGit.readCommit.mockImplementation(async ({ oid }: { oid: string }) => {
+      const entry = commitChain.find((commit) => commit.oid === oid)
+
+      if (!entry) {
+        throw new Error(`missing commit ${oid}`)
+      }
+
+      return {
+        ...entry,
+        payload: '',
+      }
+    })
+
+    const status = await getJournalGitSyncStatus(createRuntime(), {
+      branch: 'main',
+    }, credentials, {
+      recentCommitLimit: 1,
+    })
+
+    expect(mockGit.readCommit).toHaveBeenCalledTimes(1)
+    expect(status.recentCommits).toEqual([
+      {
+        committedAt: new Date(1_780_987_200 * 1000).toISOString(),
+        message: 'Latest sync',
+        oid: '1111111111111111111111111111111111111111',
+        shortOid: '1111111',
       },
     ])
   })
@@ -411,12 +584,14 @@ describe('journal git sync core', () => {
   })
 
   it('commits known changed paths without scanning the full tracked worktree twice', async () => {
+    const runtime = createRuntime()
+
     mockGit.statusMatrix.mockResolvedValueOnce([
       ['entries/2026/06/2026-06-09.md', 1, 2, 1],
     ])
 
     const commitOid = await commitJournalChanges(
-      createRuntime(),
+      runtime,
       {
         branch: 'main',
       },
@@ -428,15 +603,31 @@ describe('journal git sync core', () => {
 
     expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
     expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepaths: ['entries/2026/06/2026-06-09.md'],
     }))
     expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepath: 'entries/2026/06/2026-06-09.md',
+    }))
+    expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      ref: 'refs/heads/main',
+    }))
+    expect(mockGit.readCommit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      oid: 'commit-oid',
+    }))
+    expect(mockGit.readCommit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      oid: 'local-head',
     }))
     expect(commitOid).toBe('commit-oid')
   })
 
   it('stages deleted tracked journal files with git remove', async () => {
+    const runtime = createRuntime()
+
     mockGit.statusMatrix
       .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 1, 0, 1],
@@ -445,11 +636,12 @@ describe('journal git sync core', () => {
         ['entries/2026/06/2026-06-08.md', 1, 0, 0],
       ])
 
-    const commitOid = await commitJournalChanges(createRuntime(), {
+    const commitOid = await commitJournalChanges(runtime, {
       branch: 'main',
     })
 
     expect(mockGit.remove).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepath: 'entries/2026/06/2026-06-08.md',
     }))
     expect(mockGit.add).not.toHaveBeenCalled()
@@ -532,7 +724,20 @@ describe('journal git sync core', () => {
     expect(mockGit.fetch).toHaveBeenCalledTimes(2)
     expect(mockGit.merge).toHaveBeenCalledTimes(2)
     expect(mockGit.push).toHaveBeenCalledTimes(2)
+    expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.merge).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.walk).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       force: false,
     }))
     expect(result.mergeCommitOid).toBe('retry-merge-head')

@@ -72,7 +72,8 @@ describe('MarkdownPreviewPage', () => {
     await waitFor(() => {
       expect(loadToday).toHaveBeenCalledOnce()
       expect(screen.getByRole('heading', { name: '4月28日 · 周二' })).toBeInTheDocument()
-      expect(screen.getByText('~/.journal/2026-04-28.md')).toHaveAttribute('title', storedJournal.filePath)
+      expect(screen.queryByText('~/.journal/2026-04-28.md')).not.toBeInTheDocument()
+      expect(screen.queryByTitle(storedJournal.filePath)).not.toBeInTheDocument()
       expect(screen.getByRole('textbox', { name: '日记正文' })).toHaveTextContent('从文件醒来')
       expect(screen.getByRole('textbox', { name: '日记正文' })).not.toHaveTextContent('date: 2026-04-28')
     })

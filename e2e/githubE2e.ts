@@ -109,6 +109,7 @@ export function createNodeGitRuntime(dir: string): JournalGitRuntime {
   const traceEvents: JournalGitTraceEvent[] = []
 
   return {
+    cache: {},
     dir,
     fs,
     http,

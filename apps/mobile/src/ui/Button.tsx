@@ -1,33 +1,44 @@
 import { type ComponentProps, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text, type PressableProps } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { semanticColors } from '@journal/theme'
 import { cn } from './cn'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
+type ButtonSize = 'md' | 'sm'
 type ButtonVariant = 'primary' | 'secondary' | 'ghost'
 
 type ButtonProps = PressableProps & {
   children: ReactNode
   icon?: IconName
   loading?: boolean
+  size?: ButtonSize
   variant?: ButtonVariant
 }
 
-const buttonBase = 'min-h-12 flex-row items-center justify-center gap-2 rounded-lg px-4'
+const buttonBase = 'flex-row items-center justify-center gap-2 rounded-lg'
+const buttonSizes: Record<ButtonSize, string> = {
+  md: 'min-h-12 px-4',
+  sm: 'min-h-11 px-3',
+}
 const buttonVariants: Record<ButtonVariant, string> = {
   ghost: 'bg-transparent',
-  primary: 'bg-moss',
-  secondary: 'border border-reed bg-cloud',
+  primary: 'bg-primary',
+  secondary: 'border border-border bg-surface',
+}
+const textSizes: Record<ButtonSize, string> = {
+  md: 'text-base',
+  sm: 'text-sm',
 }
 const textVariants: Record<ButtonVariant, string> = {
-  ghost: 'text-moss',
-  primary: 'text-white',
-  secondary: 'text-moss',
+  ghost: 'text-muted-fg',
+  primary: 'text-primary-fg',
+  secondary: 'text-foreground',
 }
 const iconColors: Record<ButtonVariant, string> = {
-  ghost: '#254f43',
-  primary: '#ffffff',
-  secondary: '#254f43',
+  ghost: semanticColors['muted-fg'],
+  primary: semanticColors['primary-fg'],
+  secondary: semanticColors['muted-fg'],
 }
 
 export function Button({
@@ -36,6 +47,7 @@ export function Button({
   disabled,
   icon,
   loading = false,
+  size = 'md',
   style,
   variant = 'primary',
   ...props
@@ -45,7 +57,13 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      className={cn(buttonBase, buttonVariants[variant], isDisabled ? 'opacity-50' : '', className)}
+      className={cn(
+        buttonBase,
+        buttonSizes[size],
+        buttonVariants[variant],
+        isDisabled ? 'opacity-50' : '',
+        className,
+      )}
       disabled={isDisabled}
       style={(state) => [
         { transform: [{ scale: state.pressed && !isDisabled ? 0.99 : 1 }] },
@@ -56,9 +74,9 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={iconColors[variant]} size="small" />
       ) : icon ? (
-        <Ionicons color={iconColors[variant]} name={icon} size={18} />
+        <Ionicons color={iconColors[variant]} name={icon} size={size === 'sm' ? 17 : 18} />
       ) : null}
-      <Text className={cn('text-base font-semibold', textVariants[variant])}>{children}</Text>
+      <Text className={cn('font-semibold', textSizes[size], textVariants[variant])}>{children}</Text>
     </Pressable>
   )
 }

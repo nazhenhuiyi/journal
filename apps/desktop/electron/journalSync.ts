@@ -178,6 +178,7 @@ async function createDesktopGitRuntime(journalDirectory: string): Promise<Journa
   await mkdir(journalDirectory, { recursive: true })
 
   return {
+    cache: {},
     dir: journalDirectory,
     fs,
     http,

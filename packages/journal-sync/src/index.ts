@@ -18,6 +18,7 @@ export {
   type JournalGitSyncConfig,
   type JournalGitSyncResult,
   type JournalGitSyncStatus,
+  type JournalGitSyncStatusOptions,
   type JournalGitTrace,
   type JournalGitTraceDetails,
   type JournalGitTraceEvent,

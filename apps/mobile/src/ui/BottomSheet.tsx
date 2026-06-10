@@ -13,6 +13,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native'
+import { semanticColors } from '@journal/theme'
 import { cn } from './cn'
 
 type BottomSheetProps = {
@@ -123,7 +124,7 @@ export function BottomSheet({
 
   const sheet = (
     <Animated.View
-      className={cn('bg-canvas', sheetClassName)}
+      className={cn('bg-background', sheetClassName)}
       style={{
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   handle: {
-    backgroundColor: '#d8ded5',
+    backgroundColor: semanticColors.border,
     borderRadius: 999,
     height: 5,
     width: 48,
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   title: {
-    color: '#17241f',
+    color: semanticColors.foreground,
     fontSize: 24,
     fontWeight: '600',
   },

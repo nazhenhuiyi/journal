@@ -17,6 +17,7 @@ import {
   type JournalGitSyncConfig,
   type JournalGitSyncResult,
   type JournalGitSyncStatus,
+  type JournalGitSyncStatusOptions,
   type JournalGitTrace,
 } from '@journal/sync'
 import { ensureJournalWorktreeDirectory } from '../mobileJournalStore'
@@ -29,16 +30,19 @@ import {
 export type MobileGitSyncConfig = JournalGitSyncConfig
 export type MobileGitOperationOptions = JournalGitOperationOptions
 export type MobileGitSyncStatus = JournalGitSyncStatus
+export type MobileGitSyncStatusOptions = JournalGitSyncStatusOptions
 export type MobileGitSyncResult = JournalGitSyncResult
 export type MobileGitPushResult = JournalGitPushResult
 export type MobileGitPullResult = JournalGitPullResult
 
-const defaultAuthorEmail = 'journal-mobile@example.invalid'
-const defaultAuthorName = 'Journal Mobile'
+const defaultAuthorEmail = 'journal-mobile-sync@example.invalid'
+const defaultAuthorName = 'Journal Mobile Sync'
+const defaultCommitMessage = 'Sync mobile journal changes'
 const gitHttpRequestTimeoutMs = 30_000
 
 export async function getMobileGitSyncStatus(
   config: MobileGitSyncConfig = {},
+  options: MobileGitSyncStatusOptions = {},
 ): Promise<MobileGitSyncStatus> {
   const runtime = await createMobileGitRuntime()
   const credentialState = await loadGitHubSyncCredentials()
@@ -47,6 +51,7 @@ export async function getMobileGitSyncStatus(
     runtime,
     withMobileAuthorDefaults(config),
     credentialState.status === 'available' ? credentialState.credentials : null,
+    options,
   )
 }
 
@@ -78,7 +83,7 @@ export async function cloneMobileGitSyncRepository(
 
 export async function commitMobileJournalChanges(
   config: MobileGitSyncConfig = {},
-  message = 'Sync mobile journal changes',
+  message = defaultCommitMessage,
   options: MobileGitOperationOptions = {},
 ): Promise<string | null> {
   const runtime = await createMobileGitRuntime()
@@ -139,6 +144,7 @@ async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
   const trace = createMobileGitTraceLogger()
 
   return {
+    cache: {},
     dir: await ensureJournalWorktreeDirectory(),
     fs: createExpoGitFileSystem(),
     http: createMobileGitHttpClient(trace),
@@ -251,6 +257,7 @@ function withMobileAuthorDefaults(config: MobileGitSyncConfig): MobileGitSyncCon
     ...config,
     authorEmail: config.authorEmail ?? defaultAuthorEmail,
     authorName: config.authorName ?? defaultAuthorName,
+    commitMessage: config.commitMessage ?? defaultCommitMessage,
   }
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { primitiveColors } from '@journal/theme'
 import { motion } from 'motion/react'
 import { ArrowRight, BookOpen, CalendarDays } from 'lucide-react'
 import { useSearchParams } from 'react-router'
@@ -22,18 +23,18 @@ const monthNames = [
 ]
 const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六']
 const bookColors = [
-  '#2459bc',
-  '#14724f',
-  '#df6246',
-  '#e96b98',
-  '#7a4f32',
-  '#6f7e63',
-  '#b9802e',
-  '#4e6f9f',
-  '#9a4e60',
-  '#8b6f36',
-  '#3f746d',
-  '#574885',
+  primitiveColors.sky[700],
+  primitiveColors.moss[700],
+  primitiveColors.clay[500],
+  primitiveColors.brass[500],
+  primitiveColors.moss[500],
+  primitiveColors.sky[500],
+  primitiveColors.clay[700],
+  primitiveColors.brass[700],
+  primitiveColors.moss[900],
+  primitiveColors.sky[900],
+  primitiveColors.clay[900],
+  primitiveColors.brass[900],
 ]
 
 type CalendarCell =
@@ -366,7 +367,7 @@ function CalendarPage() {
     >
       <header className="mx-auto grid w-[min(100%,66rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-6 px-10 pb-7 pt-9">
         <div className="min-w-0">
-          <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-ink">
+          <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-foreground">
             日历书架
           </h1>
         </div>
