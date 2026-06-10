@@ -43,6 +43,7 @@ export async function importJournalImagesForDate(
   const mediaDirectory = path.join(journalDirectory, mediaDirectoryName)
   const timestamp = formatImageTimestamp(now)
   const usedFileNames = new Set<string>()
+  const usedImageIds = new Set<string>()
   const importedImages: ImportedJournalImage[] = []
 
   await mkdir(mediaDirectory, { recursive: true })
@@ -51,15 +52,17 @@ export async function importJournalImagesForDate(
     const extension = path.extname(sourcePath).toLowerCase()
     const fileStem = `img_${date.split('-').join('')}_${timestamp}`
     const fileName = await createAvailableImageFileName(mediaDirectory, fileStem, extension, usedFileNames)
+    const imageId = createAvailableImageId(fileName, extension, usedImageIds)
     const filePath = path.join(mediaDirectory, fileName)
 
     await copyFile(sourcePath, filePath)
     const location = await readImageExifLocation(filePath).catch(() => undefined)
 
     usedFileNames.add(fileName)
+    usedImageIds.add(imageId)
 
     const importedImage: ImportedJournalImage = {
-      id: path.basename(fileName, extension),
+      id: imageId,
       src: `${mediaDirectoryName}/${fileName}`,
       fileName,
       filePath,
@@ -109,6 +112,21 @@ async function createAvailableImageFileName(
   }
 
   throw new Error('Could not create a unique journal image file name.')
+}
+
+function createAvailableImageId(fileName: string, extension: string, usedImageIds: Set<string>) {
+  const baseId = path.basename(fileName, extension)
+
+  for (let index = 0; index < 10_000; index += 1) {
+    const suffix = index === 0 ? '' : `_${index + 1}`
+    const imageId = `${baseId}${suffix}`
+
+    if (!usedImageIds.has(imageId)) {
+      return imageId
+    }
+  }
+
+  throw new Error('Could not create a unique journal image id.')
 }
 
 function formatImageTimestamp(date: Date) {

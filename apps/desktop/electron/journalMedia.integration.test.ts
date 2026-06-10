@@ -91,6 +91,32 @@ describe('journal media import', () => {
 
     expect(importedImages).toHaveLength(1)
     expect(importedImages[0].fileName).toBe('img_20260429_213800_2.png')
+    expect(importedImages[0].id).toBe('img_20260429_213800_2')
+  })
+
+  it('creates unique image ids for same-timestamp multi-select sources', async () => {
+    const directory = await createTemporaryDirectory()
+    const firstImage = path.join(directory, 'first.heic')
+    const secondImage = path.join(directory, 'second.jpeg')
+
+    await writeFile(firstImage, 'first-image', 'utf8')
+    await writeFile(secondImage, 'second-image', 'utf8')
+
+    const importedImages = await importJournalImagesForDate(
+      '2026-04-29',
+      directory,
+      [firstImage, secondImage],
+      new Date(2026, 3, 29, 21, 38, 0),
+    )
+
+    expect(importedImages.map((image) => image.id)).toEqual([
+      'img_20260429_213800',
+      'img_20260429_213800_2',
+    ])
+    expect(importedImages.map((image) => image.src)).toEqual([
+      'media/2026/04/img_20260429_213800.heic',
+      'media/2026/04/img_20260429_213800.jpeg',
+    ])
   })
 
   it('rejects invalid dates before touching files', async () => {

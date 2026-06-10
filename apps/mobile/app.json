@@ -15,6 +15,14 @@
       "edgeToEdgeEnabled": true
     },
     "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "允许 Journal 使用相机，把拍下的照片保存到你的日记里。",
+          "microphonePermission": false,
+          "photosPermission": "允许 Journal 选择照片，把它们保存到你的日记里。"
+        }
+      ],
       "expo-secure-store"
     ],
     "extra": {

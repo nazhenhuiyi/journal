@@ -174,6 +174,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [hasPendingJournalEdit, setHasPendingJournalEditState] = useState(false)
   const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
   const markLocalSaveRef = useRef<((changedPaths: readonly string[]) => void) | null>(null)
+  const pendingImportedMediaPathsRef = useRef<string[]>([])
   const isEditorComposingRef = useRef(false)
   const isJournalDirtyRef = useRef(false)
   const hasPendingJournalEditRef = useRef(false)
@@ -341,8 +342,11 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
         setJournalFile(savedFile)
       }
 
-      if ((options.scheduleSync ?? true) && didJournalFileWrite(savedFile)) {
-        markLocalSaveRef.current?.(getJournalFileTrackedPaths(savedFile))
+      const pendingImportedMediaPaths = pendingImportedMediaPathsRef.current
+
+      if ((options.scheduleSync ?? true) && (didJournalFileWrite(savedFile) || pendingImportedMediaPaths.length > 0)) {
+        markLocalSaveRef.current?.(getJournalFileTrackedPaths(savedFile, pendingImportedMediaPaths))
+        pendingImportedMediaPathsRef.current = []
       }
 
       if (shouldUpdateState) {
@@ -482,6 +486,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           }
 
           const savedEntry = parseJournalMarkdown(file.content)
+          const pendingImportedMediaPaths = pendingImportedMediaPathsRef.current
 
           updateLastSavedJournalSnapshot({
             frontMatter: savedEntry.frontMatter,
@@ -489,8 +494,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           })
           journalFileRef.current = file
           setJournalFile(file)
-          if (didJournalFileWrite(file)) {
-            markLocalSaveRef.current?.(getJournalFileTrackedPaths(file))
+          if (didJournalFileWrite(file) || pendingImportedMediaPaths.length > 0) {
+            markLocalSaveRef.current?.(getJournalFileTrackedPaths(file, pendingImportedMediaPaths))
+            pendingImportedMediaPathsRef.current = []
           }
           setHasPendingJournalEdit(false)
         })
@@ -565,7 +571,14 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       throw new Error('当前环境还不能导入图片。')
     }
 
-    return journalStore.importImages(currentJournalDate)
+    const importedImages = await journalStore.importImages(currentJournalDate)
+
+    pendingImportedMediaPathsRef.current = mergeTrackedPaths([
+      ...pendingImportedMediaPathsRef.current,
+      ...importedImages.map((image) => image.src),
+    ])
+
+    return importedImages
   }
 
   return (
@@ -658,16 +671,24 @@ function didJournalFileWrite(file: JournalFile) {
   return file.didWrite === true
 }
 
-function getJournalFileTrackedPaths(file: JournalFile) {
+function getJournalFileTrackedPaths(file: JournalFile, additionalPaths: readonly string[] = []) {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(file.date)
 
   if (!match) {
-    return []
+    return mergeTrackedPaths(additionalPaths)
   }
 
   const [, year, month] = match
 
-  return [`entries/${year}/${month}/${file.date}.md`]
+  return mergeTrackedPaths([`entries/${year}/${month}/${file.date}.md`, ...additionalPaths])
+}
+
+function mergeTrackedPaths(paths: readonly string[]) {
+  return [...new Set(
+    paths
+      .map((trackedPath) => trackedPath.trim().replace(/\\/g, '/').replace(/^\.?\//, ''))
+      .filter(Boolean),
+  )].sort()
 }
 
 export default MarkdownPreviewPage

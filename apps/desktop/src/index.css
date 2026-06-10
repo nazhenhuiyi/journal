@@ -1537,6 +1537,16 @@ body {
   background: rgba(255, 250, 240, 0.72);
 }
 
+.journal-murmur-image-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--journal-line-control);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-background));
+  object-fit: cover;
+}
+
 .journal-murmur-image-form > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

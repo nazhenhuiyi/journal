@@ -179,6 +179,96 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
     })
   })
 
+  it('includes imported media paths when pushing image murmurs', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 5, 8, 10, 0, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-08\n---\n\n',
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: null,
+    }
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...storedJournal,
+      content,
+      date,
+      didWrite: true,
+      updatedAt: '2026-06-08T10:00:05.000Z',
+    }))
+    const importImages = vi.fn(async () => [
+      {
+        id: 'img_20260608_100001',
+        src: 'media/2026/06/img_20260608_100001.jpg',
+        fileName: 'img_20260608_100001.jpg',
+        filePath: '/Users/zilin/.journal/media/2026/06/img_20260608_100001.jpg',
+      },
+    ])
+    const push = vi.fn(async () => ({
+      changed: true,
+      dirtyPaths: [],
+    }))
+
+    vi.stubGlobal('journalStore', {
+      importImages,
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveDate,
+      saveToday: vi.fn(),
+    })
+    vi.stubGlobal('journalSync', {
+      loadStatus: vi.fn().mockResolvedValue({
+        branch: 'main',
+        dirtyPaths: [],
+        hasCredentials: true,
+        hasRepository: true,
+        recentCommits: [],
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+        worktreeDirectory: '/Users/zilin/.journal',
+      }),
+      pull: vi.fn().mockResolvedValue({
+        changed: false,
+        dirtyPaths: [],
+      }),
+      push,
+      syncNow: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    await screen.findByRole('complementary', { name: '碎碎念' })
+    fireEvent.click(screen.getByRole('button', { name: '添一条' }))
+    fireEvent.click(screen.getByRole('button', { name: '加图片' }))
+
+    await waitFor(() => {
+      expect(importImages).toHaveBeenCalledOnce()
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledOnce()
+    })
+    expect(saveDate.mock.calls[0][1]).toContain('src: media/2026/06/img_20260608_100001.jpg')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_100)
+    })
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledOnce()
+    })
+    expect(push).toHaveBeenCalledWith({
+      changedPaths: [
+        'entries/2026/06/2026-06-08.md',
+        'media/2026/06/img_20260608_100001.jpg',
+      ],
+      collectDirtyPathsAfterSync: false,
+    })
+  })
+
   it('reloads the open journal after remote pull instead of autosaving stale content', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
 

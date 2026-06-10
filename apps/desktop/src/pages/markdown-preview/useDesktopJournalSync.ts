@@ -119,6 +119,8 @@ export function useDesktopJournalSync({
       }
     }
 
+    let operationChangedPaths = changedPaths
+
     if (isJournalDirtyRef.current) {
       if (shouldDeferAutomaticPush(trigger)) {
         return {
@@ -135,11 +137,13 @@ export function useDesktopJournalSync({
           skipped: true,
         }
       }
+
+      operationChangedPaths = undefined
     }
 
-    const operationOptions = changedPaths && changedPaths.length > 0
+    const operationOptions = operationChangedPaths && operationChangedPaths.length > 0
       ? {
-          changedPaths,
+          changedPaths: operationChangedPaths,
           collectDirtyPathsAfterSync: false,
         }
       : undefined

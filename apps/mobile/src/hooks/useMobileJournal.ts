@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Alert } from 'react-native'
-import type { MurmurBlock } from '@journal/core'
+import type { ImageBlock, MurmurBlock } from '@journal/core'
 import { shouldDeferBackgroundSyncForInput } from '../services/inputStability'
 import {
   createMurmur,
   getLocalDateKey,
   loadDailyJournal,
   saveDailyJournal,
+  type ImportedMobileJournalImage,
   type MobileJournalRecord,
   type SaveDailyJournalResult,
 } from '../services/mobileJournalStore'
@@ -14,6 +15,7 @@ import {
 export type SaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
 export type SaveCurrentJournalOptions = {
+  additionalChangedPaths?: readonly string[]
   scheduleSync?: boolean
   showAlert?: boolean
 }
@@ -127,6 +129,7 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
 
     try {
       const savedRecord = await saveDailyJournal({
+        additionalChangedPaths: options.additionalChangedPaths,
         date: today,
         longEntryMarkdown: nextLongEntryMarkdown,
         murmurs: nextMurmurs,
@@ -245,6 +248,82 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
     return false
   }, [longEntryMarkdown, murmurs, saveCurrentJournal, today])
 
+  const addImagesToMurmur = useCallback(async ({
+    body = '',
+    images,
+    murmurId,
+  }: {
+    body?: string
+    images: readonly ImportedMobileJournalImage[]
+    murmurId?: string | null
+  }) => {
+    if (images.length === 0) {
+      return false
+    }
+
+    const previousMurmurs = murmurs
+    const imageBlocks = images.map(importedImageToBlock)
+    const existingMurmur = murmurId
+      ? previousMurmurs.find((murmur) => murmur.id === murmurId)
+      : null
+    const nextMurmurs = existingMurmur
+      ? previousMurmurs.map((murmur) => (
+          murmur.id === existingMurmur.id
+            ? { ...murmur, images: [...murmur.images, ...imageBlocks] }
+            : murmur
+        ))
+      : [
+          ...previousMurmurs,
+          {
+            ...createMurmur(today, body),
+            images: imageBlocks,
+          },
+        ]
+
+    journalVersionRef.current += 1
+    setMurmurs(nextMurmurs)
+
+    const savedRecord = await saveCurrentJournal(longEntryMarkdown, nextMurmurs, {
+      additionalChangedPaths: images.map((image) => image.repositoryPath),
+    })
+
+    if (savedRecord) {
+      return true
+    }
+
+    journalVersionRef.current += 1
+    setMurmurs(previousMurmurs)
+    return false
+  }, [longEntryMarkdown, murmurs, saveCurrentJournal, today])
+
+  const updateMurmurImageCaption = useCallback((murmurId: string, imageId: string, caption: string) => {
+    markJournalDirty()
+    setMurmurs((currentMurmurs) => currentMurmurs.map((murmur) => (
+      murmur.id === murmurId
+        ? {
+            ...murmur,
+            images: murmur.images.map((image) => (
+              image.id === imageId
+                ? { ...image, caption }
+                : image
+            )),
+          }
+        : murmur
+    )))
+  }, [markJournalDirty])
+
+  const removeMurmurImage = useCallback((murmurId: string, imageId: string) => {
+    markJournalDirty()
+    setMurmurs((currentMurmurs) => currentMurmurs.map((murmur) => (
+      murmur.id === murmurId
+        ? {
+            ...murmur,
+            images: murmur.images.filter((image) => image.id !== imageId),
+          }
+        : murmur
+    )))
+  }, [markJournalDirty])
+
   const reloadTodayFromDisk = useCallback(async () => {
     const loadedRecord = await loadDailyJournal(today)
 
@@ -287,6 +366,7 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
 
   return {
     addMurmur,
+    addImagesToMurmur,
     checkForDateRollover,
     handleLongEntryChange,
     isLongEntryFocusedRef,
@@ -300,6 +380,17 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
     saveCurrentJournalRef,
     saveState,
     saveStateRef,
+    removeMurmurImage,
     today,
+    updateMurmurImageCaption,
+  }
+}
+
+function importedImageToBlock(importedImage: ImportedMobileJournalImage): ImageBlock {
+  return {
+    id: importedImage.id,
+    location: importedImage.location,
+    src: importedImage.src,
+    tags: [],
   }
 }

@@ -5,6 +5,7 @@ import {
   parseJournalMarkdown,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
+  type ImageLocation,
   type MarkdownDiagnostic,
   type MurmurBlock,
 } from '@journal/core'
@@ -25,12 +26,53 @@ export type SaveDailyJournalResult = MobileJournalRecord & {
 }
 
 type SaveJournalInput = {
+  additionalChangedPaths?: readonly string[]
   date: string
   longEntryMarkdown: string
   murmurs: MurmurBlock[]
 }
 
 const worktreeDirectoryName = 'journal-worktree'
+const supportedImageExtensions = new Set([
+  '.bmp',
+  '.gif',
+  '.heic',
+  '.heif',
+  '.jpeg',
+  '.jpg',
+  '.png',
+  '.tif',
+  '.tiff',
+  '.webp',
+])
+const mimeTypeExtensions = new Map([
+  ['image/bmp', '.bmp'],
+  ['image/gif', '.gif'],
+  ['image/heic', '.heic'],
+  ['image/heif', '.heif'],
+  ['image/jpeg', '.jpg'],
+  ['image/jpg', '.jpg'],
+  ['image/png', '.png'],
+  ['image/tiff', '.tiff'],
+  ['image/webp', '.webp'],
+])
+
+export type MobileJournalImageAsset = {
+  exif?: Record<string, unknown> | null
+  fileName?: string | null
+  mimeType?: string | null
+  type?: string | null
+  uri?: string | null
+}
+
+export type ImportedMobileJournalImage = {
+  id: string
+  src: string
+  fileName: string
+  filePath: string
+  repositoryPath: string
+  location?: ImageLocation
+}
 
 export function getLocalDateKey(date = new Date()) {
   const year = date.getFullYear()
@@ -115,6 +157,7 @@ export async function listDailyJournals(): Promise<MobileJournalRecord[]> {
 
 export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDailyJournalResult> {
   const existingRecord = await loadDailyJournal(input.date)
+  const additionalChangedPaths = normalizeChangedPaths(input.additionalChangedPaths ?? [])
   const previous = existingRecord.markdown
     ? parseJournalMarkdown(existingRecord.markdown).frontMatter
     : {}
@@ -131,8 +174,8 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
   if (!hasMeaningfulJournalChange(existingRecord.markdown, markdown)) {
     return {
       ...existingRecord,
-      changedPaths: [],
-      didWrite: false,
+      changedPaths: additionalChangedPaths,
+      didWrite: additionalChangedPaths.length > 0,
     }
   }
 
@@ -149,15 +192,86 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
     murmurs: parsed.murmurs,
     markdown,
     updatedAt,
-    changedPaths: [getEntryRepositoryPath(input.date)],
+    changedPaths: normalizeChangedPaths([getEntryRepositoryPath(input.date), ...additionalChangedPaths]),
     didWrite: true,
   }
+}
+
+export async function importMobileJournalImagesForDate(
+  date: string,
+  assets: readonly MobileJournalImageAsset[],
+  now = new Date(),
+): Promise<ImportedMobileJournalImage[]> {
+  assertDateKey(date)
+
+  const imageAssets = assets.flatMap((asset) => {
+    const normalizedAsset = normalizeImageAsset(asset)
+
+    return normalizedAsset ? [normalizedAsset] : []
+  })
+
+  if (imageAssets.length === 0) {
+    return []
+  }
+
+  const [year, month] = date.split('-')
+  const repositoryDirectory = `media/${year}/${month}`
+  const mediaDirectory = `${getJournalWorktreeDirectory()}${repositoryDirectory}/`
+  const timestamp = formatImageTimestamp(now)
+  const usedFileNames = new Set<string>()
+  const usedImageIds = new Set<string>()
+  const importedImages: ImportedMobileJournalImage[] = []
+
+  await FileSystem.makeDirectoryAsync(mediaDirectory, { intermediates: true })
+
+  for (const imageAsset of imageAssets) {
+    const fileStem = `img_${date.replaceAll('-', '')}_${timestamp}`
+    const fileName = await createAvailableImageFileName(mediaDirectory, fileStem, imageAsset.extension, usedFileNames)
+    const imageId = createAvailableImageId(fileName, imageAsset.extension, usedImageIds)
+    const filePath = `${mediaDirectory}${fileName}`
+    const repositoryPath = `${repositoryDirectory}/${fileName}`
+
+    await FileSystem.copyAsync({
+      from: imageAsset.uri,
+      to: filePath,
+    })
+
+    usedFileNames.add(fileName)
+    usedImageIds.add(imageId)
+
+    const importedImage: ImportedMobileJournalImage = {
+      id: imageId,
+      src: repositoryPath,
+      fileName,
+      filePath,
+      repositoryPath,
+    }
+    const location = parseExifLocation(imageAsset.exif)
+
+    if (location) {
+      importedImage.location = location
+    }
+
+    importedImages.push(importedImage)
+  }
+
+  return importedImages
 }
 
 export function getEntryRepositoryPath(date: string) {
   const [year, month] = date.split('-')
 
   return `entries/${year}/${month}/${date}.md`
+}
+
+export function resolveJournalMediaFileUri(src: string) {
+  const normalizedSrc = src.trim().replace(/^\.?\//, '')
+
+  if (!isSafeMediaRepositoryPath(normalizedSrc)) {
+    return null
+  }
+
+  return `${getJournalWorktreeDirectory()}${normalizedSrc}`
 }
 
 async function getEntryFilePath(date: string) {
@@ -208,6 +322,244 @@ function isMonthDirectoryName(value: string) {
 
 function isDailyJournalFileName(value: string) {
   return /^\d{4}-\d{2}-\d{2}\.md$/.test(value)
+}
+
+function normalizeImageAsset(asset: MobileJournalImageAsset) {
+  const uri = typeof asset.uri === 'string' ? asset.uri.trim() : ''
+
+  if (!uri || (asset.type && asset.type !== 'image')) {
+    return null
+  }
+
+  const extension = getImageAssetExtension(asset)
+
+  if (!extension) {
+    return null
+  }
+
+  return {
+    exif: asset.exif ?? null,
+    extension,
+    uri,
+  }
+}
+
+function getImageAssetExtension(asset: MobileJournalImageAsset) {
+  const candidates = [
+    asset.fileName,
+    asset.uri,
+  ]
+
+  for (const candidate of candidates) {
+    const extension = getSupportedImagePathExtension(candidate)
+
+    if (extension) {
+      return extension
+    }
+  }
+
+  const mimeType = typeof asset.mimeType === 'string' ? asset.mimeType.toLowerCase() : ''
+
+  return mimeTypeExtensions.get(mimeType) ?? null
+}
+
+function getSupportedImagePathExtension(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
+  const pathWithoutQuery = value.split(/[?#]/)[0] ?? ''
+  const match = /(\.[A-Za-z0-9]+)$/.exec(pathWithoutQuery)
+  const extension = match?.[1]?.toLowerCase()
+
+  return extension && supportedImageExtensions.has(extension) ? extension : null
+}
+
+async function createAvailableImageFileName(
+  directory: string,
+  fileStem: string,
+  extension: string,
+  usedFileNames: Set<string>,
+) {
+  for (let index = 0; index < 10_000; index += 1) {
+    const suffix = index === 0 ? '' : `_${index + 1}`
+    const fileName = `${fileStem}${suffix}${extension}`
+
+    if (usedFileNames.has(fileName)) {
+      continue
+    }
+
+    const fileInfo = await FileSystem.getInfoAsync(`${directory}${fileName}`)
+
+    if (!fileInfo.exists) {
+      return fileName
+    }
+  }
+
+  throw new Error('Could not create a unique journal image file name.')
+}
+
+function createAvailableImageId(fileName: string, extension: string, usedImageIds: Set<string>) {
+  const baseId = fileName.slice(0, -extension.length)
+
+  for (let index = 0; index < 10_000; index += 1) {
+    const suffix = index === 0 ? '' : `_${index + 1}`
+    const imageId = `${baseId}${suffix}`
+
+    if (!usedImageIds.has(imageId)) {
+      return imageId
+    }
+  }
+
+  throw new Error('Could not create a unique journal image id.')
+}
+
+function formatImageTimestamp(date: Date) {
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+  const seconds = `${date.getSeconds()}`.padStart(2, '0')
+
+  return `${hours}${minutes}${seconds}`
+}
+
+function parseExifLocation(exif: Record<string, unknown> | null | undefined): ImageLocation | undefined {
+  if (!exif) {
+    return undefined
+  }
+
+  const latitude = parseExifCoordinate(exif, [
+    'GPSLatitude',
+    'latitude',
+    'Latitude',
+  ], [
+    'GPSLatitudeRef',
+    'latitudeRef',
+    'LatitudeRef',
+  ])
+  const longitude = parseExifCoordinate(exif, [
+    'GPSLongitude',
+    'longitude',
+    'Longitude',
+  ], [
+    'GPSLongitudeRef',
+    'longitudeRef',
+    'LongitudeRef',
+  ])
+
+  if (latitude === undefined || longitude === undefined) {
+    return undefined
+  }
+
+  return {
+    latitude: roundCoordinate(latitude),
+    longitude: roundCoordinate(longitude),
+    source: 'exif',
+  }
+}
+
+function parseExifCoordinate(
+  exif: Record<string, unknown>,
+  valueKeys: readonly string[],
+  referenceKeys: readonly string[],
+) {
+  const value = firstExifValue(exif, valueKeys)
+  const coordinate = parseCoordinateValue(value)
+
+  if (coordinate === undefined) {
+    return undefined
+  }
+
+  const reference = firstExifValue(exif, referenceKeys)
+
+  return typeof reference === 'string' && /^[SW]$/i.test(reference)
+    ? -Math.abs(coordinate)
+    : coordinate
+}
+
+function firstExifValue(exif: Record<string, unknown>, keys: readonly string[]) {
+  for (const key of keys) {
+    if (exif[key] !== undefined && exif[key] !== null) {
+      return exif[key]
+    }
+  }
+
+  return undefined
+}
+
+function parseCoordinateValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const numberValue = Number(value)
+
+    if (Number.isFinite(numberValue)) {
+      return numberValue
+    }
+  }
+
+  if (Array.isArray(value) && value.length >= 3) {
+    const parts = value.slice(0, 3).map(parseCoordinatePart)
+
+    if (parts.every((part): part is number => part !== undefined)) {
+      return parts[0] + parts[1] / 60 + parts[2] / 3600
+    }
+  }
+
+  return undefined
+}
+
+function parseCoordinatePart(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const rationalMatch = /^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/.exec(value.trim())
+
+    if (rationalMatch) {
+      const numerator = Number(rationalMatch[1])
+      const denominator = Number(rationalMatch[2])
+
+      return Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0
+        ? numerator / denominator
+        : undefined
+    }
+
+    const numberValue = Number(value)
+
+    return Number.isFinite(numberValue) ? numberValue : undefined
+  }
+
+  return undefined
+}
+
+function roundCoordinate(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000
+}
+
+function normalizeChangedPaths(paths: readonly string[]) {
+  return [...new Set(
+    paths
+      .map((path) => path.trim().replace(/\\/g, '/').replace(/^\.?\//, ''))
+      .filter(Boolean),
+  )].sort()
+}
+
+function assertDateKey(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new TypeError('Journal date must use YYYY-MM-DD format.')
+  }
+}
+
+function isSafeMediaRepositoryPath(path: string) {
+  return path.startsWith('media/') && !path.split('/').some((segment) => (
+    !segment ||
+    segment.startsWith('.') ||
+    segment.endsWith('.tmp') ||
+    segment === '..'
+  ))
 }
 
 function createMurmurId(date: string, now: Date) {

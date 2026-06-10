@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, MapPin, MessageSquareText, Trash } from 'lucide-react'
 import type { ImageBlock, ImageLocation, MurmurBlock } from '@journal/core'
+import { resolveJournalMediaSrc } from '../../domain/journalMedia'
 
 type ImportedJournalImage = {
   id: string
@@ -206,6 +207,11 @@ function MurmurImageForm({
 
   return (
     <section className="journal-murmur-image-form">
+      <img
+        alt={image.caption?.trim() || image.id}
+        className="journal-murmur-image-preview"
+        src={resolveJournalMediaSrc(image.src)}
+      />
       <div>
         <strong title={image.src}>{image.src}</strong>
         <button aria-label="移除图片" onClick={onDelete} type="button">

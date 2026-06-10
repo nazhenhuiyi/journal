@@ -1,13 +1,16 @@
 import { type ComponentProps, useCallback, useRef, useState } from 'react'
 import {
+  Alert,
+  Image as NativeImage,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
-import type { MurmurBlock } from '@journal/core'
+import type { ImageBlock, MurmurBlock } from '@journal/core'
 import { semanticColors } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
@@ -30,6 +33,10 @@ import { ReviewPage } from './pages/ReviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SyncSettingsPage } from './pages/SyncSettingsPage'
 import { Screen } from './ui/Screen'
+import {
+  importMobileJournalImagesForDate,
+  resolveJournalMediaFileUri,
+} from './services/mobileJournalStore'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
 type HeaderStatusTone = 'blue' | 'danger' | 'green' | 'plain'
@@ -44,6 +51,7 @@ type RootStackParamList = {
   Settings: undefined
   SyncSettings: undefined
 }
+type ImageImportSource = 'camera' | 'library'
 
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -65,10 +73,12 @@ function returnToToday(navigation: TodayFallbackNavigation) {
 
 export default function App() {
   const [murmurDraft, setMurmurDraft] = useState('')
+  const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
   const onLocalSaveRef = useRef<MobileLocalSaveHandler | null>(null)
   const {
     addMurmur,
+    addImagesToMurmur,
     checkForDateRollover,
     handleLongEntryChange,
     isLongEntryFocusedRef,
@@ -78,11 +88,12 @@ export default function App() {
     record,
     reloadTodayFromDisk,
     reloadTodayFromDiskIfChanged,
-    saveCurrentJournal,
     saveCurrentJournalRef,
     saveState,
     saveStateRef,
+    removeMurmurImage,
     today,
+    updateMurmurImageCaption,
   } = useMobileJournal({ onLocalSaveRef })
   const {
     gitStatusError,
@@ -120,6 +131,7 @@ export default function App() {
     syncRemoteUrl,
   )
   const isBusy = saveState === 'saving' || saveState === 'loading'
+  const isImportingImages = activeImageImport !== null
   const isSyncBusy = isSavingSyncConfiguration || syncSnapshot.status === 'syncing'
   const headerStatus = getHeaderStatus(
     saveState,
@@ -147,6 +159,76 @@ export default function App() {
       setMurmurDraft('')
     }
   }, [addMurmur, murmurDraft])
+
+  const handleImportMurmurImages = useCallback(async (
+    source: ImageImportSource,
+    murmurId?: string | null,
+  ) => {
+    if (isBusy || isImportingImages) {
+      return
+    }
+
+    setActiveImageImport(source)
+
+    try {
+      const permission = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync(false)
+
+      if (!permission.granted) {
+        Alert.alert(
+          source === 'camera' ? '无法打开相机' : '无法打开相册',
+          source === 'camera'
+            ? '请允许 Journal 使用相机后再拍照。'
+            : '请允许 Journal 访问照片后再添加图片。',
+        )
+        return
+      }
+
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            exif: true,
+            mediaTypes: ['images'],
+            quality: 1,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            allowsMultipleSelection: true,
+            exif: true,
+            mediaTypes: ['images'],
+            quality: 1,
+          })
+
+      if (result.canceled) {
+        return
+      }
+
+      const importedImages = await importMobileJournalImagesForDate(today, result.assets)
+
+      if (importedImages.length === 0) {
+        Alert.alert('没有可用图片', source === 'camera'
+          ? '刚才拍下的照片没有能放进日记的图片文件。'
+          : '刚才选择的内容里没有能放进日记的图片。')
+        return
+      }
+
+      const didAdd = await addImagesToMurmur({
+        body: murmurDraft,
+        images: importedImages,
+        murmurId,
+      })
+
+      if (didAdd && !murmurId) {
+        setMurmurDraft('')
+      }
+    } catch (error) {
+      console.error(error)
+      Alert.alert('图片没有放进去', source === 'camera'
+        ? '刚才拍下的照片没有保存成功。'
+        : '刚才选择的图片没有保存成功。')
+    } finally {
+      setActiveImageImport(null)
+    }
+  }, [addImagesToMurmur, isBusy, isImportingImages, murmurDraft, today])
 
   return (
     <NavigationContainer>
@@ -288,9 +370,33 @@ export default function App() {
                         value={murmurDraft}
                       />
                     </View>
-                    <View className="flex-row justify-end" style={{ marginTop: 18 }}>
+                    <View className="flex-row items-center justify-between gap-2" style={{ marginTop: 18 }}>
+                      <View className="flex-row gap-2">
+                        <Button
+                          className="min-h-10 rounded-full px-3"
+                          disabled={isBusy || isImportingImages}
+                          icon="camera-outline"
+                          loading={activeImageImport === 'camera'}
+                          onPress={() => void handleImportMurmurImages('camera')}
+                          testID="take-murmur-photo-button"
+                          variant="secondary"
+                        >
+                          拍照
+                        </Button>
+                        <Button
+                          className="min-h-10 rounded-full px-3"
+                          disabled={isBusy || isImportingImages}
+                          icon="images-outline"
+                          loading={activeImageImport === 'library'}
+                          onPress={() => void handleImportMurmurImages('library')}
+                          testID="add-murmur-images-button"
+                          variant="secondary"
+                        >
+                          相册
+                        </Button>
+                      </View>
                       <Button
-                        className="min-h-10 rounded-full px-5"
+                        className="min-h-10 rounded-full px-4"
                         disabled={!murmurDraft.trim() || isBusy}
                         icon="add"
                         onPress={() => void handleAddMurmur()}
@@ -312,7 +418,15 @@ export default function App() {
                       >
                         <View className="gap-3">
                           {murmurs.map((murmur) => (
-                            <MurmurItem key={murmur.id} murmur={murmur} />
+                            <MurmurItem
+                              isAddingImages={isImportingImages}
+                              key={murmur.id}
+                              murmur={murmur}
+                              onAddImages={(murmurId) => void handleImportMurmurImages('library', murmurId)}
+                              onRemoveImage={removeMurmurImage}
+                              onTakePhoto={(murmurId) => void handleImportMurmurImages('camera', murmurId)}
+                              onUpdateImageCaption={updateMurmurImageCaption}
+                            />
                           ))}
                         </View>
                       </ScrollView>
@@ -497,14 +611,128 @@ function InlineStatusButton({
   )
 }
 
-function MurmurItem({ murmur }: { murmur: MurmurBlock }) {
+function MurmurItem({
+  isAddingImages,
+  murmur,
+  onAddImages,
+  onRemoveImage,
+  onTakePhoto,
+  onUpdateImageCaption,
+}: {
+  isAddingImages: boolean
+  murmur: MurmurBlock
+  onAddImages: (murmurId: string) => void
+  onRemoveImage: (murmurId: string, imageId: string) => void
+  onTakePhoto: (murmurId: string) => void
+  onUpdateImageCaption: (murmurId: string, imageId: string, caption: string) => void
+}) {
   return (
     <View
       className="border border-border bg-surface px-4 py-4"
       style={{ borderRadius: 18 }}
     >
-      <Text className="mb-3 text-xs font-semibold text-muted-fg">{formatTime(murmur.time)}</Text>
-      <Text className="text-base leading-6 text-foreground">{murmur.body}</Text>
+      <View className="mb-3 flex-row items-center justify-between gap-3">
+        <Text className="text-xs font-semibold text-muted-fg">{formatTime(murmur.time)}</Text>
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            accessibilityLabel="给这条碎碎念拍照"
+            accessibilityRole="button"
+            className="min-h-8 flex-row items-center gap-1 rounded-full px-2"
+            disabled={isAddingImages}
+            onPress={() => onTakePhoto(murmur.id)}
+            style={({ pressed }) => ({
+              opacity: isAddingImages ? 0.45 : pressed ? 0.72 : 1,
+            })}
+          >
+            <Ionicons color={semanticColors['muted-fg']} name="camera-outline" size={15} />
+            <Text className="text-xs font-semibold text-muted-fg">拍照</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="给这条碎碎念从相册加图片"
+            accessibilityRole="button"
+            className="min-h-8 flex-row items-center gap-1 rounded-full px-2"
+            disabled={isAddingImages}
+            onPress={() => onAddImages(murmur.id)}
+            style={({ pressed }) => ({
+              opacity: isAddingImages ? 0.45 : pressed ? 0.72 : 1,
+            })}
+          >
+            <Ionicons color={semanticColors['muted-fg']} name="image-outline" size={15} />
+            <Text className="text-xs font-semibold text-muted-fg">相册</Text>
+          </Pressable>
+        </View>
+      </View>
+      {murmur.body.trim() ? (
+        <Text className="text-base leading-6 text-foreground">{murmur.body}</Text>
+      ) : null}
+      {murmur.images.length > 0 ? (
+        <View className="gap-3" style={{ marginTop: murmur.body.trim() ? 14 : 0 }}>
+          {murmur.images.map((image) => (
+            <MurmurImageItem
+              image={image}
+              key={image.id}
+              murmurId={murmur.id}
+              onRemove={onRemoveImage}
+              onUpdateCaption={onUpdateImageCaption}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+function MurmurImageItem({
+  image,
+  murmurId,
+  onRemove,
+  onUpdateCaption,
+}: {
+  image: ImageBlock
+  murmurId: string
+  onRemove: (murmurId: string, imageId: string) => void
+  onUpdateCaption: (murmurId: string, imageId: string, caption: string) => void
+}) {
+  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageMeta = formatImageMeta(image)
+
+  return (
+    <View className="gap-2">
+      <NativeImage
+        accessibilityLabel={image.caption?.trim() || '碎碎念图片'}
+        resizeMode="cover"
+        source={{ uri: imageUri }}
+        style={{
+          aspectRatio: 4 / 3,
+          backgroundColor: semanticColors['surface-muted'],
+          borderRadius: 14,
+          width: '100%',
+        }}
+      />
+      <View className="flex-row items-center gap-2">
+        <TextInput
+          accessibilityLabel="图片说明"
+          className="min-h-10 flex-1 rounded-lg border border-border bg-surface-muted px-3 text-sm text-foreground"
+          onChangeText={(value) => onUpdateCaption(murmurId, image.id, value)}
+          placeholder="给这张图留一句说明"
+          placeholderTextColor={semanticColors['muted-fg']}
+          value={image.caption ?? ''}
+        />
+        <Pressable
+          accessibilityLabel="移除图片"
+          accessibilityRole="button"
+          className="h-10 w-10 items-center justify-center rounded-full border border-border"
+          onPress={() => onRemove(murmurId, image.id)}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.72 : 1,
+          })}
+        >
+          <Ionicons color={semanticColors.danger} name="trash-outline" size={16} />
+        </Pressable>
+      </View>
+      {imageMeta ? (
+        <Text className="text-xs leading-4 text-muted-fg">{imageMeta}</Text>
+      ) : null}
     </View>
   )
 }
@@ -533,6 +761,18 @@ function formatTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatImageMeta(image: ImageBlock) {
+  const tags = image.tags.length > 0 ? image.tags.join(', ') : ''
+  const location = image.location?.name?.trim() ?? ''
+  const latitude = image.location?.latitude
+  const longitude = image.location?.longitude
+  const coordinates = typeof latitude === 'number' && typeof longitude === 'number'
+    ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+    : ''
+
+  return [location, coordinates, tags].filter(Boolean).join(' · ')
 }
 
 function getHeaderStatus(
