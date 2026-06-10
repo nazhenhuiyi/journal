@@ -47,8 +47,8 @@ const styles = StyleSheet.create({
   nav: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: spacingPixels['10'],
-    marginBottom: spacingPixels['7'],
+    height: 36,
+    marginBottom: spacingPixels['1.5'],
   },
   navSpacer: {
     width: spacingPixels['8'],

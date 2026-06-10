@@ -69,6 +69,37 @@ describe('getJournalSyncStatusPresentation', () => {
     expect(presentation.label).toBe('未配置')
   })
 
+  it('keeps the main surface quiet when sync is configured but idle', () => {
+    const presentation = getJournalSyncStatusPresentation(
+      {
+        ...syncedSnapshot,
+        lastSyncedAt: null,
+        status: 'idle',
+      },
+      '',
+      'https://github.com/example/journal.git',
+      true,
+    )
+
+    expect(presentation.label).toBe('已保存')
+  })
+
+  it('can show saved configuration for settings surfaces', () => {
+    const presentation = getJournalSyncStatusPresentation(
+      {
+        ...syncedSnapshot,
+        lastSyncedAt: null,
+        status: 'idle',
+      },
+      '',
+      'https://github.com/example/journal.git',
+      true,
+      { showConfigurationState: true },
+    )
+
+    expect(presentation.label).toBe('已配置')
+  })
+
   it('does not let an older sync timestamp hide retry state', () => {
     const presentation = getJournalSyncStatusPresentation(
       {

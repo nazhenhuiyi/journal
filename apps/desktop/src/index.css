@@ -33,6 +33,14 @@ body {
   --journal-chrome-background: var(--color-sidebar);
   --journal-control-background: var(--color-card);
   --journal-control-hover: var(--color-accent);
+  --journal-menu-hover-background: color-mix(in srgb, var(--color-sidebar-accent) 72%, var(--color-card));
+  --journal-menu-hover-border: color-mix(in srgb, var(--color-sidebar-border) 74%, transparent);
+  --journal-menu-hover-foreground: var(--color-sidebar-accent-foreground);
+  --journal-menu-active-background: color-mix(in srgb, var(--color-primary-soft) 42%, var(--color-card));
+  --journal-menu-active-border: color-mix(in srgb, var(--color-primary) 22%, var(--color-sidebar-border));
+  --journal-menu-active-foreground: var(--color-sidebar-foreground);
+  --journal-menu-active-description: color-mix(in srgb, var(--color-primary) 38%, var(--journal-text-subtle));
+  --journal-menu-active-icon: var(--color-primary);
   --journal-panel-background: var(--color-card);
   --journal-text-primary: var(--color-text-primary);
   --journal-text-secondary: var(--color-text-secondary);
@@ -475,7 +483,7 @@ body {
 
 .settings-commit-summary code {
   overflow: hidden;
-  color: var(--color-success);
+  color: var(--color-card-foreground);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.82rem;
   font-weight: 760;
@@ -770,9 +778,9 @@ body {
 }
 
 .journal-menu :is(a, button):hover {
-  border-color: var(--journal-line-soft);
-  background: var(--journal-control-hover);
-  color: var(--color-sidebar-accent-foreground);
+  border-color: var(--journal-menu-hover-border);
+  background: var(--journal-menu-hover-background);
+  color: var(--journal-menu-hover-foreground);
 }
 
 .journal-menu :is(a, button):focus-visible {
@@ -781,9 +789,9 @@ body {
 }
 
 .journal-menu :is(a, button).is-active {
-  border-color: var(--journal-line-active-strong);
-  color: var(--color-foreground);
-  background: var(--color-primary-soft);
+  border-color: var(--journal-menu-active-border);
+  color: var(--journal-menu-active-foreground);
+  background: var(--journal-menu-active-background);
 }
 
 .journal-menu-list > :nth-child(1) svg {
@@ -799,7 +807,7 @@ body {
 }
 
 .journal-menu :is(a, button).is-active svg {
-  color: var(--color-foreground);
+  color: var(--journal-menu-active-icon);
 }
 
 .journal-menu :is(a, button):hover svg,
@@ -844,6 +852,10 @@ body {
   font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.journal-menu :is(a, button).is-active small {
+  color: var(--journal-menu-active-description);
 }
 
 .calendar-library {

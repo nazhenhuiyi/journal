@@ -166,11 +166,20 @@ export function getJournalSyncStatusPresentation(
     }
   }
 
+  if (options.showConfigurationState) {
+    return {
+      detail: '同步配置已保存，写作时会自动处理改动。',
+      kind: 'configured',
+      label: '已配置',
+      tone: 'ready',
+    }
+  }
+
   return {
-    detail: '同步配置已保存，写作时会自动处理改动。',
-    kind: 'configured',
-    label: '已配置',
-    tone: 'ready',
+    detail: '本地日记已经保存。',
+    kind: 'pending',
+    label: '已保存',
+    tone: 'success',
   }
 }
 
