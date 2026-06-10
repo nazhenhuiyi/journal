@@ -20,6 +20,17 @@ export {
   isFreshWeather,
   isFreshWeatherForLocation,
 } from './weatherFreshness'
+export {
+  getOpenMeteoWeatherText,
+  normalizeWeatherQueryForWttr,
+  parseOpenMeteoGeocoding,
+  parseOpenMeteoWeather,
+  parseWttrWeather,
+} from './weatherLookup'
+export type {
+  WeatherLookupLocation,
+  WeatherLookupPayload,
+} from './weatherLookup'
 export type {
   Annotation,
   AnnotationFile,

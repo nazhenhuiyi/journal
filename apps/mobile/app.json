@@ -23,6 +23,12 @@
           "photosPermission": "允许 Journal 选择照片，把它们保存到你的日记里。"
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "允许 Journal 使用当前位置，为今天的日记记录天气。"
+        }
+      ],
       "expo-secure-store"
     ],
     "extra": {

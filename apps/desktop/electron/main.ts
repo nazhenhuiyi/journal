@@ -15,13 +15,16 @@ import {
   syncJournalNow,
 } from './journalSync'
 import { importJournalImagesForDate } from './journalMedia'
-import { normalizeWeatherQueryForWttr } from './weatherLookup'
 import {
   createJournalMarkdownWithFrontMatter,
   hasMeaningfulJournalChange,
   isFreshWeather,
   isFreshWeatherForLocation,
+  normalizeWeatherQueryForWttr,
+  parseOpenMeteoGeocoding,
+  parseOpenMeteoWeather,
   parseJournalMarkdown,
+  parseWttrWeather,
   stripManagedFrontMatter,
 } from '@journal/core'
 import type {
@@ -32,6 +35,8 @@ import type {
   TextPosition,
   TextQuote,
   TextSelector,
+  WeatherLookupLocation,
+  WeatherLookupPayload,
 } from '@journal/core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -117,17 +122,6 @@ type JournalFile = {
 }
 
 type JournalEntry = Omit<JournalFile, 'content'>
-
-type WeatherLookupLocation = {
-  latitude?: number
-  longitude?: number
-  query?: string
-}
-
-type WeatherLookupPayload = {
-  weather: NonNullable<DayFrontMatter['weather']>
-  location?: NonNullable<DayFrontMatter['location']>
-}
 
 function getTodayDateKey(date = new Date()) {
   const year = date.getFullYear()
@@ -798,19 +792,70 @@ async function writeJournalFile(filePath: string, content: string) {
 }
 
 async function fetchTodayWeather(location: WeatherLookupLocation): Promise<WeatherLookupPayload> {
+  try {
+    return await fetchOpenMeteoWeather(location)
+  } catch {
+    return fetchWttrWeather(location)
+  }
+}
+
+type ResolvedOpenMeteoLocation = WeatherLookupLocation & {
+  location?: DayFrontMatter['location']
+}
+
+async function fetchOpenMeteoWeather(location: WeatherLookupLocation): Promise<WeatherLookupPayload> {
+  const resolvedLocation: ResolvedOpenMeteoLocation = location.query
+    ? await fetchOpenMeteoLocation(location.query)
+    : location
+  const frontMatterLocation = resolvedLocation.location
+
+  if (!hasCoordinates(resolvedLocation)) {
+    throw new Error('Weather coordinates unavailable.')
+  }
+
+  const requestUrl = new URL('https://api.open-meteo.com/v1/forecast')
+
+  requestUrl.searchParams.set('latitude', `${resolvedLocation.latitude}`)
+  requestUrl.searchParams.set('longitude', `${resolvedLocation.longitude}`)
+  requestUrl.searchParams.set(
+    'current',
+    'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+  )
+  requestUrl.searchParams.set('wind_speed_unit', 'kmh')
+  requestUrl.searchParams.set('timezone', 'auto')
+  requestUrl.searchParams.set('forecast_days', '1')
+
+  const response = await fetchJson(requestUrl)
+
+  return parseOpenMeteoWeather(response, frontMatterLocation)
+}
+
+async function fetchOpenMeteoLocation(query: string): Promise<ResolvedOpenMeteoLocation> {
+  const requestUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+
+  requestUrl.searchParams.set('name', query.trim())
+  requestUrl.searchParams.set('count', '1')
+  requestUrl.searchParams.set('language', 'zh')
+  requestUrl.searchParams.set('format', 'json')
+
+  const location = parseOpenMeteoGeocoding(await fetchJson(requestUrl))
+
+  if (!location) {
+    throw new Error('Open-Meteo geocoding did not include a usable location.')
+  }
+
+  return location
+}
+
+async function fetchWttrWeather(location: WeatherLookupLocation): Promise<WeatherLookupPayload> {
   const weatherTarget = getWeatherTarget(location)
   const requestUrl = `https://wttr.in/${weatherTarget}?format=j1&lang=zh`
-  const response = await fetch(requestUrl, {
+
+  return parseWttrWeather(await fetchJson(requestUrl, {
     headers: {
       'User-Agent': 'JournalDesktop/0.0.0',
     },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Weather request failed with ${response.status}.`)
-  }
-
-  return parseWttrWeather(await response.json())
+  }))
 }
 
 function getWeatherTarget(location: WeatherLookupLocation) {
@@ -829,38 +874,23 @@ function encodeWeatherTarget(target: string) {
   return encodeURIComponent(target).replace(/%2C/g, ',')
 }
 
-function parseWttrWeather(payload: unknown): WeatherLookupPayload {
-  const root = asRecord(payload)
-  const currentCondition = firstRecord(root.current_condition)
-  const nearestArea = firstRecord(root.nearest_area)
-  const temperature = numberFromRecord(currentCondition, 'temp_C')
-  const feelsLike = numberFromRecord(currentCondition, 'FeelsLikeC')
-  const humidity = numberFromRecord(currentCondition, 'humidity')
-  const windSpeed = numberFromRecord(currentCondition, 'windspeedKmph')
-  const text = firstLocalizedValue(currentCondition.lang_zh) ?? firstLocalizedValue(currentCondition.weatherDesc)
+async function fetchJson(input: string | URL, init: RequestInit = {}) {
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => abortController.abort(), 4500)
 
-  if (!text || temperature === undefined) {
-    throw new Error('Weather response did not include current weather.')
-  }
+  try {
+    const response = await fetch(input, {
+      ...init,
+      signal: abortController.signal,
+    })
 
-  const areaName = firstLocalizedValue(nearestArea.areaName)
-  const region = firstLocalizedValue(nearestArea.region)
-  const country = firstLocalizedValue(nearestArea.country)
+    if (!response.ok) {
+      throw new Error(`Weather request failed with ${response.status}.`)
+    }
 
-  return {
-    weather: {
-      text,
-      temperature,
-      feelsLike,
-      humidity,
-      windSpeed,
-      updatedAt: new Date().toISOString(),
-    },
-    location: {
-      name: areaName,
-      region,
-      country,
-    },
+    return response.json() as Promise<unknown>
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -930,17 +960,6 @@ function stringFromRecord(record: Record<string, unknown>, key: string) {
   const value = record[key]
 
   return typeof value === 'string' && value ? value : undefined
-}
-
-function firstLocalizedValue(value: unknown) {
-  const record = firstRecord(value)
-  const localizedValue = record.value
-
-  return typeof localizedValue === 'string' && localizedValue.trim() ? localizedValue.trim() : undefined
-}
-
-function firstRecord(value: unknown): Record<string, unknown> {
-  return Array.isArray(value) ? asRecord(value[0]) : {}
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

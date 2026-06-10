@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Alert } from 'react-native'
-import type { ImageBlock, MurmurBlock } from '@journal/core'
+import type { DayFrontMatter, ImageBlock, MurmurBlock } from '@journal/core'
 import { shouldDeferBackgroundSyncForInput } from '../services/inputStability'
 import { mobileSyncManager } from '../services/sync/mobileSyncManager'
 import {
@@ -11,6 +11,7 @@ import {
   type ImportedMobileJournalImage,
   type MobileJournalRecord,
   type SaveDailyJournalResult,
+  updateDailyJournalFrontMatter,
 } from '../services/mobileJournalStore'
 
 export type SaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
@@ -347,6 +348,18 @@ export function useMobileJournal() {
     return true
   }, [today])
 
+  const updateTodayFrontMatter = useCallback(async (frontMatterPatch: DayFrontMatter) => {
+    const updatedRecord = await updateDailyJournalFrontMatter(today, frontMatterPatch)
+
+    setRecord(updatedRecord)
+
+    if (updatedRecord.didWrite) {
+      mobileSyncManager.markLocalSave(updatedRecord.changedPaths)
+    }
+
+    return updatedRecord
+  }, [today])
+
   useEffect(() => {
     const intervalId = setInterval(() => {
       void checkForDateRollover().catch((error) => {
@@ -375,6 +388,7 @@ export function useMobileJournal() {
     saveStateRef,
     removeMurmurImage,
     today,
+    updateTodayFrontMatter,
     updateMurmurImageCaption,
   }
 }

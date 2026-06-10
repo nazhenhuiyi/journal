@@ -4,6 +4,7 @@ import {
   hasMeaningfulJournalChange,
   parseJournalMarkdown,
   serializeJournalMarkdownBody,
+  stripManagedFrontMatter,
   type DayFrontMatter,
   type ImageLocation,
   type MarkdownDiagnostic,
@@ -14,6 +15,7 @@ import { getMobileE2eRunId } from './e2eEnvironment'
 export type MobileJournalRecord = {
   date: string
   diagnostics: MarkdownDiagnostic[]
+  frontMatter: DayFrontMatter
   longEntryMarkdown: string
   murmurs: MurmurBlock[]
   markdown: string
@@ -101,6 +103,7 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
     return {
       date,
       diagnostics: [],
+      frontMatter: { date },
       longEntryMarkdown: '',
       murmurs: [],
       markdown: '',
@@ -114,6 +117,7 @@ export async function loadDailyJournal(date: string): Promise<MobileJournalRecor
   return {
     date,
     diagnostics: parsed.diagnostics,
+    frontMatter: parsed.frontMatter,
     longEntryMarkdown: parsed.longEntryMarkdown,
     murmurs: parsed.murmurs,
     markdown,
@@ -143,6 +147,7 @@ export async function listDailyJournals(): Promise<MobileJournalRecord[]> {
         records.push({
           date,
           diagnostics: parsed.diagnostics,
+          frontMatter: parsed.frontMatter,
           longEntryMarkdown: parsed.longEntryMarkdown,
           markdown,
           murmurs: parsed.murmurs,
@@ -188,11 +193,62 @@ export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDai
   return {
     date: input.date,
     diagnostics: parsed.diagnostics,
+    frontMatter: parsed.frontMatter,
     longEntryMarkdown: parsed.longEntryMarkdown,
     murmurs: parsed.murmurs,
     markdown,
     updatedAt,
     changedPaths: normalizeChangedPaths([getEntryRepositoryPath(input.date), ...additionalChangedPaths]),
+    didWrite: true,
+  }
+}
+
+export async function updateDailyJournalFrontMatter(
+  date: string,
+  frontMatterPatch: DayFrontMatter,
+): Promise<SaveDailyJournalResult> {
+  const existingRecord = await loadDailyJournal(date)
+  const previousFrontMatter = existingRecord.markdown
+    ? parseJournalMarkdown(existingRecord.markdown).frontMatter
+    : existingRecord.frontMatter
+  const nextFrontMatter: DayFrontMatter = {
+    ...previousFrontMatter,
+    ...frontMatterPatch,
+    date,
+  }
+  const body = existingRecord.markdown
+    ? stripManagedFrontMatter(existingRecord.markdown)
+    : serializeJournalMarkdownBody(existingRecord.longEntryMarkdown, existingRecord.murmurs)
+  const markdown = createJournalMarkdownWithFrontMatter(body, nextFrontMatter)
+  const parsed = parseJournalMarkdown(markdown)
+
+  if (!hasMeaningfulJournalChange(existingRecord.markdown, markdown)) {
+    return {
+      date,
+      diagnostics: parsed.diagnostics,
+      frontMatter: parsed.frontMatter,
+      longEntryMarkdown: parsed.longEntryMarkdown,
+      murmurs: parsed.murmurs,
+      markdown,
+      updatedAt: parsed.frontMatter.updatedAt ?? null,
+      changedPaths: [],
+      didWrite: false,
+    }
+  }
+
+  const filePath = await getEntryFilePath(date)
+
+  await FileSystem.writeAsStringAsync(filePath, markdown)
+
+  return {
+    date,
+    diagnostics: parsed.diagnostics,
+    frontMatter: parsed.frontMatter,
+    longEntryMarkdown: parsed.longEntryMarkdown,
+    murmurs: parsed.murmurs,
+    markdown,
+    updatedAt: parsed.frontMatter.updatedAt ?? null,
+    changedPaths: [getEntryRepositoryPath(date)],
     didWrite: true,
   }
 }
