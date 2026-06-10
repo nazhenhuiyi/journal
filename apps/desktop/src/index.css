@@ -1266,7 +1266,7 @@ body {
 .journal-writing-panel {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(0, 54rem) 22rem;
+  grid-template-columns: minmax(0, 54rem) 26rem;
   align-items: flex-start;
   justify-content: center;
   gap: clamp(1.25rem, 2vw, 1.65rem);
@@ -1346,10 +1346,11 @@ body {
   max-height: min(58rem, calc(100vh - 9rem));
   min-height: 0;
   flex-direction: column;
-  border: 1px solid var(--journal-line);
+  overflow: hidden;
+  border: 1px solid var(--journal-line-control);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--color-surface) 74%, var(--color-background));
-  box-shadow: none;
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
+  box-shadow: 0 1px 2px rgba(39, 37, 35, 0.04), 0 14px 30px rgba(39, 37, 35, 0.045);
 }
 
 .journal-murmur-panel-header {
@@ -1357,8 +1358,14 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid var(--journal-line-soft);
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--journal-line);
   padding: 1rem 1rem 0.85rem;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-background));
+}
+
+.journal-murmur-panel-header > div {
+  min-width: 0;
 }
 
 .journal-murmur-panel-header p {
@@ -1370,10 +1377,12 @@ body {
 }
 
 .journal-murmur-panel-header span,
-.journal-murmur-list button span,
-.journal-murmur-form label span {
+.journal-murmur-dialog-header span,
+.journal-murmur-section-heading span,
+.journal-murmur-dialog label span {
   color: rgba(47, 38, 31, 0.52);
   font-size: 0.76rem;
+  font-weight: 650;
 }
 
 .journal-murmur-panel button {
@@ -1385,7 +1394,7 @@ body {
   border-radius: 8px;
   padding: 0.5rem 0.68rem;
   color: rgba(47, 38, 31, 0.66);
-  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
   cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
@@ -1397,21 +1406,21 @@ body {
 }
 
 .journal-murmur-panel button:hover {
-  border-color: var(--journal-line-control);
+  border-color: var(--journal-line-active);
   color: var(--color-ink);
-  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background));
+  background: color-mix(in srgb, var(--color-primary-soft) 42%, var(--color-surface));
 }
 
 .journal-murmur-panel-header > button {
   border-color: var(--journal-line-control);
-  color: rgba(47, 38, 31, 0.68);
-  background: var(--color-surface);
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
   box-shadow: none;
 }
 
 .journal-murmur-panel-header > button:hover {
-  border-color: var(--journal-line-control);
-  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background));
+  border-color: var(--journal-line-active);
+  background: color-mix(in srgb, var(--color-primary-soft) 42%, var(--color-surface));
 }
 
 .journal-murmur-panel button:disabled {
@@ -1419,85 +1428,162 @@ body {
   opacity: 0.58;
 }
 
-.journal-murmur-list {
+.journal-murmur-scroll {
   display: grid;
-  gap: 0.46rem;
-  padding: 0.75rem 0.8rem 0;
-}
-
-.journal-murmur-list button {
-  display: grid;
-  grid-template-columns: 3.15rem minmax(0, 1fr);
-  width: 100%;
-  justify-content: stretch;
-  gap: 0.55rem;
-  text-align: left;
-}
-
-.journal-murmur-list button strong {
-  overflow: hidden;
-  color: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.journal-murmur-list button.is-active,
-.journal-murmur-list button[aria-pressed="true"] {
-  border-color: var(--journal-line-control);
-  color: var(--color-foreground);
-  background: color-mix(in srgb, var(--color-surface) 86%, var(--color-background));
-}
-
-.journal-murmur-form {
+  flex: 1 1 auto;
   min-height: 0;
+  align-content: start;
   overflow-y: auto;
-  padding: 0.9rem 0.9rem 1rem;
+  padding: 0.9rem;
 }
 
-.journal-murmur-form label {
+.journal-murmur-feed {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.journal-murmur-card {
+  display: grid;
+  gap: 0.68rem;
+  border: 1px solid var(--journal-line-control);
+  border-radius: 10px;
+  padding: 0.78rem;
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
+}
+
+.journal-murmur-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.journal-murmur-card-header time {
+  flex: 0 0 auto;
+  color: rgba(47, 38, 31, 0.52);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.journal-murmur-card-actions {
+  display: inline-flex;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.38rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.journal-murmur-card:hover .journal-murmur-card-actions,
+.journal-murmur-card:focus-within .journal-murmur-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.journal-murmur-card-actions button {
+  min-height: 2rem;
+  padding: 0.38rem 0.56rem;
+}
+
+.journal-murmur-card-actions button:last-child {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 6%, color-mix(in srgb, var(--color-surface) 96%, white));
+}
+
+.journal-murmur-card-body {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.journal-murmur-card-empty {
+  margin: 0;
+  color: rgba(47, 38, 31, 0.52);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.journal-murmur-empty {
+  border: 1px solid var(--journal-line-control);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
+}
+
+.journal-murmur-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.journal-murmur-section-heading strong {
+  color: rgba(47, 38, 31, 0.66);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.journal-murmur-dialog label {
   display: grid;
   gap: 0.38rem;
 }
 
-.journal-murmur-form textarea,
-.journal-murmur-form input {
+.journal-murmur-body-field {
+  min-width: 0;
+}
+
+.journal-murmur-dialog textarea,
+.journal-murmur-dialog input {
   width: 100%;
   border: 1px solid var(--journal-line-control);
   border-radius: 8px;
   padding: 0.64rem 0.7rem;
   color: var(--color-ink);
-  background: rgba(255, 250, 240, 0.72);
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
   font: inherit;
 }
 
-.journal-murmur-form textarea {
-  min-height: 9rem;
+.journal-murmur-dialog textarea::placeholder,
+.journal-murmur-dialog input::placeholder {
+  color: rgba(47, 38, 31, 0.42);
+}
+
+.journal-murmur-dialog textarea {
+  min-height: 8.6rem;
   resize: vertical;
   line-height: 1.7;
 }
 
-.journal-murmur-form textarea:focus,
-.journal-murmur-form input:focus {
+.journal-murmur-dialog textarea:focus,
+.journal-murmur-dialog input:focus {
+  border-color: var(--journal-line-active-strong);
   outline: 2px solid color-mix(in srgb, var(--color-ring) 26%, transparent);
   outline-offset: 2px;
 }
 
 .journal-murmur-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 0.5rem;
-  margin-top: 0.7rem;
+  margin-top: 0;
 }
 
 .journal-murmur-actions button:first-child {
-  flex: 1;
+  flex: 0 0 auto;
   color: rgba(47, 38, 31, 0.66);
 }
 
 .journal-murmur-actions button:last-child,
-.journal-murmur-image-preview-shell button {
+.journal-murmur-image-tile button {
   color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 6%, color-mix(in srgb, var(--color-surface) 96%, white));
 }
 
 .journal-murmur-error {
@@ -1511,6 +1597,7 @@ body {
   place-items: center;
   min-height: 11.5rem;
   gap: 0.65rem;
+  padding: 1.1rem;
   color: rgba(47, 38, 31, 0.52);
   text-align: center;
 }
@@ -1522,46 +1609,101 @@ body {
   line-height: 1.6;
 }
 
+.journal-murmur-image-section {
+  display: grid;
+  gap: 0.55rem;
+}
+
 .journal-murmur-images {
   display: grid;
-  gap: 0.72rem;
-  margin-top: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0;
 }
 
-.journal-murmur-image-form {
-  display: grid;
-  gap: 0.58rem;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 14%, transparent);
-  border-radius: 10px 8px 11px 8px;
-  padding: 0.72rem;
-  background: rgba(255, 250, 240, 0.72);
-}
-
-.journal-murmur-image-preview-shell {
+.journal-murmur-image-tile {
   position: relative;
+  overflow: hidden;
+  border: 1px solid var(--journal-line-control);
+  border-radius: 10px;
+  background: var(--color-surface-muted);
 }
 
 .journal-murmur-image-preview {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  border: 1px solid var(--journal-line-control);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-background));
+  height: auto;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface-muted);
   object-fit: cover;
 }
 
-.journal-murmur-image-preview-shell button {
+.journal-murmur-image-tile button {
   position: absolute;
-  top: 0.62rem;
-  right: 0.62rem;
-  width: 2.1rem;
-  height: 2.1rem;
+  top: 0.32rem;
+  right: 0.32rem;
+  width: 1.85rem;
+  height: 1.85rem;
   padding: 0;
-  border-color: rgba(255, 250, 240, 0.82);
-  background: rgba(255, 250, 240, 0.84);
-  box-shadow: 0 8px 18px rgba(74, 47, 27, 0.16);
-  backdrop-filter: blur(8px);
+  border-color: color-mix(in srgb, var(--color-danger) 16%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-surface) 92%, white);
+  box-shadow: 0 6px 14px rgba(74, 47, 27, 0.14);
+}
+
+.journal-murmur-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(47, 38, 31, 0.18);
+  backdrop-filter: blur(4px);
+}
+
+.journal-murmur-dialog {
+  display: grid;
+  width: min(100%, 32rem);
+  max-height: min(42rem, calc(100vh - 4rem));
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--journal-line-control);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
+  box-shadow: 0 20px 60px rgba(39, 37, 35, 0.16);
+}
+
+.journal-murmur-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--journal-line);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-background));
+}
+
+.journal-murmur-dialog-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.journal-murmur-dialog-header strong {
+  color: var(--color-ink);
+  font-size: 1rem;
+  font-weight: 760;
+}
+
+.journal-murmur-dialog-body {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 0.85rem;
+  overflow-y: auto;
+  padding: 1rem;
 }
 
 .markdown-preview {

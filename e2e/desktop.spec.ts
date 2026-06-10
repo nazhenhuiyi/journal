@@ -48,7 +48,7 @@ test('desktop creates, saves, reloads, and reviews today journal content', async
   }
 })
 
-test('desktop creates, persists, and reviews a murmur', async () => {
+test('desktop creates, persists, and displays a murmur', async () => {
   const context = await createIsolatedDesktopApp()
 
   try {
@@ -71,11 +71,14 @@ test('desktop creates, persists, and reviews a murmur', async () => {
     await page.reload()
     await waitForJournalEditor(page)
 
-    await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveValue(murmurText)
     await expect(page.getByLabel('碎碎念列表')).toContainText(murmurText)
+    const createdMurmurCard = page.locator('.journal-murmur-card').filter({ hasText: murmurText })
 
-    await page.getByRole('button', { name: '回看' }).click()
-    await expect(page.locator('.journal-murmur')).toContainText(murmurText)
+    await createdMurmurCard.hover()
+    await createdMurmurCard.getByRole('button', { name: '编辑' }).click()
+    await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveValue(murmurText)
+    await page.getByRole('button', { name: '完成' }).click()
+    await expect(page.getByLabel('碎碎念列表')).toContainText(murmurText)
   } finally {
     await closeIsolatedDesktopApp(context)
   }
@@ -105,8 +108,11 @@ test('desktop deletes a murmur and persists the removal', async () => {
   try {
     const page = await waitForPreviewPage(context.app)
 
-    await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveValue(murmurText)
-    await page.getByRole('button', { name: '删掉这条' }).click()
+    await expect(page.getByLabel('碎碎念列表')).toContainText(murmurText)
+    const existingMurmurCard = page.locator('.journal-murmur-card').filter({ hasText: murmurText })
+
+    await existingMurmurCard.hover()
+    await existingMurmurCard.getByRole('button', { name: /删除 .* 的碎碎念/ }).click()
 
     await expect(page.getByText('可以先留一条碎碎念，再给它放照片。')).toBeVisible()
     await expect.poll(
@@ -123,10 +129,7 @@ test('desktop deletes a murmur and persists the removal', async () => {
 
     await expect(page.getByText('可以先留一条碎碎念，再给它放照片。')).toBeVisible()
     await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveCount(0)
-
-    await page.getByRole('button', { name: '回看' }).click()
     await expect(page.getByText('保留长日记正文。')).toBeVisible()
-    await expect(page.locator('.journal-murmur')).toHaveCount(0)
   } finally {
     await closeIsolatedDesktopApp(context)
   }

@@ -160,7 +160,8 @@ describe('MarkdownPreviewPage', () => {
       target: { value: '地铁上突然想到的一句。' },
     })
 
-    act(() => {
+    await act(async () => {
+      await Promise.resolve()
       vi.advanceTimersByTime(5_100)
     })
 
@@ -223,18 +224,19 @@ describe('MarkdownPreviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '添一条' }))
     fireEvent.click(screen.getByRole('button', { name: '加图片' }))
 
-    const captionInput = await screen.findByRole('textbox', { name: '图片说明' })
-
-    expect(captionInput).toHaveValue('')
+    await waitFor(() => {
+      expect(screen.getAllByRole('img', { name: '碎碎念图片' })).toHaveLength(2)
+    })
     expect(screen.getByRole('button', { name: '移除图片' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '图片说明' })).not.toBeInTheDocument()
     expect(screen.queryByText('media/2026/06/img_20260608_213800.jpg')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('图片标签')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('图片地点')).not.toBeInTheDocument()
     expect(screen.queryByText('青龙湖')).not.toBeInTheDocument()
     expect(screen.queryByText(/30\.12346/)).not.toBeInTheDocument()
 
-    fireEvent.change(captionInput, {
-      target: { value: '湖边那张晚饭。' },
+    await act(async () => {
+      await Promise.resolve()
     })
 
     act(() => {
@@ -244,14 +246,14 @@ describe('MarkdownPreviewPage', () => {
     await waitFor(() => {
       expect(saveDate).toHaveBeenCalledWith(
         '2026-06-08',
-        expect.stringContaining('caption: 湖边那张晚饭。'),
+        expect.stringContaining('src: media/2026/06/img_20260608_213800.jpg'),
       )
     })
     const savedImageCall = saveDate.mock.calls.find(([, content]) =>
-      content.includes('caption: 湖边那张晚饭。'),
+      content.includes('src: media/2026/06/img_20260608_213800.jpg'),
     )
 
-    expect(savedImageCall?.[1]).toContain('src: media/2026/06/img_20260608_213800.jpg')
+    expect(savedImageCall?.[1]).not.toContain('caption:')
     expect(savedImageCall?.[1]).toContain('location: 青龙湖')
     expect(savedImageCall?.[1]).toContain('locationSource: exif')
   })
