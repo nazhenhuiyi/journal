@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, MapPin, MessageSquareText, Trash } from 'lucide-react'
+import { Camera, MessageSquareText, Trash } from 'lucide-react'
 import type { ImageBlock, ImageLocation, MurmurBlock } from '@journal/core'
 import { resolveJournalMediaSrc } from '../../domain/journalMedia'
 
@@ -202,18 +202,14 @@ function MurmurImageForm({
   onDelete: () => void
   onUpdate: (image: ImageBlock) => void
 }) {
-  const latitude = image.location?.latitude
-  const longitude = image.location?.longitude
-
   return (
     <section className="journal-murmur-image-form">
-      <img
-        alt={image.caption?.trim() || image.id}
-        className="journal-murmur-image-preview"
-        src={resolveJournalMediaSrc(image.src)}
-      />
-      <div>
-        <strong title={image.src}>{image.src}</strong>
+      <div className="journal-murmur-image-preview-shell">
+        <img
+          alt={image.caption?.trim() || '碎碎念图片'}
+          className="journal-murmur-image-preview"
+          src={resolveJournalMediaSrc(image.src)}
+        />
         <button aria-label="移除图片" onClick={onDelete} type="button">
           <Trash aria-hidden="true" size={16} strokeWidth={2.05} />
         </button>
@@ -227,31 +223,6 @@ function MurmurImageForm({
           value={image.caption ?? ''}
         />
       </label>
-      <label>
-        <span>标签</span>
-        <input
-          aria-label="图片标签"
-          onChange={(event) => onUpdate({ ...image, tags: parseTagsInput(event.target.value) })}
-          placeholder="雨, 窗户"
-          value={image.tags.join(', ')}
-        />
-      </label>
-      <label>
-        <span>地点</span>
-        <input
-          aria-label="图片地点"
-          onChange={(event) => onUpdate(updateImageLocationName(image, event.target.value))}
-          placeholder="青龙湖、公园、家里..."
-          value={image.location?.name ?? ''}
-        />
-      </label>
-      {latitude !== undefined && longitude !== undefined ? (
-        <p className="journal-murmur-image-location">
-          <MapPin aria-hidden="true" size={14} strokeWidth={2.05} />
-          <span>{formatImageCoordinates(latitude, longitude)}</span>
-          {image.location?.source === 'exif' ? <span>EXIF</span> : null}
-        </p>
-      ) : null}
     </section>
   )
 }
@@ -276,23 +247,6 @@ function importedImageToBlock(importedImage: ImportedJournalImage): ImageBlock {
     location: importedImage.location,
     src: importedImage.src,
     tags: [],
-  }
-}
-
-function updateImageLocationName(image: ImageBlock, value: string): ImageBlock {
-  const name = value.trim()
-  const location = image.location
-  const hasCoordinates = location?.latitude !== undefined || location?.longitude !== undefined
-
-  return {
-    ...image,
-    location: name || hasCoordinates
-      ? {
-          ...location,
-          name: name || undefined,
-          source: location?.source ?? 'manual',
-        }
-      : undefined,
   }
 }
 
@@ -342,23 +296,6 @@ function formatMurmurSummary(murmur: MurmurBlock) {
   }
 
   return '空白碎碎念'
-}
-
-function parseTagsInput(value: string) {
-  return normalizeTags(
-    value
-      .split(/[,，]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean),
-  )
-}
-
-function normalizeTags(tags: string[]) {
-  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)))
-}
-
-function formatImageCoordinates(latitude: number, longitude: number) {
-  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
 }
 
 export default JournalMurmurPanel

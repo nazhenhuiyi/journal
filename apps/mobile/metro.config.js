@@ -12,7 +12,6 @@ const nativeWindInput = path.resolve(projectRoot, 'global.css')
 const nativeWindTailwindConfig = path.resolve(projectRoot, 'tailwind.config.js')
 const e2eHmrShimPath = path.resolve(projectRoot, 'src/shims/expoHmrE2e.ts')
 const expoSetupHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/setupHMR.ts')
-const workspaceExpoSetupHmrPath = path.resolve(workspaceNodeModules, 'expo/src/async-require/setupHMR.ts')
 const expoNativeHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/hmr.native.ts')
 const isMobileE2e = Boolean(
   process.env.JOURNAL_MOBILE_E2E_RUN_ID ||
@@ -90,7 +89,7 @@ module.exports = withNativeWind(config, {
 function isExpoSetupHmrPath(originModulePath) {
   const normalizedPath = path.normalize(originModulePath ?? '')
 
-  return normalizedPath === expoSetupHmrPath || normalizedPath === workspaceExpoSetupHmrPath
+  return normalizedPath === expoSetupHmrPath
 }
 
 function isHmrClientModule(moduleName) {

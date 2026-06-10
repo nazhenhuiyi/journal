@@ -145,7 +145,7 @@ function escapeDirectiveAttribute(value: string) {
 }
 
 function serializeRenderableImage(image: ImageBlock) {
-  const alt = image.caption?.trim() || image.id
+  const alt = image.caption?.trim() || '碎碎念图片'
   const caption = image.caption?.trim()
   const imageMarkdown = `![${escapeImageLabel(alt)}](${encodeImageUrl(image.src)})`
 

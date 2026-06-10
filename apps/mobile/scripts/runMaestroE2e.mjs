@@ -4,6 +4,10 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import net from 'node:net'
 import process from 'node:process'
+import {
+  createExpoCliInvocation,
+  createExpoEnv,
+} from './expoEnvironment.mjs'
 
 const maestroCommand = resolveMaestroCommand()
 const toolEnv = createToolEnv()
@@ -180,14 +184,10 @@ function resolveJavaHome() {
 }
 
 function startExpoServer(port) {
-  const expoCli = resolveExpoCliInvocation()
+  const expoCli = createExpoCliInvocation()
   const env = {
-    ...process.env,
+    ...createExpoEnv(),
     EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID: e2eRunId,
-    NODE_OPTIONS: appendNodeOption(
-      process.env.NODE_OPTIONS ?? '',
-      '--dns-result-order=ipv4first',
-    ),
   }
   const child = spawn(
     expoCli.command,
@@ -200,6 +200,7 @@ function startExpoServer(port) {
       String(port),
     ],
     {
+      cwd: expoCli.cwd,
       env,
       stdio: ['ignore', 'inherit', 'inherit'],
     },
@@ -218,36 +219,6 @@ function startExpoServer(port) {
   })
 
   return child
-}
-
-function resolveExpoCliInvocation() {
-  const localExpoCliCandidates = [
-    `${process.cwd()}/node_modules/.bin/expo`,
-    `${process.cwd()}/../../node_modules/.bin/expo`,
-  ]
-  const localExpoCli = localExpoCliCandidates.find((candidate) => existsSync(candidate))
-
-  if (localExpoCli) {
-    return {
-      args: [localExpoCli],
-      command: process.execPath,
-    }
-  }
-
-  return {
-    args: ['expo'],
-    command: 'npx',
-  }
-}
-
-function appendNodeOption(currentValue, nextOption) {
-  const options = currentValue.split(/\s+/).filter(Boolean)
-
-  if (options.includes(nextOption)) {
-    return currentValue
-  }
-
-  return [...options, nextOption].join(' ')
 }
 
 function createMaestroEnvArgs() {

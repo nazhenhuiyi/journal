@@ -178,6 +178,84 @@ describe('MarkdownPreviewPage', () => {
     expect(savedMurmurCall?.[1]).toContain('id: m_20260428_101205')
   })
 
+  it('keeps imported image metadata internal in the murmur editor', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 5, 8, 21, 38, 0))
+
+    const storedJournal = {
+      content: '---\ndate: 2026-06-08\n---\n\n',
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: null,
+    }
+    const saveDate = vi.fn(async (date: string, content: string) => ({
+      ...storedJournal,
+      content,
+      date,
+      updatedAt: '2026-06-08T21:38:05.000Z',
+    }))
+    const importImages = vi.fn(async () => [
+      {
+        id: 'img_20260608_213800',
+        src: 'media/2026/06/img_20260608_213800.jpg',
+        fileName: 'img_20260608_213800.jpg',
+        filePath: '/Users/zilin/.journal/media/2026/06/img_20260608_213800.jpg',
+        location: {
+          latitude: 30.123456,
+          longitude: 104.654321,
+          name: '青龙湖',
+          source: 'exif' as const,
+        },
+      },
+    ])
+
+    vi.stubGlobal('journalStore', {
+      importImages,
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveDate,
+      saveToday: vi.fn(),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    await screen.findByRole('complementary', { name: '碎碎念' })
+    fireEvent.click(screen.getByRole('button', { name: '添一条' }))
+    fireEvent.click(screen.getByRole('button', { name: '加图片' }))
+
+    const captionInput = await screen.findByRole('textbox', { name: '图片说明' })
+
+    expect(captionInput).toHaveValue('')
+    expect(screen.getByRole('button', { name: '移除图片' })).toBeInTheDocument()
+    expect(screen.queryByText('media/2026/06/img_20260608_213800.jpg')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('图片标签')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('图片地点')).not.toBeInTheDocument()
+    expect(screen.queryByText('青龙湖')).not.toBeInTheDocument()
+    expect(screen.queryByText(/30\.12346/)).not.toBeInTheDocument()
+
+    fireEvent.change(captionInput, {
+      target: { value: '湖边那张晚饭。' },
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(5_100)
+    })
+
+    await waitFor(() => {
+      expect(saveDate).toHaveBeenCalledWith(
+        '2026-06-08',
+        expect.stringContaining('caption: 湖边那张晚饭。'),
+      )
+    })
+    const savedImageCall = saveDate.mock.calls.find(([, content]) =>
+      content.includes('caption: 湖边那张晚饭。'),
+    )
+
+    expect(savedImageCall?.[1]).toContain('src: media/2026/06/img_20260608_213800.jpg')
+    expect(savedImageCall?.[1]).toContain('location: 青龙湖')
+    expect(savedImageCall?.[1]).toContain('locationSource: exif')
+  })
+
   it('preserves existing murmur blocks when saving long-entry edits', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 3, 28, 10, 0, 0))

@@ -54,6 +54,7 @@ type ImageImportSource = 'camera' | 'library'
 
 const weatherPlaceholder = '晴 24℃'
 const Stack = createNativeStackNavigator<RootStackParamList>()
+const murmurDraftInputMinHeight = 92
 
 type TodayFallbackNavigation = {
   canGoBack: () => boolean
@@ -72,6 +73,7 @@ function returnToToday(navigation: TodayFallbackNavigation) {
 
 export default function App() {
   const [murmurDraft, setMurmurDraft] = useState('')
+  const [murmurDraftInputHeight, setMurmurDraftInputHeight] = useState(murmurDraftInputMinHeight)
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
   const {
@@ -192,6 +194,7 @@ export default function App() {
             allowsMultipleSelection: true,
             exif: true,
             mediaTypes: ['images'],
+            preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
             quality: 1,
           })
 
@@ -334,14 +337,19 @@ export default function App() {
                 onClose={() => closeMurmurPanel(true)}
                 visible={isMurmurPanelVisible}
               >
-                <View style={{ flex: 1 }}>
+                <ScrollView
+                  className="flex-1"
+                  contentContainerStyle={{ paddingBottom: 12 }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
                   <View>
                     <View
                       className="border border-border bg-surface"
                       style={{
                         borderRadius: 20,
                         paddingHorizontal: 20,
-                        paddingVertical: 18,
+                        paddingVertical: 16,
                       }}
                     >
                       {murmurs.length === 0 ? (
@@ -352,14 +360,21 @@ export default function App() {
                       <TextInput
                         accessibilityLabel="碎碎念正文"
                         autoFocus={murmurs.length === 0}
-                        className="min-h-32 text-base leading-6 text-foreground"
+                        className="text-base leading-6 text-foreground"
                         multiline
+                        onContentSizeChange={(event) => {
+                          setMurmurDraftInputHeight(Math.max(
+                            murmurDraftInputMinHeight,
+                            Math.ceil(event.nativeEvent.contentSize.height),
+                          ))
+                        }}
                         onChangeText={setMurmurDraft}
                         placeholder={murmurs.length === 0 ? '比如：刚刚想到的一句话。' : '再补一句碎碎念。'}
                         placeholderTextColor={semanticColors['muted-fg']}
+                        scrollEnabled={false}
                         style={{
+                          height: murmurDraftInputHeight,
                           margin: 0,
-                          minHeight: 136,
                           padding: 0,
                         }}
                         textAlignVertical="top"
@@ -406,30 +421,24 @@ export default function App() {
                   </View>
 
                   {murmurs.length > 0 ? (
-                    <View style={{ flex: 1, marginTop: 38 }}>
+                    <View style={{ marginTop: 34 }}>
                       <Text className="mb-4 text-xs font-semibold text-muted-fg">今天</Text>
-                      <ScrollView
-                        className="flex-1"
-                        contentContainerStyle={{ paddingBottom: 24 }}
-                        showsVerticalScrollIndicator={false}
-                      >
-                        <View className="gap-3">
-                          {murmurs.map((murmur) => (
-                            <MurmurItem
-                              isAddingImages={isImportingImages}
-                              key={murmur.id}
-                              murmur={murmur}
-                              onAddImages={(murmurId) => void handleImportMurmurImages('library', murmurId)}
-                              onRemoveImage={removeMurmurImage}
-                              onTakePhoto={(murmurId) => void handleImportMurmurImages('camera', murmurId)}
-                              onUpdateImageCaption={updateMurmurImageCaption}
-                            />
-                          ))}
-                        </View>
-                      </ScrollView>
+                      <View className="gap-3">
+                        {murmurs.map((murmur) => (
+                          <MurmurItem
+                            isAddingImages={isImportingImages}
+                            key={murmur.id}
+                            murmur={murmur}
+                            onAddImages={(murmurId) => void handleImportMurmurImages('library', murmurId)}
+                            onRemoveImage={removeMurmurImage}
+                            onTakePhoto={(murmurId) => void handleImportMurmurImages('camera', murmurId)}
+                            onUpdateImageCaption={updateMurmurImageCaption}
+                          />
+                        ))}
+                      </View>
                     </View>
                   ) : null}
-                </View>
+                </ScrollView>
               </BottomSheet>
             </Screen>
           )}
@@ -691,7 +700,6 @@ function MurmurImageItem({
   onUpdateCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
   const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
-  const imageMeta = formatImageMeta(image)
 
   return (
     <View className="gap-2">
@@ -727,9 +735,6 @@ function MurmurImageItem({
           <Ionicons color={semanticColors.danger} name="trash-outline" size={16} />
         </Pressable>
       </View>
-      {imageMeta ? (
-        <Text className="text-xs leading-4 text-muted-fg">{imageMeta}</Text>
-      ) : null}
     </View>
   )
 }
@@ -758,18 +763,6 @@ function formatTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function formatImageMeta(image: ImageBlock) {
-  const tags = image.tags.length > 0 ? image.tags.join(', ') : ''
-  const location = image.location?.name?.trim() ?? ''
-  const latitude = image.location?.latitude
-  const longitude = image.location?.longitude
-  const coordinates = typeof latitude === 'number' && typeof longitude === 'number'
-    ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
-    : ''
-
-  return [location, coordinates, tags].filter(Boolean).join(' · ')
 }
 
 function getHeaderStatus(

@@ -432,7 +432,7 @@ POC 需要覆盖：
 限制：
 
 - 本机没有连接 Android 设备或模拟器，所以这次没有在 Expo Go UI 上手动点击“同步”按钮。
-- Android bundle 已通过 `npx expo export --platform android` 验证，移动端服务层和真实 GitHub 远端链路已通过；后续真机 UI 回归可以继续使用这个永久测试仓库。
+- Android bundle 已通过移动端 workspace 本地 Expo CLI 验证，移动端服务层和真实 GitHub 远端链路已通过；后续真机 UI 回归可以继续使用这个永久测试仓库。
 
 ### 阶段 5：图片与导入导出
 

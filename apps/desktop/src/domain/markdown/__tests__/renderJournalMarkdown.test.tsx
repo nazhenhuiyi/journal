@@ -130,6 +130,31 @@ tags: [雨]
     )
   })
 
+  it('uses a generic image label when stored murmur images have no caption', () => {
+    render(
+      <>
+        {renderJournalMarkdown({
+          markdown: `:::murmur
+id: m_20260429_213800
+time: 2026-04-29T21:38:00+08:00
+---
+::image
+id: img_20260429_213801
+src: media/2026/04/rain.jpg
+::
+:::`,
+          sourceFilePath: '/Users/zilin/.journal/entries/2026/04/2026-04-29.md',
+        })}
+      </>,
+    )
+
+    expect(screen.getByRole('img', { name: '碎碎念图片' })).toHaveAttribute(
+      'src',
+      'journal-media://local/media/2026/04/rain.jpg',
+    )
+    expect(screen.queryByRole('img', { name: 'img_20260429_213801' })).not.toBeInTheDocument()
+  })
+
   it('renders annotation target markdown without flattening inline content', () => {
     render(<>{renderJournalMarkdown({ markdown: annotationTargetsEntry })}</>)
 

@@ -1496,7 +1496,7 @@ body {
 }
 
 .journal-murmur-actions button:last-child,
-.journal-murmur-image-form > div button {
+.journal-murmur-image-preview-shell button {
   color: var(--color-danger);
 }
 
@@ -1537,6 +1537,10 @@ body {
   background: rgba(255, 250, 240, 0.72);
 }
 
+.journal-murmur-image-preview-shell {
+  position: relative;
+}
+
 .journal-murmur-image-preview {
   display: block;
   width: 100%;
@@ -1547,36 +1551,17 @@ body {
   object-fit: cover;
 }
 
-.journal-murmur-image-form > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.journal-murmur-image-form strong {
-  overflow: hidden;
-  color: rgba(47, 38, 31, 0.62);
-  font-size: 0.74rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.journal-murmur-image-location {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.38rem;
-  margin: -0.12rem 0 0;
-  color: rgba(47, 38, 31, 0.54);
-  font-size: 0.72rem;
-}
-
-.journal-murmur-image-location span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.journal-murmur-image-preview-shell button {
+  position: absolute;
+  top: 0.62rem;
+  right: 0.62rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border-color: rgba(255, 250, 240, 0.82);
+  background: rgba(255, 250, 240, 0.84);
+  box-shadow: 0 8px 18px rgba(74, 47, 27, 0.16);
+  backdrop-filter: blur(8px);
 }
 
 .markdown-preview {
