@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { primitiveColors } from '@journal/theme'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowRight, BookOpen, CalendarDays } from 'lucide-react'
+import { ArrowRight, CalendarDays } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { JournalDayView } from './MarkdownPreviewPage'
 import type { JournalDayViewHandle } from './MarkdownPreviewPage'
@@ -22,21 +21,6 @@ const monthNames = [
   '十二月',
 ]
 const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六']
-const bookColors = [
-  primitiveColors.sky[700],
-  primitiveColors.moss[700],
-  primitiveColors.clay[500],
-  primitiveColors.brass[500],
-  primitiveColors.moss[500],
-  primitiveColors.sky[500],
-  primitiveColors.clay[700],
-  primitiveColors.brass[700],
-  primitiveColors.moss[900],
-  primitiveColors.sky[900],
-  primitiveColors.clay[900],
-  primitiveColors.brass[900],
-]
-
 type CalendarCell =
   | {
       type: 'blank'
@@ -136,7 +120,7 @@ function CalendarPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   const dayViewRef = useRef<JournalDayViewHandle>(null)
-  const [loadStatus, setLoadStatus] = useState<CalendarLoadStatus>(() =>
+  const [, setLoadStatus] = useState<CalendarLoadStatus>(() =>
     getJournalStore()?.listEntries ? 'loading' : 'ready',
   )
   const entryDateKeys = useMemo(() => new Set(entries.map((entry) => entry.date)), [entries])
@@ -163,14 +147,7 @@ function CalendarPage() {
 
     return nextDatesByMonth
   }, [entries, viewYear])
-  const firstEntryMonth = useMemo(
-    () => Array.from(entryDatesByMonth.keys()).sort((left, right) => left - right)[0],
-    [entryDatesByMonth],
-  )
-  const displayMonth =
-    loadStatus === 'ready' && !entryDatesByMonth.has(viewMonth) && firstEntryMonth !== undefined
-      ? firstEntryMonth
-      : viewMonth
+  const displayMonth = viewMonth
   const activeMonthCells = useMemo(
     () => buildMonthCells(viewYear, displayMonth, todayDateKey, entryDateKeys),
     [displayMonth, entryDateKeys, todayDateKey, viewYear],
@@ -253,12 +230,6 @@ function CalendarPage() {
   }, [dateParam, dateParamParts, setSearchParams])
 
   function handleOpenMonth(monthIndex: number) {
-    const monthDates = entryDatesByMonth.get(monthIndex) ?? []
-
-    if (monthDates.length === 0) {
-      return
-    }
-
     setActiveMonth(monthIndex)
     setSearchParams({}, { replace: true })
   }
@@ -368,7 +339,7 @@ function CalendarPage() {
       <header className="mx-auto grid w-[min(100%,66rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-6 px-10 pb-7 pt-9">
         <div className="min-w-0">
           <h1 className="m-0 font-display text-[2.45rem] font-semibold leading-tight tracking-[0] text-foreground">
-            日历书架
+            日历
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -390,29 +361,23 @@ function CalendarPage() {
         </div>
       </header>
 
-      <section aria-label={`${viewYear} 年月份书架`} className="calendar-shelf mx-auto w-[min(100%,66rem)] px-10">
-        <div className="calendar-book-row">
+      <section aria-label={`${viewYear} 年月份`} className="calendar-month-strip mx-auto w-[min(100%,66rem)] px-10">
+        <div className="calendar-month-row">
           {monthNames.map((monthName, monthIndex) => {
             const isActive = monthIndex === displayMonth
-              const monthDateKey = `${viewYear}-${`${monthIndex + 1}`.padStart(2, '0')}`
             const monthDates = entryDatesByMonth.get(monthIndex) ?? []
             const hasEntries = monthDates.length > 0
 
             return (
               <button
-                aria-expanded={isActive}
-                className={`calendar-book ${isActive ? 'is-active' : ''} ${hasEntries ? '' : 'is-empty'}`}
-                disabled={!hasEntries}
+                aria-pressed={isActive}
+                className={`calendar-month-button ${isActive ? 'is-active' : ''} ${hasEntries ? '' : 'is-empty'}`}
                 key={monthName}
                 onClick={() => handleOpenMonth(monthIndex)}
-                style={{ '--book-accent': bookColors[monthIndex] } as CSSProperties}
                 type="button"
               >
-                <span aria-hidden="true" className="calendar-book-cap" />
-                <span className="calendar-book-title">{monthName}</span>
-                <time className="calendar-book-date" dateTime={monthDateKey}>
-                  {hasEntries ? `${monthDates.length}篇` : '空'}
-                </time>
+                <span>{monthName}</span>
+                <small>{hasEntries ? `${monthDates.length} 篇` : '空'}</small>
               </button>
             )
           })}
@@ -423,9 +388,9 @@ function CalendarPage() {
         aria-labelledby="calendar-open-month"
         className="mx-auto grid w-[min(100%,66rem)] grid-cols-[16rem_minmax(0,1fr)] gap-6 px-10 pb-12 pt-8"
       >
-        <aside className="calendar-open-book">
-          <div className="calendar-open-book-heading">
-            <BookOpen aria-hidden="true" className="calendar-open-book-icon" size={22} strokeWidth={2.08} />
+        <aside className="calendar-month-summary">
+          <div className="calendar-month-summary-heading">
+            <CalendarDays aria-hidden="true" className="calendar-month-summary-icon" size={22} strokeWidth={2.08} />
             <h2 id="calendar-open-month">{monthNames[displayMonth]}</h2>
           </div>
           <dl className="calendar-month-stats">

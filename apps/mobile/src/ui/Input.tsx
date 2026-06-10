@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { StyleSheet, TextInput, type TextInputProps } from 'react-native'
-import { primitiveColors, semanticColors } from '@journal/theme'
+import { semanticColors } from '@journal/theme'
 import { cn } from './cn'
 
 type InputProps = TextInputProps & {
@@ -18,7 +18,7 @@ export function Input({
   className,
   onBlur,
   onFocus,
-  placeholderTextColor = semanticColors['muted-fg'],
+  placeholderTextColor = semanticColors['text-quaternary'],
   style,
   variant = 'box',
   ...props
@@ -49,9 +49,9 @@ export function Input({
 
 const styles = StyleSheet.create({
   focusedBox: {
-    borderColor: primitiveColors.ink[300],
+    borderColor: semanticColors.ring,
   },
   focusedLine: {
-    borderBottomColor: primitiveColors.ink[300],
+    borderBottomColor: semanticColors.ring,
   },
 })

@@ -1,9 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, net, protocol } from 'electron'
+import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
   loadJournalGitSyncStatus,
@@ -39,6 +41,7 @@ const JOURNAL_MEDIA_PROTOCOL = 'journal-media'
 const JOURNAL_DIR_OVERRIDE = process.env['JOURNAL_DIR']?.trim()
 const JOURNAL_USER_DATA_DIR = process.env['JOURNAL_USER_DATA_DIR']?.trim()
 const SHOULD_DISABLE_WEATHER = process.env['JOURNAL_DISABLE_WEATHER'] === '1'
+const execFileAsync = promisify(execFile)
 
 if (JOURNAL_USER_DATA_DIR) {
   mkdirSync(JOURNAL_USER_DATA_DIR, { recursive: true })
@@ -444,14 +447,90 @@ async function importJournalImages(date: unknown) {
 }
 
 function registerJournalMediaProtocol() {
-  protocol.handle(JOURNAL_MEDIA_PROTOCOL, (request) => {
+  protocol.handle(JOURNAL_MEDIA_PROTOCOL, async (request) => {
     const filePath = resolveJournalMediaRequestPath(request.url)
 
     if (!filePath) {
       return new Response('Not found', { status: 404 })
     }
 
+    if (isHeicImagePath(filePath)) {
+      const displayableImage = await createDisplayableHeicResponse(filePath)
+
+      if (displayableImage) {
+        return displayableImage
+      }
+    }
+
     return net.fetch(pathToFileURL(filePath).toString())
+  })
+}
+
+async function createDisplayableHeicResponse(filePath: string) {
+  const nativeResponse = createNativeImageResponse(filePath)
+
+  if (nativeResponse) {
+    return nativeResponse
+  }
+
+  if (process.platform !== 'darwin') {
+    return null
+  }
+
+  const jpegBuffer = await convertHeicWithSips(filePath).catch(() => null)
+
+  if (!jpegBuffer) {
+    return null
+  }
+
+  return createJpegResponse(jpegBuffer)
+}
+
+function createNativeImageResponse(filePath: string) {
+  const image = nativeImage.createFromPath(filePath)
+
+  if (image.isEmpty()) {
+    return null
+  }
+
+  const jpegBuffer = image.toJPEG(90)
+
+  if (jpegBuffer.length === 0) {
+    return null
+  }
+
+  return createJpegResponse(jpegBuffer)
+}
+
+async function convertHeicWithSips(filePath: string) {
+  const fileStat = await stat(filePath)
+  const cacheDirectory = path.join(app.getPath('userData'), 'heic-cache')
+  const cacheKey = hashText(`${filePath}:${fileStat.size}:${fileStat.mtimeMs}`)
+  const cacheFilePath = path.join(cacheDirectory, `${cacheKey}.jpg`)
+  const cachedImage = await readFile(cacheFilePath).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  })
+
+  if (cachedImage) {
+    return cachedImage
+  }
+
+  await mkdir(cacheDirectory, { recursive: true })
+  await execFileAsync('/usr/bin/sips', ['-s', 'format', 'jpeg', filePath, '--out', cacheFilePath])
+
+  return readFile(cacheFilePath)
+}
+
+function createJpegResponse(jpegBuffer: Buffer) {
+  return new Response(new Uint8Array(jpegBuffer), {
+    headers: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Type': 'image/jpeg',
+    },
   })
 }
 
@@ -477,6 +556,10 @@ function resolveJournalMediaRequestPath(requestUrl: string) {
 
 function isSupportedJournalMediaPath(filePath: string) {
   return /\.(bmp|gif|heic|heif|jpe?g|png|tiff?|webp)$/i.test(filePath)
+}
+
+function isHeicImagePath(filePath: string) {
+  return /\.(heic|heif)$/i.test(filePath)
 }
 
 function normalizeAnnotationFile(payload: unknown, date: string): AnnotationFile {

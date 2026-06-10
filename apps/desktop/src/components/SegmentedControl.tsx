@@ -24,7 +24,7 @@ function SegmentedControl<T extends string>({
     <div
       aria-label={ariaLabel}
       className={classNames(
-        'inline-flex h-9 items-center gap-1 rounded-[8px] border border-[var(--journal-line-control)] bg-surface-muted p-0.5',
+        'inline-flex h-9 items-center gap-1 rounded-[var(--journal-radius-control)] border border-[var(--journal-line-control)] bg-surface-muted p-0.5',
       )}
       role="group"
     >
@@ -35,7 +35,7 @@ function SegmentedControl<T extends string>({
           <button
             aria-pressed={isActive}
             className={classNames(
-              'h-8 min-w-[3.55rem] rounded-[7px] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
+              'h-8 min-w-[3.55rem] rounded-[var(--radius-sm)] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
               'cursor-pointer text-muted-fg transition-[background-color,color] duration-200 ease-out',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               !isActive && 'hover:bg-surface hover:text-foreground',

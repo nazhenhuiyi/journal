@@ -31,6 +31,8 @@ module.exports = {
         ...resolveTokenMap(themeTokens.semantic),
         ...resolveTokenMap(themeTokens.legacy),
       },
+      borderRadius: themeTokens.radius,
+      spacing: themeTokens.spacing,
       fontFamily: {
         sans: ['System'],
       },

@@ -10,32 +10,33 @@ type JournalWeatherHeaderProps = {
 
 const previewClasses = {
   root: [
-    'grid grid-cols-[minmax(9rem,0.8fr)_minmax(26rem,1fr)] items-center gap-[1.05rem]',
-    'mx-[1.05rem] mb-0 mt-[0.8rem] min-h-[4.6rem] py-[0.62rem] pl-[0.65rem] pr-[0.8rem]',
-    'rounded-[10px] border border-[var(--journal-line)] bg-surface text-[rgba(47,38,31,0.72)]',
+    'grid grid-cols-[minmax(9rem,0.8fr)_minmax(26rem,1fr)] items-center gap-[var(--journal-space-4)]',
+    'mx-[var(--journal-space-4)] mb-0 mt-[var(--journal-space-3)] min-h-[4.6rem]',
+    'py-[var(--journal-space-2-5)] pl-[var(--journal-space-2-5)] pr-[var(--journal-space-3)]',
+    'rounded-[var(--journal-radius-card)] border border-[var(--journal-line)] bg-surface text-text-secondary',
   ].join(' '),
-  copy: 'flex min-w-0 flex-col gap-[0.12rem]',
-  summary: 'overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.78rem] text-[rgba(47,38,31,0.58)]',
+  copy: 'flex min-w-0 flex-col gap-[var(--journal-space-1)]',
+  summary: 'overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.78rem] text-text-tertiary',
   temperature: 'font-display text-[1.36rem] font-[650] leading-[1.1] text-foreground',
-  details: 'm-0 grid grid-cols-4 gap-[0.45rem]',
-  detail: 'min-w-0 border-l border-[var(--journal-line-soft)] pl-[0.72rem]',
-  label: 'm-0 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.68rem] text-[rgba(47,38,31,0.44)]',
-  value: 'm-0 overflow-hidden text-ellipsis whitespace-nowrap font-display text-[0.9rem] leading-[1.45] text-[rgba(47,38,31,0.7)]',
+  details: 'm-0 grid grid-cols-4 gap-[var(--journal-space-2)]',
+  detail: 'min-w-0 border-l border-[var(--journal-line-soft)] pl-[var(--journal-space-3)]',
+  label: 'm-0 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.68rem] text-text-quaternary',
+  value: 'm-0 overflow-hidden text-ellipsis whitespace-nowrap font-display text-[0.9rem] leading-[1.45] text-text-secondary',
 }
 
 const writingClasses = {
   root: [
-    'flex min-w-0 flex-1 items-center justify-start gap-[0.55rem]',
-    'border-0 bg-transparent text-[rgba(47,38,31,0.5)] shadow-none',
+    'flex min-w-0 flex-1 items-center justify-start gap-[var(--journal-space-2)]',
+    'border-0 bg-transparent text-text-tertiary shadow-none',
   ].join(' '),
-  copy: 'flex min-w-0 flex-none flex-row items-baseline gap-[0.34rem]',
+  copy: 'flex min-w-0 flex-none flex-row items-baseline gap-[var(--journal-space-1-5)]',
   summary: 'max-w-[10rem] overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
-  temperature: 'flex-none font-sans text-[0.76rem] font-[560] leading-none text-[rgba(122,79,50,0.58)]',
-  details: 'm-0 flex min-w-0 flex-nowrap items-baseline gap-[0.46rem]',
-  detail: 'flex min-w-0 items-baseline gap-[0.14rem] whitespace-nowrap border-l-0 pl-0',
+  temperature: 'flex-none font-sans text-[0.76rem] font-[560] leading-none text-text-tertiary',
+  details: 'm-0 flex min-w-0 flex-nowrap items-baseline gap-[var(--journal-space-2)]',
+  detail: 'flex min-w-0 items-baseline gap-[var(--journal-space-1)] whitespace-nowrap border-l-0 pl-0',
   label: 'm-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
   value: 'm-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[0.76rem] font-[450] leading-none text-inherit',
-  separator: 'flex-none pr-[0.08rem] text-[rgba(122,79,50,0.24)]',
+  separator: 'flex-none pr-[var(--journal-space-1)] text-text-disabled',
 }
 
 function JournalWeatherHeader({

@@ -82,7 +82,7 @@ describe('MarkdownPreviewPage', () => {
     expect(saveToday).not.toHaveBeenCalled()
   })
 
-  it('renders the journal body in review mode without annotation controls', async () => {
+  it('keeps the today page in writing mode without a review toggle', async () => {
     const storedJournal = {
       content: '---\ndate: 2026-04-28\n---\n\n# 窗边植物\n窗边那盆植物又长出一点新叶。',
       date: '2026-04-28',
@@ -99,13 +99,12 @@ describe('MarkdownPreviewPage', () => {
     render(<MarkdownPreviewPage />)
 
     await screen.findByRole('textbox', { name: '日记正文' })
-    fireEvent.click(screen.getByRole('button', { name: '回看' }))
 
-    expect(screen.getByRole('heading', { name: '窗边植物' })).toBeInTheDocument()
-    expect(screen.getByText('窗边那盆植物又长出一点新叶。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '回看' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '书写' })).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: /批注/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('complementary', { name: '碎碎念' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: '日记正文' })).not.toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: '碎碎念' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '日记正文' })).toBeInTheDocument()
   })
 
   it('shows markdown diagnostics from the loaded journal', async () => {

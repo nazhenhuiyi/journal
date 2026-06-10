@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import { semanticColors } from '@journal/theme'
+import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import type { SyncSnapshot } from '@journal/sync'
 import { Button } from '../ui/Button'
 import { ListGroup, ListRow } from '../ui/ListRow'
@@ -97,7 +97,7 @@ export function SyncSettingsPage({
                   <Text className="text-sm font-semibold leading-5 text-foreground">
                     还没有配置完整同步
                   </Text>
-                  <Text className="text-sm leading-6 text-muted-fg">
+                  <Text className="text-sm leading-6 text-text-tertiary">
                     需要 GitHub 仓库地址和 GitHub Token 后，才能开始同步。
                   </Text>
                   <Button
@@ -157,11 +157,11 @@ function CommitRow({
         <Text className="font-mono text-sm font-semibold leading-5 text-foreground" numberOfLines={1}>
           {commit.shortOid}
         </Text>
-        <Text className="text-xs leading-5 text-muted-fg" numberOfLines={2}>
+        <Text className="text-xs leading-5 text-text-tertiary" numberOfLines={2}>
           {commit.message}
         </Text>
       </View>
-      <Text className="text-right text-xs leading-5 text-muted-fg" numberOfLines={1} style={styles.commitTime}>
+      <Text className="text-right text-xs leading-5 text-text-tertiary" numberOfLines={1} style={styles.commitTime}>
         {formatCommitTime(commit.committedAt)}
       </Text>
     </View>
@@ -179,7 +179,7 @@ function MessageRow({
 }) {
   return (
     <View style={[styles.messageRow, divider ? styles.divider : null]}>
-      <Text className={danger ? 'text-sm leading-5 text-danger' : 'text-sm leading-5 text-muted-fg'}>
+      <Text className={danger ? 'text-sm leading-5 text-danger' : 'text-sm leading-5 text-text-tertiary'}>
         {children}
       </Text>
     </View>
@@ -247,14 +247,14 @@ function formatPendingReason(value: string | null) {
 const styles = StyleSheet.create({
   actionCard: {
     backgroundColor: semanticColors.surface,
-    borderRadius: 8,
-    gap: 10,
-    padding: 16,
+    borderRadius: radiusPixels.lg,
+    gap: spacingPixels['2.5'],
+    padding: spacingPixels['4'],
   },
   commitRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 14,
+    gap: spacingPixels['3.5'],
     justifyContent: 'space-between',
     minHeight: 52,
   },
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     minWidth: 86,
   },
   content: {
-    gap: 28,
+    gap: spacingPixels['7'],
   },
   divider: {
     borderTopColor: semanticColors.border,
@@ -278,9 +278,9 @@ const styles = StyleSheet.create({
   },
   promptCard: {
     backgroundColor: semanticColors.surface,
-    borderRadius: 8,
-    gap: 10,
-    padding: 16,
+    borderRadius: radiusPixels.lg,
+    gap: spacingPixels['2.5'],
+    padding: spacingPixels['4'],
   },
   root: {
     flex: 1,
@@ -289,6 +289,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: spacingPixels['7'],
   },
 })

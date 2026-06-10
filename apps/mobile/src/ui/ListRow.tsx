@@ -8,7 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { semanticColors } from '@journal/theme'
+import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 
 type ListGroupProps = {
   children: ReactNode
@@ -46,7 +46,7 @@ export function ListRow({
 }: ListRowProps) {
   const rowContent = (
     <>
-      <Text className="text-sm font-medium leading-5 text-muted-fg">{label}</Text>
+      <Text className="text-sm font-medium leading-5 text-text-tertiary">{label}</Text>
       {children ? (
         <View style={styles.trailing}>{children}</View>
       ) : (
@@ -59,7 +59,7 @@ export function ListRow({
             {value}
           </Text>
           {showChevron ? (
-            <Ionicons color={semanticColors['muted-fg']} name="chevron-forward" size={17} />
+            <Ionicons color={semanticColors['text-quaternary']} name="chevron-forward" size={17} />
           ) : null}
         </View>
       )}
@@ -99,16 +99,16 @@ const styles = StyleSheet.create({
   },
   group: {
     backgroundColor: semanticColors.surface,
-    borderRadius: 8,
+    borderRadius: radiusPixels.lg,
     overflow: 'hidden',
-    paddingHorizontal: 16,
-    paddingVertical: 3,
+    paddingHorizontal: spacingPixels['4'],
+    paddingVertical: spacingPixels['1'],
   },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 14,
-    minHeight: 48,
+    gap: spacingPixels['3.5'],
+    minHeight: spacingPixels['12'],
   },
   trailing: {
     alignItems: 'flex-end',
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
-    gap: 4,
+    gap: spacingPixels['1'],
     justifyContent: 'flex-end',
     minWidth: 0,
   },

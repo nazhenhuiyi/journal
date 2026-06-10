@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import { spacingPixels } from '@journal/theme'
 
 type SectionProps = {
   action?: ReactNode
@@ -26,11 +27,11 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: spacingPixels['3'],
     justifyContent: 'space-between',
-    minHeight: 32,
+    minHeight: spacingPixels['8'],
   },
   section: {
-    gap: 10,
+    gap: spacingPixels['2.5'],
   },
 })

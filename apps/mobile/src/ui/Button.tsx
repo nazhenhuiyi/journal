@@ -31,14 +31,14 @@ const textSizes: Record<ButtonSize, string> = {
   sm: 'text-sm',
 }
 const textVariants: Record<ButtonVariant, string> = {
-  ghost: 'text-muted-fg',
+  ghost: 'text-text-tertiary',
   primary: 'text-primary-fg',
   secondary: 'text-foreground',
 }
 const iconColors: Record<ButtonVariant, string> = {
-  ghost: semanticColors['muted-fg'],
+  ghost: semanticColors['text-tertiary'],
   primary: semanticColors['primary-fg'],
-  secondary: semanticColors['muted-fg'],
+  secondary: semanticColors['text-tertiary'],
 }
 
 export function Button({

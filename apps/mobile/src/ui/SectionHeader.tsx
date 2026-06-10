@@ -15,7 +15,7 @@ export function SectionHeader({ icon, meta, title }: SectionHeaderProps) {
   return (
     <View className="flex-row items-center gap-2">
       <View className="h-8 w-8 items-center justify-center rounded-lg bg-surface-muted">
-        <Ionicons color={semanticColors['muted-fg']} name={icon} size={18} />
+        <Ionicons color={semanticColors['text-tertiary']} name={icon} size={18} />
       </View>
       <Text className="text-lg font-semibold text-foreground">{title}</Text>
       {meta ? <View className="ml-auto">{meta}</View> : null}

@@ -13,7 +13,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native'
-import { semanticColors } from '@journal/theme'
+import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import { cn } from './cn'
 
 type BottomSheetProps = {
@@ -126,8 +126,8 @@ export function BottomSheet({
     <Animated.View
       className={cn('bg-background', sheetClassName)}
       style={{
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
+        borderTopLeftRadius: radiusPixels['4xl'],
+        borderTopRightRadius: radiusPixels['4xl'],
         height,
         maxHeight,
         transform: [{ translateY }],
@@ -187,20 +187,20 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    paddingBottom: 36,
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingBottom: spacingPixels['8'] + spacingPixels['1'],
+    paddingHorizontal: spacingPixels['6'],
+    paddingTop: spacingPixels['2'],
   },
   handle: {
     backgroundColor: semanticColors.border,
-    borderRadius: 999,
-    height: 5,
-    width: 48,
+    borderRadius: radiusPixels.full,
+    height: spacingPixels['1.5'],
+    width: spacingPixels['12'],
   },
   handleArea: {
     alignItems: 'center',
-    paddingBottom: 18,
-    paddingTop: 20,
+    paddingBottom: spacingPixels['5'],
+    paddingTop: spacingPixels['5'],
   },
   title: {
     color: semanticColors.foreground,
@@ -208,6 +208,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   titleArea: {
-    paddingBottom: 30,
+    paddingBottom: spacingPixels['8'],
   },
 })

@@ -111,7 +111,7 @@ const journalMarkdownLineDecorations = ViewPlugin.fromClass(
 const journalEditorTheme = EditorView.theme({
   '&': {
     height: '100%',
-    color: 'var(--color-ink)',
+    color: 'var(--journal-text-primary)',
     backgroundColor: 'transparent',
     fontFamily: 'var(--font-display)',
     fontSize: '1.1rem',
@@ -123,11 +123,11 @@ const journalEditorTheme = EditorView.theme({
   },
   '.cm-content': {
     minHeight: '34rem',
-    padding: '3.1rem 2.8rem 2.4rem 4.2rem',
+    padding: 'var(--journal-space-12) var(--journal-space-10) var(--journal-space-10) var(--journal-space-12)',
     caretColor: 'var(--color-primary)',
   },
   '.cm-line': {
-    borderRadius: '8px 6px 9px 6px',
+    borderRadius: 'var(--journal-radius-control)',
     padding: '0 0.35rem',
   },
   '.cm-gutters': {
@@ -165,7 +165,7 @@ const journalEditorTheme = EditorView.theme({
     fontSize: '1.08em',
   },
   '.tok-heading.tok-meta': {
-    color: 'rgba(122, 79, 50, 0.42)',
+    color: 'var(--journal-text-quaternary)',
   },
   '.tok-emphasis': {
     color: 'var(--color-primary)',
@@ -176,23 +176,23 @@ const journalEditorTheme = EditorView.theme({
     fontWeight: '700',
   },
   '.tok-strikethrough': {
-    borderRadius: '4px',
-    color: 'rgba(82, 55, 45, 0.72)',
-    backgroundColor: 'rgba(190, 71, 52, 0.055)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--journal-text-tertiary)',
+    backgroundColor: 'var(--journal-danger-background)',
     textDecoration: 'line-through',
-    textDecorationColor: 'rgba(151, 77, 57, 0.72)',
+    textDecorationColor: 'color-mix(in srgb, var(--color-destructive) 46%, transparent)',
     textDecorationThickness: '0.08em',
   },
   '.tok-quote': {
     color: 'var(--color-primary)',
   },
   '.tok-list': {
-    color: 'rgba(122, 79, 50, 0.78)',
+    color: 'var(--color-primary)',
     fontWeight: '550',
   },
   '.tok-monospace': {
     border: '1px solid var(--journal-line-control)',
-    borderRadius: '5px',
+    borderRadius: 'var(--radius-sm)',
     padding: '0.04rem 0.24rem',
     color: 'var(--color-primary-hover)',
     backgroundColor: 'color-mix(in srgb, var(--color-primary-soft) 42%, transparent)',
@@ -200,7 +200,7 @@ const journalEditorTheme = EditorView.theme({
     fontSize: '0.9em',
   },
   '.tok-link': {
-    color: '#2f7070',
+    color: 'var(--color-primary)',
     textDecoration: 'underline',
     textUnderlineOffset: '0.16em',
   },
@@ -208,13 +208,13 @@ const journalEditorTheme = EditorView.theme({
     color: 'color-mix(in srgb, var(--color-info) 72%, var(--color-muted-fg))',
   },
   '.tok-content-separator': {
-    color: 'rgba(122, 79, 50, 0.38)',
+    color: 'var(--journal-text-quaternary)',
   },
   '.tok-meta': {
-    color: 'rgba(122, 79, 50, 0.46)',
+    color: 'var(--journal-text-quaternary)',
   },
   '.tok-strong.tok-meta, .tok-emphasis.tok-meta, .tok-link.tok-meta': {
-    color: 'rgba(122, 79, 50, 0.36)',
+    color: 'var(--journal-text-disabled)',
     fontWeight: '500',
     textDecoration: 'none',
   },
@@ -227,23 +227,23 @@ const journalEditorTheme = EditorView.theme({
   },
   '.cm-md-quote-line': {
     borderLeft: '2px solid color-mix(in srgb, var(--color-primary) 24%, transparent)',
-    borderRadius: '0 8px 8px 0',
+    borderRadius: '0 var(--journal-radius-card) var(--journal-radius-card) 0',
     paddingLeft: '0.9rem',
-    color: 'rgba(47, 38, 31, 0.76)',
+    color: 'var(--journal-text-secondary)',
     backgroundColor: 'color-mix(in srgb, var(--color-primary-soft) 34%, transparent)',
   },
   '.cm-md-code-line': {
     borderRadius: '0',
     paddingLeft: '0.85rem',
     color: 'var(--color-primary-hover)',
-    backgroundColor: 'rgba(122, 79, 50, 0.045)',
+    backgroundColor: 'color-mix(in srgb, var(--color-muted) 70%, transparent)',
     fontFamily: '"SFMono-Regular", "Menlo", "Consolas", monospace',
     fontSize: '0.9em',
     lineHeight: '1.75',
   },
   '.cm-md-code-boundary': {
-    color: 'rgba(122, 79, 50, 0.42)',
-    backgroundColor: 'rgba(122, 79, 50, 0.06)',
+    color: 'var(--journal-text-quaternary)',
+    backgroundColor: 'var(--color-muted)',
   },
   '.cm-md-code-line .tok-monospace': {
     border: '0',
@@ -254,10 +254,10 @@ const journalEditorTheme = EditorView.theme({
     fontSize: 'inherit',
   },
   '.cm-md-code-line .tok-meta': {
-    color: 'rgba(122, 79, 50, 0.42)',
+    color: 'var(--journal-text-quaternary)',
   },
   '.cm-md-separator-line': {
-    color: 'rgba(122, 79, 50, 0.38)',
+    color: 'var(--journal-text-quaternary)',
     textAlign: 'center',
     letterSpacing: '0',
   },

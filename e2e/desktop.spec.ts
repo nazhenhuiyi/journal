@@ -13,7 +13,7 @@ import {
   writeMalformedJournal,
 } from './desktopApp'
 
-test('desktop creates, saves, reloads, and reviews today journal content', async () => {
+test('desktop creates, saves, and reloads today journal content', async () => {
   const context = await createIsolatedDesktopApp()
 
   try {
@@ -38,11 +38,6 @@ test('desktop creates, saves, reloads, and reviews today journal content', async
 
     await expect(editor).toContainText(entryTitle)
     await expect(editor).toContainText(entryText)
-
-    await page.getByRole('button', { name: '回看' }).click()
-    await expect(page.getByRole('heading', { name: entryTitle })).toBeVisible()
-    await expect(page.getByText(entryText)).toBeVisible()
-    await expect(editor).toHaveCount(0)
   } finally {
     await closeIsolatedDesktopApp(context)
   }

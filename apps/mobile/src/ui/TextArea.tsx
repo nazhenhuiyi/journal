@@ -11,7 +11,7 @@ export const TextArea = forwardRef<TextInput, TextAreaProps>(function TextArea(
   {
     className,
     minHeightClassName = 'min-h-28',
-    placeholderTextColor = semanticColors['muted-fg'],
+    placeholderTextColor = semanticColors['text-quaternary'],
     ...props
   },
   ref,

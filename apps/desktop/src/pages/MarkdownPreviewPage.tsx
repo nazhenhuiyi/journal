@@ -1,22 +1,17 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { Settings2 } from 'lucide-react'
-import SegmentedControl from '../components/SegmentedControl'
 import {
   parseJournalMarkdown,
   serializeJournalMarkdownBody,
   type DayFrontMatter,
   type MurmurBlock,
 } from '@journal/core'
-import {
-  renderJournalMarkdown,
-} from '../domain/markdown'
 import { desktopSyncManager } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
 import JournalWeatherHeader from './markdown-preview/JournalWeatherHeader'
 import JournalMurmurPanel from './markdown-preview/JournalMurmurPanel'
-import MarkdownPreviewArticle from './markdown-preview/MarkdownPreviewArticle'
 import JournalDiagnosticsBanner from './markdown-preview/JournalDiagnosticsBanner'
 import {
   createManagedJournalMarkdown,
@@ -29,7 +24,6 @@ import {
 import { useTodayWeather } from './markdown-preview/useTodayWeather'
 import { useDesktopJournalSync } from './markdown-preview/useDesktopJournalSync'
 
-type JournalMode = 'write' | 'review'
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
 type JournalDayViewProps = {
   date?: string | null
@@ -40,41 +34,10 @@ export type JournalDayViewHandle = {
 }
 
 const AUTOSAVE_DELAY_MS = 5_000
-const JOURNAL_MODE_STORAGE_KEY = 'journal.preview.mode'
 const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-const journalModeOptions: Array<{ value: JournalMode; label: string }> = [
-  { value: 'write', label: '书写' },
-  { value: 'review', label: '回看' },
-]
 
 function getJournalStore() {
   return typeof window === 'undefined' ? undefined : window.journalStore
-}
-
-function readStoredJournalMode(): JournalMode {
-  if (typeof window === 'undefined') {
-    return 'write'
-  }
-
-  try {
-    const storedMode = window.localStorage.getItem(JOURNAL_MODE_STORAGE_KEY)
-
-    return storedMode === 'review' ? 'review' : 'write'
-  } catch {
-    return 'write'
-  }
-}
-
-function writeStoredJournalMode(mode: JournalMode) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  try {
-    window.localStorage.setItem(JOURNAL_MODE_STORAGE_KEY, mode)
-  } catch {
-    // localStorage can be unavailable in constrained browser contexts.
-  }
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -163,7 +126,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   { date = null, showDaySwitchNudge = true },
   ref,
 ) {
-  const [journalMode, setJournalMode] = useState<JournalMode>(() => readStoredJournalMode())
   const [journalMarkdown, setJournalMarkdown] = useState('')
   const [journalFile, setJournalFile] = useState<JournalFile | null>(null)
   const [journalFrontMatter, setJournalFrontMatter] = useState<DayFrontMatter>({})
@@ -200,7 +162,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     setJournalFrontMatter,
     updateLastSavedJournalSnapshot,
   })
-  const isReviewing = journalMode === 'review'
   const isViewingAnotherDay = Boolean(journalFile?.date && journalFile.date !== realTodayDate)
   const currentJournalDate = journalFile?.date ?? journalFrontMatter.date ?? realTodayDate
   const parsedJournalEntry = useMemo(() => parseJournalMarkdown(journalMarkdown), [journalMarkdown])
@@ -209,15 +170,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     journalFrontMatter.weather?.text,
   )
   const hasPendingUnsavedJournalChanges = hasPendingJournalEdit && hasUnsavedJournalChanges
-  const renderedMarkdown = useMemo(
-    () =>
-      renderJournalMarkdown({
-        markdown: journalMarkdown,
-        sourceFilePath: journalFile?.filePath,
-      }),
-    [journalFile?.filePath, journalMarkdown],
-  )
-
   const setHasPendingJournalEdit = useCallback((nextValue: boolean) => {
     hasPendingJournalEditRef.current = nextValue
     setHasPendingJournalEditState(nextValue)
@@ -227,7 +179,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     const parsedFile = parseJournalMarkdown(file.content)
     const editableMarkdown = serializeJournalMarkdownBody(parsedFile.longEntryMarkdown, parsedFile.murmurs)
     const frontMatter = parsedFile.frontMatter
-    const initialJournalMode = isBlankJournalMarkdown(editableMarkdown) ? 'write' : readStoredJournalMode()
 
     saveRequestIdRef.current += 1
     setHasPendingJournalEdit(false)
@@ -241,7 +192,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     setJournalFrontMatter(frontMatter)
     setJournalFile(file)
     setJournalMarkdown(editableMarkdown)
-    setJournalMode(initialJournalMode)
     setHasLoadedJournal(true)
     void refreshTodayWeather(file)
   }, [refreshTodayWeather, setHasPendingJournalEdit, updateLastSavedJournalSnapshot])
@@ -501,11 +451,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     return () => window.clearTimeout(timeoutId)
   }, [hasLoadedJournal, hasPendingJournalEdit, isEditorComposing, journalFile?.date, journalFrontMatter, journalMarkdown, realTodayDate, saveJournalFile, setHasPendingJournalEdit, updateLastSavedJournalSnapshot])
 
-  function handleModeChange(nextMode: JournalMode) {
-    setJournalMode(nextMode)
-    writeStoredJournalMode(nextMode)
-  }
-
   async function handleGoToToday() {
     saveRequestIdRef.current += 1
 
@@ -607,44 +552,34 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
             <span>{syncStatus.label}</span>
             <Settings2 aria-hidden="true" size={14} strokeWidth={2.25} />
           </a>
-          <SegmentedControl
-            ariaLabel="纸面状态"
-            onChange={handleModeChange}
-            options={journalModeOptions}
-            value={journalMode}
-          />
         </div>
       </motion.header>
 
       <section className="journal-stage flex-1 min-h-0">
         <JournalDiagnosticsBanner diagnostics={parsedJournalEntry.diagnostics} />
-        {isReviewing ? (
-          <MarkdownPreviewArticle renderedMarkdown={renderedMarkdown} />
-        ) : (
-          <motion.article
-            animate={{ opacity: 1, y: 0 }}
-            className="journal-writing-panel"
-            initial={{ opacity: 0, y: 10 }}
-            transition={{ ...panelTransition, delay: 0.08 }}
-          >
-            <div className="journal-paper">
-              <div className="journal-paper-meta">
-                <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
-              </div>
-              <JournalMarkdownEditor
-                onChange={handleJournalMarkdownChange}
-                onCompositionChange={handleEditorCompositionChange}
-                value={parsedJournalEntry.longEntryMarkdown}
-              />
+        <motion.article
+          animate={{ opacity: 1, y: 0 }}
+          className="journal-writing-panel"
+          initial={{ opacity: 0, y: 10 }}
+          transition={{ ...panelTransition, delay: 0.08 }}
+        >
+          <div className="journal-paper">
+            <div className="journal-paper-meta">
+              <JournalWeatherHeader frontMatter={journalFrontMatter} status={weatherStatus} variant="writing" />
             </div>
-            <JournalMurmurPanel
-              date={currentJournalDate}
-              murmurs={parsedJournalEntry.murmurs}
-              onChange={handleJournalMurmursChange}
-              onImportImages={handleImportMurmurImages}
+            <JournalMarkdownEditor
+              onChange={handleJournalMarkdownChange}
+              onCompositionChange={handleEditorCompositionChange}
+              value={parsedJournalEntry.longEntryMarkdown}
             />
-          </motion.article>
-        )}
+          </div>
+          <JournalMurmurPanel
+            date={currentJournalDate}
+            murmurs={parsedJournalEntry.murmurs}
+            onChange={handleJournalMurmursChange}
+            onImportImages={handleImportMurmurImages}
+          />
+        </motion.article>
       </section>
     </>
   )
@@ -652,10 +587,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
 
 function MarkdownPreviewPage() {
   return <JournalDayView />
-}
-
-function isBlankJournalMarkdown(markdown: string) {
-  return markdown.trim() === ''
 }
 
 function getCurrentTimestamp() {

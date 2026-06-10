@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
+import { spacingPixels } from '@journal/theme'
 import {
   listDailyJournals,
   type MobileJournalRecord,
@@ -70,10 +71,10 @@ export function JournalListPage({
 
   return (
     <PageShell onBack={onBack} title="日记列表">
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacingPixels['6'] }} showsVerticalScrollIndicator={false}>
         <View className="gap-3">
           {isLoading ? (
-            <Text className="px-1 text-sm font-medium text-muted-fg">正在打开日记列表</Text>
+            <Text className="px-1 text-sm font-medium text-text-tertiary">正在打开日记列表</Text>
           ) : null}
 
           {didLoadFail ? (
@@ -82,7 +83,7 @@ export function JournalListPage({
 
           {!isLoading && !didLoadFail && rows.length === 0 ? (
             <View className="rounded-lg border border-border bg-surface px-4 py-4">
-              <Text className="text-sm leading-5 text-muted-fg">还没有写下内容</Text>
+              <Text className="text-sm leading-5 text-text-tertiary">还没有写下内容</Text>
             </View>
           ) : null}
 
@@ -90,9 +91,9 @@ export function JournalListPage({
             <View key={row.date} className="rounded-lg border border-border bg-surface px-4 py-4">
               <View className="mb-3 flex-row items-center justify-between gap-3">
                 <Text className="text-base font-semibold text-foreground">{row.isToday ? '今天' : formatCompactDate(row.date)}</Text>
-                <Text className="text-sm font-medium text-muted-fg">{formatPaperDateLine(row.date)}</Text>
+                <Text className="text-sm font-medium text-text-tertiary">{formatPaperDateLine(row.date)}</Text>
               </View>
-              <Text className="text-sm leading-5 text-muted-fg" numberOfLines={3}>
+              <Text className="text-sm leading-5 text-text-tertiary" numberOfLines={3}>
                 {row.preview || (row.murmurCount > 0 ? `${row.murmurCount} 条碎碎念` : '还没有写下内容')}
               </Text>
             </View>

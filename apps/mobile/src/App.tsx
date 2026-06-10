@@ -11,7 +11,7 @@ import {
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import type { ImageBlock, MurmurBlock } from '@journal/core'
-import { semanticColors } from '@journal/theme'
+import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusTone,
@@ -277,9 +277,9 @@ export default function App() {
                 <View
                   className="flex-1 rounded-lg bg-surface"
                   style={{
-                    paddingBottom: 22,
-                    paddingHorizontal: 24,
-                    paddingTop: 16,
+                    paddingBottom: spacingPixels['6'],
+                    paddingHorizontal: spacingPixels['6'],
+                    paddingTop: spacingPixels['4'],
                   }}
                 >
                   <View className="mb-5 flex-row items-center justify-between gap-4">
@@ -315,13 +315,13 @@ export default function App() {
                       isLongEntryFocusedRef.current = true
                     }}
                     placeholder="写一点今天真正留下来的东西。"
-                    placeholderTextColor={semanticColors['muted-fg']}
+                    placeholderTextColor={semanticColors['text-quaternary']}
                     scrollEnabled
                     spellCheck={false}
                     style={{
                       margin: 0,
                       padding: 0,
-                      paddingBottom: 20,
+                      paddingBottom: spacingPixels['5'],
                       paddingTop: 0,
                     }}
                     textAlignVertical="top"
@@ -339,7 +339,7 @@ export default function App() {
               >
                 <ScrollView
                   className="flex-1"
-                  contentContainerStyle={{ paddingBottom: 12 }}
+                  contentContainerStyle={{ paddingBottom: spacingPixels['3'] }}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
@@ -347,13 +347,13 @@ export default function App() {
                     <View
                       className="border border-border bg-surface"
                       style={{
-                        borderRadius: 20,
-                        paddingHorizontal: 20,
-                        paddingVertical: 16,
+                        borderRadius: radiusPixels['2xl'],
+                        paddingHorizontal: spacingPixels['5'],
+                        paddingVertical: spacingPixels['4'],
                       }}
                     >
                       {murmurs.length === 0 ? (
-                        <Text className="mb-4 text-sm leading-5 text-muted-fg">
+                        <Text className="mb-4 text-sm leading-5 text-text-tertiary">
                           今天还没有碎碎念。
                         </Text>
                       ) : null}
@@ -370,7 +370,7 @@ export default function App() {
                         }}
                         onChangeText={setMurmurDraft}
                         placeholder={murmurs.length === 0 ? '比如：刚刚想到的一句话。' : '再补一句碎碎念。'}
-                        placeholderTextColor={semanticColors['muted-fg']}
+                        placeholderTextColor={semanticColors['text-quaternary']}
                         scrollEnabled={false}
                         style={{
                           height: murmurDraftInputHeight,
@@ -382,7 +382,7 @@ export default function App() {
                         value={murmurDraft}
                       />
                     </View>
-                    <View className="flex-row items-center justify-between gap-2" style={{ marginTop: 18 }}>
+                    <View className="flex-row items-center justify-between gap-2" style={{ marginTop: spacingPixels['5'] }}>
                       <View className="flex-row gap-2">
                         <Button
                           className="min-h-10 rounded-full px-3"
@@ -421,8 +421,8 @@ export default function App() {
                   </View>
 
                   {murmurs.length > 0 ? (
-                    <View style={{ marginTop: 34 }}>
-                      <Text className="mb-4 text-xs font-semibold text-muted-fg">今天</Text>
+                    <View style={{ marginTop: spacingPixels['8'] }}>
+                      <Text className="mb-4 text-xs font-semibold text-text-tertiary">今天</Text>
                       <View className="gap-3">
                         {murmurs.map((murmur) => (
                           <MurmurItem
@@ -529,7 +529,7 @@ function MurmurCountButton({
       testID={testID}
     >
       <Text className="text-sm font-semibold text-foreground">碎碎念</Text>
-      <Text className="text-sm font-semibold text-muted-fg">· {count} 条</Text>
+      <Text className="text-sm font-semibold text-text-tertiary">· {count} 条</Text>
     </Pressable>
   )
 }
@@ -556,7 +556,7 @@ function TopNavButton({
       })}
       testID={testID}
     >
-      <Ionicons color={semanticColors['muted-fg']} name={icon} size={19} />
+      <Ionicons color={semanticColors['text-tertiary']} name={icon} size={19} />
     </Pressable>
   )
 }
@@ -583,7 +583,7 @@ function HeaderIconButton({
       })}
       testID={testID}
     >
-      <Ionicons color={semanticColors['muted-fg']} name={icon} size={15} />
+      <Ionicons color={semanticColors['text-tertiary']} name={icon} size={15} />
     </Pressable>
   )
 }
@@ -635,10 +635,10 @@ function MurmurItem({
   return (
     <View
       className="border border-border bg-surface px-4 py-4"
-      style={{ borderRadius: 18 }}
+      style={{ borderRadius: radiusPixels['2xl'] }}
     >
       <View className="mb-3 flex-row items-center justify-between gap-3">
-        <Text className="text-xs font-semibold text-muted-fg">{formatTime(murmur.time)}</Text>
+        <Text className="text-xs font-semibold text-text-tertiary">{formatTime(murmur.time)}</Text>
         <View className="flex-row items-center gap-1">
           <Pressable
             accessibilityLabel="给这条碎碎念拍照"
@@ -650,8 +650,8 @@ function MurmurItem({
               opacity: isAddingImages ? 0.45 : pressed ? 0.72 : 1,
             })}
           >
-            <Ionicons color={semanticColors['muted-fg']} name="camera-outline" size={15} />
-            <Text className="text-xs font-semibold text-muted-fg">拍照</Text>
+            <Ionicons color={semanticColors['text-tertiary']} name="camera-outline" size={15} />
+            <Text className="text-xs font-semibold text-text-tertiary">拍照</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="给这条碎碎念从相册加图片"
@@ -663,8 +663,8 @@ function MurmurItem({
               opacity: isAddingImages ? 0.45 : pressed ? 0.72 : 1,
             })}
           >
-            <Ionicons color={semanticColors['muted-fg']} name="image-outline" size={15} />
-            <Text className="text-xs font-semibold text-muted-fg">相册</Text>
+            <Ionicons color={semanticColors['text-tertiary']} name="image-outline" size={15} />
+            <Text className="text-xs font-semibold text-text-tertiary">相册</Text>
           </Pressable>
         </View>
       </View>
@@ -672,7 +672,7 @@ function MurmurItem({
         <Text className="text-base leading-6 text-foreground">{murmur.body}</Text>
       ) : null}
       {murmur.images.length > 0 ? (
-        <View className="gap-3" style={{ marginTop: murmur.body.trim() ? 14 : 0 }}>
+        <View className="gap-3" style={{ marginTop: murmur.body.trim() ? spacingPixels['3.5'] : 0 }}>
           {murmur.images.map((image) => (
             <MurmurImageItem
               image={image}
@@ -710,7 +710,7 @@ function MurmurImageItem({
         style={{
           aspectRatio: 4 / 3,
           backgroundColor: semanticColors['surface-muted'],
-          borderRadius: 14,
+          borderRadius: radiusPixels.xl,
           width: '100%',
         }}
       />
@@ -720,7 +720,7 @@ function MurmurImageItem({
           className="min-h-10 flex-1 rounded-lg border border-border bg-surface-muted px-3 text-sm text-foreground"
           onChangeText={(value) => onUpdateCaption(murmurId, image.id, value)}
           placeholder="给这张图留一句说明"
-          placeholderTextColor={semanticColors['muted-fg']}
+          placeholderTextColor={semanticColors['text-quaternary']}
           value={image.caption ?? ''}
         />
         <Pressable
@@ -831,8 +831,8 @@ function formatMarkdownDiagnosticSummary(errorCount: number) {
 }
 
 const headerStatusTextClasses: Record<HeaderStatusTone, string> = {
-  blue: 'text-muted-fg',
+  blue: 'text-text-tertiary',
   danger: 'text-danger',
-  green: 'text-muted-fg',
-  plain: 'text-muted-fg',
+  green: 'text-text-tertiary',
+  plain: 'text-text-tertiary',
 }

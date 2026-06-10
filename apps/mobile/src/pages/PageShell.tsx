@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { semanticColors } from '@journal/theme'
+import { semanticColors, spacingPixels } from '@journal/theme'
 import { Screen } from '../ui/Screen'
 
 type PageShellProps = {
@@ -22,7 +22,7 @@ export function PageShell({ children, onBack, title }: PageShellProps) {
             style={styles.backButton}
             testID="back-to-today-button"
           >
-            <Ionicons color={semanticColors['muted-fg']} name="chevron-back" size={24} />
+            <Ionicons color={semanticColors['text-tertiary']} name="chevron-back" size={24} />
           </Pressable>
           <Text
             className="text-lg font-semibold text-foreground"
@@ -42,16 +42,16 @@ const styles = StyleSheet.create({
   backButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 32,
+    width: spacingPixels['8'],
   },
   nav: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 40,
-    marginBottom: 28,
+    height: spacingPixels['10'],
+    marginBottom: spacingPixels['7'],
   },
   navSpacer: {
-    width: 32,
+    width: spacingPixels['8'],
   },
   title: {
     flex: 1,

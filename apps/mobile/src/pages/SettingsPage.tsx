@@ -1,10 +1,12 @@
 import { type ReactNode } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import { semanticColors } from '@journal/theme'
+import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Section } from '../ui/Section'
 import { PageShell } from './PageShell'
+
+const storedTokenMask = '••••••••'
 
 type SettingsPageProps = {
   hasStoredSyncToken: boolean
@@ -66,20 +68,20 @@ export function SettingsPage({
                     value={syncBranch}
                   />
                 </ConfigField>
-                <ConfigField label={hasStoredSyncToken ? '新的 GitHub Token' : 'GitHub Token'}>
+                <ConfigField label="GitHub Token">
                   <Input
                     accessibilityLabel="GitHub token"
                     autoCapitalize="none"
                     autoCorrect={false}
                     onChangeText={setSyncTokenDraft}
-                    placeholder={hasStoredSyncToken ? '留空不改，粘贴后替换' : '粘贴 GitHub token'}
+                    placeholder={hasStoredSyncToken ? storedTokenMask : '粘贴 GitHub token'}
                     secureTextEntry
                     testID="sync-token-input"
                     value={syncTokenDraft}
                   />
                   {hasStoredSyncToken ? (
-                    <Text className="text-xs leading-5 text-muted-fg">
-                      已保存的 token 不会显示；留空只保存仓库与分支。
+                    <Text className="text-xs leading-5 text-text-tertiary">
+                      Token 已保存，粘贴新的 token 会替换。
                     </Text>
                   ) : null}
                 </ConfigField>
@@ -111,7 +113,7 @@ function ConfigField({
 }) {
   return (
     <View style={styles.configField}>
-      <Text className="text-xs font-semibold leading-5 text-muted-fg">{label}</Text>
+      <Text className="text-xs font-semibold leading-5 text-text-tertiary">{label}</Text>
       {children}
     </View>
   )
@@ -119,16 +121,16 @@ function ConfigField({
 
 const styles = StyleSheet.create({
   configField: {
-    gap: 6,
+    gap: spacingPixels['1.5'],
   },
   content: {
-    gap: 28,
+    gap: spacingPixels['7'],
   },
   formCard: {
     backgroundColor: semanticColors.surface,
-    borderRadius: 8,
-    gap: 14,
-    padding: 16,
+    borderRadius: radiusPixels.lg,
+    gap: spacingPixels['3.5'],
+    padding: spacingPixels['4'],
   },
   root: {
     flex: 1,
@@ -137,6 +139,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: spacingPixels['7'],
   },
 })

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { type ReactNode, useEffect, useSyncExternalStore } from 'react'
 import { motion } from 'motion/react'
 import {
   AlertCircle,
@@ -14,6 +14,8 @@ import { Link } from 'react-router'
 import { desktopSyncManager, type DesktopSyncManagerState } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
+
+const storedTokenMask = '••••••••'
 
 function SettingsPage() {
   const {
@@ -47,13 +49,7 @@ function SettingsPage() {
   const SyncStatusIcon = syncStatus.icon
   const tokenHint = getTokenHint(credentialStatus, credentialMessage, hasStoredSyncToken)
   const disabled = isLoadingSyncSettings || isSavingSyncSettings || isSyncingNow
-  const dirtyPathLabel = useMemo(() => {
-    if (dirtyPaths.length === 0) {
-      return ''
-    }
-
-    return dirtyPaths.length === 1 ? dirtyPaths[0] : `${dirtyPaths.length} 个文件等待同步`
-  }, [dirtyPaths])
+  const dirtyPathLabel = dirtyPaths.length === 1 ? dirtyPaths[0] : `${dirtyPaths.length} 个文件等待同步`
 
   useEffect(() => {
     void desktopSyncManager.refreshStatus()
@@ -84,69 +80,52 @@ function SettingsPage() {
           initial={{ opacity: 0, y: 10 }}
           transition={{ ...panelTransition, delay: 0.08 }}
         >
-          <div className="settings-section-heading">
-            <div className={`settings-sync-status is-${syncStatus.tone}`}>
-              <span aria-hidden="true">
-                <SyncStatusIcon size={20} strokeWidth={2.2} />
-              </span>
-              <div>
-                <small>Git 同步</small>
-                <strong>{syncStatus.label}</strong>
-                <p>{syncStatus.detail}</p>
-              </div>
-            </div>
-            {dirtyPathLabel ? (
-              <p className="settings-dirty-path" title={dirtyPaths.join('\n')}>
-                {dirtyPathLabel}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="settings-git-inspector" aria-label="Git 状态">
-            <section className="settings-git-section">
-              <h2>最近 commit</h2>
-              {recentCommits.length > 0 ? (
-                <ol className="settings-git-list">
-                  {recentCommits.map((commit) => (
-                    <li className="settings-commit-row" key={commit.oid}>
-                      <span className="settings-commit-meta">
-                        <code title={commit.oid}>{commit.shortOid}</code>
-                        <time dateTime={commit.committedAt ?? undefined}>
-                          {formatCommitTime(commit.committedAt)}
-                        </time>
-                      </span>
-                      <span className="settings-commit-message">{commit.message}</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="settings-empty-note">还没有本地 commit。</p>
-              )}
-            </section>
-
-            <section className="settings-git-section">
-              <h2>未提交文件</h2>
+          <section className="settings-section">
+            <h2 className="settings-section-title">状态</h2>
+            <div className="settings-list-group">
+              <SettingsListRow
+                icon={<SyncStatusIcon size={17} strokeWidth={2.2} />}
+                label="远端同步"
+                tone={syncStatus.tone}
+                value={syncStatus.label}
+              />
+              <SettingsListRow label="最近同步" value={formatLastSyncedAt(syncSnapshot.lastSyncedAt)} />
+              <SettingsListRow label="待处理" value={formatPendingReason(syncSnapshot.pendingReason)} />
               {dirtyPaths.length > 0 ? (
-                <ul className="settings-git-list settings-file-list">
-                  {dirtyPaths.map((filepath) => (
-                    <li key={filepath}>
-                      <code>{filepath}</code>
-                    </li>
-                  ))}
-                </ul>
+                <SettingsMessageRow title={dirtyPaths.join('\n')}>
+                  未提交文件：{dirtyPathLabel}
+                </SettingsMessageRow>
+              ) : null}
+              {syncSnapshot.lastError ? (
+                <SettingsMessageRow danger title={syncSnapshot.lastError}>
+                  {syncSnapshot.lastError}
+                </SettingsMessageRow>
+              ) : null}
+            </div>
+            <p className="settings-status-detail">{syncStatus.detail}</p>
+          </section>
+
+          <section className="settings-section">
+            <h2 className="settings-section-title">最近 commit</h2>
+            <div className="settings-list-group">
+              {recentCommits.length > 0 ? (
+                recentCommits.map((commit) => (
+                  <CommitRow commit={commit} key={commit.oid} />
+                ))
               ) : (
-                <p className="settings-empty-note">没有未提交文件。</p>
+                <SettingsMessageRow>还没有本地 commit。</SettingsMessageRow>
               )}
-            </section>
-          </div>
+            </div>
+          </section>
 
           <form
-            className="settings-form"
+            className="settings-form settings-section"
             onSubmit={(event) => {
               event.preventDefault()
               void desktopSyncManager.saveConfiguration({ showSuccessMessage: true })
             }}
           >
+            <h2 className="settings-section-title">配置</h2>
             <label className="settings-field settings-field-wide">
               <span>仓库地址</span>
               <input
@@ -177,7 +156,7 @@ function SettingsPage() {
                 <input
                   disabled={disabled}
                   onChange={(event) => desktopSyncManager.setSyncTokenDraft(event.target.value)}
-                  placeholder={hasStoredSyncToken ? '已保存，留空不改' : 'ghp_...'}
+                  placeholder={hasStoredSyncToken ? storedTokenMask : 'ghp_...'}
                   type="password"
                   value={syncTokenDraft}
                 />
@@ -233,6 +212,60 @@ function SettingsPage() {
   )
 }
 
+function SettingsListRow({
+  icon,
+  label,
+  tone,
+  value,
+}: {
+  icon?: ReactNode
+  label: string
+  tone?: string
+  value: string
+}) {
+  return (
+    <div className="settings-list-row">
+      <span className="settings-list-label">{label}</span>
+      <span className={`settings-list-value${tone ? ` is-${tone}` : ''}`}>
+        {icon ? <span aria-hidden="true">{icon}</span> : null}
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function SettingsMessageRow({
+  children,
+  danger = false,
+  title,
+}: {
+  children: ReactNode
+  danger?: boolean
+  title?: string
+}) {
+  return (
+    <p className={danger ? 'settings-message-row is-danger' : 'settings-message-row'} title={title}>
+      {children}
+    </p>
+  )
+}
+
+function CommitRow({
+  commit,
+}: {
+  commit: DesktopSyncManagerState['recentCommits'][number]
+}) {
+  return (
+    <div className="settings-commit-row">
+      <div className="settings-commit-summary">
+        <code title={commit.oid}>{commit.shortOid}</code>
+        <span>{commit.message}</span>
+      </div>
+      <time dateTime={commit.committedAt ?? undefined}>{formatCommitTime(commit.committedAt)}</time>
+    </div>
+  )
+}
+
 function getTokenHint(
   credentialStatus: DesktopSyncManagerState['credentialStatus'],
   credentialMessage: string,
@@ -243,7 +276,7 @@ function getTokenHint(
   }
 
   if (hasStoredSyncToken) {
-    return 'Token 已保存，留空会继续使用原来的凭据。'
+    return 'Token 已保存，粘贴新的 token 会替换。'
   }
 
   return '保存 Token 后才能访问私有仓库。'
@@ -259,6 +292,34 @@ function getCredentialStatusLabel(status: DesktopSyncManagerState['credentialSta
   }
 
   return '请先保存 GitHub token。'
+}
+
+function formatLastSyncedAt(value: string | null) {
+  if (!value) {
+    return '还没有同步'
+  }
+
+  return formatCommitTime(value)
+}
+
+function formatPendingReason(value: DesktopSyncManagerState['snapshot']['pendingReason']) {
+  if (!value) {
+    return '无'
+  }
+
+  if (value === 'local-save') {
+    return '本地保存'
+  }
+
+  if (value === 'remote-check') {
+    return '远端检查'
+  }
+
+  if (value === 'retry') {
+    return '等待重试'
+  }
+
+  return value
 }
 
 function formatCommitTime(value: string | null) {
