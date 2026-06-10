@@ -10,6 +10,8 @@ const workspaceNodeModules = path.resolve(workspaceRoot, 'node_modules')
 const config = getDefaultConfig(projectRoot)
 const nativeWindInput = path.resolve(projectRoot, 'global.css')
 const nativeWindTailwindConfig = path.resolve(projectRoot, 'tailwind.config.js')
+const expoSetupHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/setupHMR.ts')
+const expoNativeHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/hmr.native.ts')
 const packageEntries = {
   'webidl-conversions': path.resolve(
     workspaceNodeModules,
@@ -38,6 +40,17 @@ config.resolver.extraNodeModules = {
   'whatwg-url-without-unicode': path.resolve(workspaceNodeModules, 'whatwg-url-without-unicode'),
 }
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (
+    platform !== 'web' &&
+    moduleName === './hmr' &&
+    path.normalize(context.originModulePath ?? '') === expoSetupHmrPath
+  ) {
+    return {
+      type: 'sourceFile',
+      filePath: expoNativeHmrPath,
+    }
+  }
+
   const packageEntry = packageEntries[moduleName]
 
   if (packageEntry) {

@@ -27,6 +27,7 @@ import type {
 } from './useMobileJournal'
 
 const mobilePullIntervalMs = 30_000
+const mobileRecentCommitLimit = 3
 
 const initialSyncSnapshot: SyncSnapshot = {
   lastError: null,
@@ -97,7 +98,7 @@ export function useMobileSync({
         remoteUrl: remoteUrl.trim(),
       }, {
         includeDirtyPaths,
-        recentCommitLimit: 1,
+        recentCommitLimit: mobileRecentCommitLimit,
       })
 
       setMobileGitStatus(status)

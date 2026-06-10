@@ -8,6 +8,8 @@ import { Section } from '../ui/Section'
 import type { MobileGitSyncStatus } from '../services/sync'
 import { PageShell } from './PageShell'
 
+const recentCommitDisplayLimit = 3
+
 type SyncSettingsPageProps = {
   gitStatus: MobileGitSyncStatus | null
   gitStatusError: string | null
@@ -42,7 +44,7 @@ export function SyncSettingsPage({
   }, [onRefreshGitStatus])
 
   const isConfigured = Boolean(syncRemoteUrl.trim()) && hasStoredSyncToken
-  const recentCommits = gitStatus?.recentCommits.slice(0, 1) ?? []
+  const recentCommits = gitStatus?.recentCommits.slice(0, recentCommitDisplayLimit) ?? []
 
   return (
     <PageShell onBack={onBack} title="同步">
@@ -142,11 +144,11 @@ function CommitRow({
   return (
     <View style={[styles.commitRow, divider ? styles.divider : null]}>
       <View style={styles.commitSummary}>
-        <Text className="text-sm font-semibold leading-5 text-foreground" numberOfLines={2}>
-          {commit.message}
-        </Text>
-        <Text className="font-mono text-xs font-semibold leading-5 text-muted-fg" numberOfLines={1}>
+        <Text className="font-mono text-sm font-semibold leading-5 text-foreground" numberOfLines={1}>
           {commit.shortOid}
+        </Text>
+        <Text className="text-xs leading-5 text-muted-fg" numberOfLines={2}>
+          {commit.message}
         </Text>
       </View>
       <Text className="text-right text-xs leading-5 text-muted-fg" numberOfLines={1} style={styles.commitTime}>
