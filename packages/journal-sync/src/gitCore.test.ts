@@ -3,6 +3,7 @@ import * as git from 'isomorphic-git'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   assertSafeRemoteUrl,
+  cloneJournalGitSyncRepository,
   commitJournalChanges,
   createJournalGitAuthenticatedHttpClient,
   createJournalGitAuthHeaders,
@@ -53,6 +54,7 @@ const credentials = {
 
 function createRuntime(): JournalGitRuntime {
   return {
+    cache: {},
     dir: '/journal',
     fs: mockFs as unknown as FsClient,
     git: mockGit as unknown as typeof git,
@@ -212,6 +214,15 @@ describe('journal git sync core', () => {
     })
   })
 
+  it('encodes non-ASCII Git Basic auth credentials as UTF-8 base64', () => {
+    expect(createJournalGitAuthHeaders(undefined, {
+      token: '令牌🔑',
+      username: '张三',
+    })).toEqual({
+      Authorization: `Basic ${Buffer.from('张三:令牌🔑', 'utf8').toString('base64')}`,
+    })
+  })
+
   it('preserves an explicitly provided Authorization header', () => {
     expect(createJournalGitAuthHeaders({
       authorization: 'Bearer existing-token',
@@ -287,6 +298,28 @@ describe('journal git sync core', () => {
         Authorization: 'Basic eC1hY2Nlc3MtdG9rZW46Z2l0aHViLXRva2Vu',
         accept: 'application/x-git-upload-pack-advertisement',
       }),
+    }))
+  })
+
+  it('passes the runtime cache to clone operations', async () => {
+    const runtime = createRuntime()
+
+    mockFs.promises.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), {
+      code: 'ENOENT',
+    }))
+
+    await cloneJournalGitSyncRepository(runtime, {
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    }, credentials)
+
+    expect(mockGit.clone).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      dir: '/journal',
+      fs: mockFs,
+      ref: 'main',
+      singleBranch: true,
+      url: 'https://github.com/example/journal-sync.git',
     }))
   })
 
@@ -551,12 +584,14 @@ describe('journal git sync core', () => {
   })
 
   it('commits known changed paths without scanning the full tracked worktree twice', async () => {
+    const runtime = createRuntime()
+
     mockGit.statusMatrix.mockResolvedValueOnce([
       ['entries/2026/06/2026-06-09.md', 1, 2, 1],
     ])
 
     const commitOid = await commitJournalChanges(
-      createRuntime(),
+      runtime,
       {
         branch: 'main',
       },
@@ -568,15 +603,31 @@ describe('journal git sync core', () => {
 
     expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
     expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepaths: ['entries/2026/06/2026-06-09.md'],
     }))
     expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepath: 'entries/2026/06/2026-06-09.md',
+    }))
+    expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      ref: 'refs/heads/main',
+    }))
+    expect(mockGit.readCommit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      oid: 'commit-oid',
+    }))
+    expect(mockGit.readCommit).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+      oid: 'local-head',
     }))
     expect(commitOid).toBe('commit-oid')
   })
 
   it('stages deleted tracked journal files with git remove', async () => {
+    const runtime = createRuntime()
+
     mockGit.statusMatrix
       .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 1, 0, 1],
@@ -585,11 +636,12 @@ describe('journal git sync core', () => {
         ['entries/2026/06/2026-06-08.md', 1, 0, 0],
       ])
 
-    const commitOid = await commitJournalChanges(createRuntime(), {
+    const commitOid = await commitJournalChanges(runtime, {
       branch: 'main',
     })
 
     expect(mockGit.remove).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       filepath: 'entries/2026/06/2026-06-08.md',
     }))
     expect(mockGit.add).not.toHaveBeenCalled()
@@ -672,7 +724,20 @@ describe('journal git sync core', () => {
     expect(mockGit.fetch).toHaveBeenCalledTimes(2)
     expect(mockGit.merge).toHaveBeenCalledTimes(2)
     expect(mockGit.push).toHaveBeenCalledTimes(2)
+    expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.merge).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.walk).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
+    }))
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      cache: runtime.cache,
       force: false,
     }))
     expect(result.mergeCommitOid).toBe('retry-merge-head')

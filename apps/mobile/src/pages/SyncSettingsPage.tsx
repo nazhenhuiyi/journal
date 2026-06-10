@@ -141,16 +141,16 @@ function CommitRow({
 }) {
   return (
     <View style={[styles.commitRow, divider ? styles.divider : null]}>
-      <View style={styles.commitMeta}>
-        <Text className="font-mono text-xs font-semibold leading-5 text-muted-fg">
+      <View style={styles.commitSummary}>
+        <Text className="text-sm font-semibold leading-5 text-foreground" numberOfLines={2}>
+          {commit.message}
+        </Text>
+        <Text className="font-mono text-xs font-semibold leading-5 text-muted-fg" numberOfLines={1}>
           {commit.shortOid}
         </Text>
-        <Text className="text-xs leading-5 text-muted-fg" numberOfLines={1}>
-          {formatCommitTime(commit.committedAt)}
-        </Text>
       </View>
-      <Text className="text-right text-sm font-semibold leading-5 text-foreground" numberOfLines={2} style={styles.commitMessage}>
-        {commit.message}
+      <Text className="text-right text-xs leading-5 text-muted-fg" numberOfLines={1} style={styles.commitTime}>
+        {formatCommitTime(commit.committedAt)}
       </Text>
     </View>
   )
@@ -245,12 +245,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 52,
   },
-  commitMessage: {
+  commitSummary: {
     flex: 1,
     minWidth: 0,
   },
-  commitMeta: {
-    minWidth: 82,
+  commitTime: {
+    minWidth: 86,
   },
   content: {
     gap: 28,
