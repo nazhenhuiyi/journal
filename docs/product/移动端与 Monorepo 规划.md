@@ -1,6 +1,6 @@
-# 移动端与 Monorepo 实施计划
+# 移动端与 Monorepo 现状
 
-这份文档用于指导桌面端到移动端的演进。目标不是一次性把项目搬成完整大仓库，而是先把跨端共享的数据格式和同步闭环做稳。
+这份文档记录桌面端、移动端和共享包的当前分层，以及从最初移动端计划延续下来的后续工作。历史 POC 已经落地的部分不再按候选方案描述；代码事实以各 workspace 的实现和 `AGENTS.md` 为准。
 
 ## 1. 目标
 
@@ -25,12 +25,12 @@
 
 | 主题 | 决策 |
 | --- | --- |
-| 仓库形态 | 采用 Monorepo，但分阶段改造 |
-| 当前重点 | 桌面端、移动端和共享 core 已拆入 workspace；第 4 阶段真实 GitHub 私有远端 POC 已通过，下一步做 Android 真机 UI 回归 |
+| 仓库形态 | 已采用 npm workspaces Monorepo |
+| 当前重点 | 桌面端、移动端、`journal-core`、`journal-sync`、`journal-theme` 已拆入 workspace；继续补强移动端真机回归、媒体体积控制和导入导出 |
 | 包管理 | 继续使用 npm workspaces，不切 pnpm/yarn |
-| 共享范围 | 共享数据模型、解析、序列化和迁移工具，不共享桌面/移动 UI |
+| 共享范围 | 共享数据模型、Markdown 解析/序列化、Git 同步核心、同步调度、合并策略和主题 token；不共享桌面/移动 UI |
 | 移动端技术栈 | Expo SDK 54 + React Native + TypeScript，优先兼容 Play Store 版 Expo Go |
-| 移动端同步候选 | 第一候选是 `isomorphic-git`，先做 POC |
+| 同步实现 | 桌面端和移动端都通过 `@journal/sync` 使用 `isomorphic-git`，平台层注入文件系统、HTTP、凭据和生命周期 |
 | 同步远端 | GitHub 私有仓库，不自建后端服务 |
 | 冲突策略 | 日记 Markdown 使用 diff3 文本合并；批注 JSON 和无法文本合并的文件保留 fallback 选边；真实冲突保留冲突标记并停止自动 push |
 | 加密策略 | 第一版接受 GitHub 私有仓库权限和 HTTPS 传输加密，不做端到端加密 |
@@ -53,6 +53,10 @@ journal/
   packages/
     journal-core/
       # 纯 TypeScript：数据结构、解析、序列化、校验、迁移
+    journal-sync/
+      # 纯 TypeScript：Git 同步核心、调度、合并策略、状态展示
+    journal-theme/
+      # CSS / JSON / TS 主题 token
 ```
 
 长期可以继续按需要增加共享包：
@@ -61,8 +65,6 @@ journal/
 packages/
     journal-storage/
       # 可选：跨端存储接口、导入导出协议
-    design-tokens/
-      # 可选：颜色、间距、字体等跨端设计 token
 ```
 
 根 `package.json` 只负责 workspace 编排和命令转发：
@@ -82,6 +84,8 @@ packages/
 - `apps/desktop/package.json`
 - `apps/mobile/package.json`
 - `packages/journal-core/package.json`
+- `packages/journal-sync/package.json`
+- `packages/journal-theme/package.json`
 
 ## 4. `journal-core` 边界
 
@@ -144,7 +148,7 @@ journal-sync/
 1. 用户编辑日记或碎碎念。
 2. 使用 `journal-core` 生成 canonical Markdown。
 3. 写入本地 Git worktree 里的 `entries/`、`media/`、`annotations/`。
-4. 等待手动同步或自动延迟同步。
+4. 等待保存后延迟同步、打开 app 拉取、进入后台前 flush 或手动立即同步。
 
 第一版先避免多一层缓存状态，减少 Markdown 和本地索引不一致的风险。等日记数量、全文搜索、标签筛选或图片检索真的需要性能优化时，再增加可重建的索引层。
 
@@ -160,66 +164,67 @@ journal-sync/
 - 新功能不再创建 AI 批注。
 - 序列化时尽量保留未知字段，减少旧数据被新版本写坏的风险。
 
-## 7. GitHub 同步计划
+## 7. GitHub 同步现状
 
 同步方案不自建后端服务。桌面端和移动端都围绕同一个 GitHub 私有仓库工作。
 
 核心判断：同步应该是 Git 同步，不是基于 GitHub REST API 重新实现一套文件同步协议。
 
-### 7.1 桌面端
+### 7.1 共享同步核心
 
-桌面端可以直接使用系统 Git 客户端。
+跨端同步核心在 `packages/journal-sync`，统一使用 `isomorphic-git`。这里负责：
 
-基础流程：
+- 初始化或 clone 同步仓库。
+- 读取同步状态、dirty paths 和最近 commit。
+- 提交 `entries/`、`media/`、`annotations/`、`manifest.json` 范围内的改动。
+- fetch / merge / push，以及 push rejected 后的 fetch / merge / retry。
+- 日记 Markdown diff3 合并、批注 JSON 和无法文本合并文件的 fallback 选边。
+- `JournalSyncCoordinator` 的单飞、排队、保存后延迟推送、定时拉取、后台 flush 和重试状态机。
 
-```txt
-git pull
-git add entries media annotations manifest.json
-git commit -m "Sync journal"
-git push
-```
+共享核心不保存 token，不读取平台设置，也不直接依赖 Electron、Expo 或 React Native。
 
-桌面端暂时不需要使用 `isomorphic-git`。
+### 7.2 桌面端适配
 
-### 7.2 移动端
+桌面端适配在：
 
-移动端不能假设系统里有 `git` 命令，也不依赖 shell 调用。
+- `apps/desktop/electron/journalSync.ts`
+- `apps/desktop/electron/journalSyncCredentials.ts`
+- `apps/desktop/src/services/sync/desktopSyncManager.ts`
 
-移动端第一候选是 `isomorphic-git` POC。当前已经在移动端新增同步服务边界、Expo 文件系统适配层、SecureStore 凭据存储、Markdown diff3 merge driver、fallback merge driver 和手动同步入口。
+Electron 主进程注入 Node `fs`、`isomorphic-git/http/node`、桌面端凭据和 journal directory。Renderer 只通过 preload IPC 调用 `journalSync`，再由 `desktopSyncManager` 绑定编辑器保存、自动推送和设置页状态。
 
-POC 代码路径：
+桌面端不再依赖系统 `git` 作为产品同步主流程，也不要重新加入命令行 fallback。
+
+### 7.3 移动端适配
+
+移动端不能假设系统里有 `git` 命令，也不依赖 shell 调用。平台适配在：
 
 - `apps/mobile/src/services/sync/mobileGitSync.ts`
 - `apps/mobile/src/services/sync/expoGitFileSystem.ts`
 - `apps/mobile/src/services/sync/secureSyncCredentials.ts`
-- `apps/mobile/src/services/sync/lastWriteWins.ts`
+- `apps/mobile/src/services/sync/mobileSyncManager.ts`
+- `apps/mobile/src/services/sync/pendingSyncPaths.ts`
 
-POC 需要覆盖：
+移动端注入 Expo FileSystem、`expo/fetch`、SecureStore 凭据、AppState 生命周期和 UI 状态。`mobileSyncManager` 会在配置完整后启动定时拉取，保存后把 changed paths 交给共享调度器，App 进入后台前会尽量补保存并 flush 待推送内容。
 
-- 在 app 私有目录初始化或 clone 一个 repo。
-- 写入一篇 Markdown 日记。
-- `add`、`commit`、`push` 到 GitHub 私有仓库。
-- 从远端 `fetch` 或 `pull` 回来。
-- 验证新增、修改、删除文件都能稳定工作。
-- 验证少量图片文件能随日记一起同步。
+认证第一版支持 HTTPS + GitHub token。token 保存在系统安全存储里；仓库 URL 会拒绝包含用户名或 token 的危险格式。
 
-认证第一版优先支持 HTTPS + GitHub token 或 OAuth，不急着支持 SSH。token 或 OAuth 凭据需要放在系统安全存储里，例如 iOS Keychain / Android Keystore，对 Expo 来说可以先评估 Expo SecureStore。
+### 7.4 同步流程
 
-### 7.3 同步流程
+同步以自动后台协调为主，手动“立即同步”作为显式入口。
 
-第一版同步以手动触发为主，自动同步为辅。
+当前触发来源：
 
-推荐优先级：
+- 打开 app / 回到前台时拉取。
+- 保存后延迟推送。
+- 手动立即同步。
+- 进入后台前尝试保存并 flush。
+- 同步失败后的克制重试。
 
-1. 手动同步按钮。
-2. 打开 app 时拉取。
-3. 保存后延迟推送。
-4. 网络恢复后重试。
-
-移动端同步流程：
+通用同步流程：
 
 ```txt
-打开 app / 手动同步
+打开 app / 手动同步 / 保存后空闲
   -> 把本地未提交改动写成 commit
   -> fetch 远端
   -> 如果可以 fast-forward，则直接更新本地
@@ -230,7 +235,7 @@ POC 需要覆盖：
   -> 如果 push 被远端新提交拒绝，则 fetch 后重试一次
 ```
 
-### 7.4 冲突策略
+### 7.5 冲突策略
 
 第一版从整文件 last-write-wins 调整为保守的文本合并：优先不丢内容，无法自动判断时显式暴露冲突。
 
@@ -244,7 +249,7 @@ POC 需要覆盖：
 
 这个策略可能让少量 true conflict 需要手动处理，但比静默覆盖任意一端内容更安全。
 
-### 7.5 第一版暂不做
+### 7.6 第一版暂不做
 
 - 后台实时同步。
 - 多人协作。
@@ -255,42 +260,55 @@ POC 需要覆盖：
 - SSH 同步。
 - 依赖外部 Git 客户端作为产品主流程。
 
-### 7.6 备选方案
+### 7.7 备选方案
 
-如果 `isomorphic-git` POC 在移动端不稳定，再考虑：
+如果后续真实数据规模或平台限制证明 `isomorphic-git` 难以继续承载，再考虑：
 
 - 原生 Git 库：用 `libgit2` 或其他原生实现，通过 Expo native module 暴露给 React Native。这条路更稳也更重，需要 Development Build，并增加 iOS/Android 原生维护成本。
 - GitHub REST API / Git Data API：作为 fallback 或辅助能力，用于创建 repo、检查权限、读取远端信息，或在 Git 协议路线无法满足时做轻量同步。
 - 外部 Git 客户端：例如 iOS 的 Working Copy 或跨平台 GitSync。这更适合高级用户手动配置，不适合作为默认产品流程。
 
-## 8. 移动端第一版范围
+## 8. 移动端当前范围
 
-第一版只做三个核心页面。
+当前移动端已经拆出五个 stack screen。
 
-### 8.1 今日
+### 8.1 Today
 
 - 显示今天日期。
 - 长日记输入区。
 - 碎碎念快速输入。
-- 添加图片或拍照。
+- 添加图片或拍照，图片落盘到 `media/YYYY/MM/` 并写入 murmur image block。
 - 自动保存。
 - 保存状态。
-- 同步状态。
+- 顶部轻量同步状态。
 
-### 8.2 回看
+### 8.2 JournalList
 
-- 日历或日期列表。
-- 有内容的日期高亮。
-- 打开某一天查看长日记、碎碎念和图片。
-- 第一版可以先只读，编辑历史日记后置。
+- 读取本地 `entries/`。
+- 按日期倒序展示已有日记。
+- 展示长日记预览和碎碎念数量。
+- 当前只做列表预览，不做历史日记编辑。
 
-### 8.3 设置
+### 8.3 Review
+
+- 展示今天长日记字数。
+- 展示今天碎碎念数量。
+- 作为后续回顾能力的入口占位。
+
+### 8.4 Settings
 
 - GitHub 同步仓库配置。
-- 登录或填写 GitHub token。
-- 本地数据位置说明。
-- 导入桌面端日记包。
-- 导出移动端日记包。
+- GitHub token 保存。
+- 分支配置。
+
+### 8.5 SyncSettings
+
+- 同步状态。
+- 最近同步时间。
+- 待处理原因。
+- 最近 commit。
+- 立即同步入口。
+- 跳转同步配置。
 
 第一版不做：
 
@@ -301,19 +319,23 @@ POC 需要覆盖：
 - 复杂富文本编辑器。
 - 密码锁和生物识别。
 - iCloud、WebDAV 或其他同步通道。
+- 历史日记编辑。
+- 导入导出包。
 
 ## 9. React Native 技术栈
 
-建议使用：
+当前使用：
 
 - Expo SDK 54。
 - React Native。
 - TypeScript。
-- Expo Router 或 React Navigation。
+- React Navigation native stack。
 - Expo FileSystem。
 - Expo ImagePicker。
 - `isomorphic-git`。
-- `lucide-react-native` 或 Expo 生态主流图标库。
+- NativeWind。
+- `@expo/vector-icons`。
+- `@journal/theme` 提供主题 token 和像素化 layout token。
 
 倾向先用 Expo，因为早期最重要的是快速真机验证和稳定打包。等确实遇到原生能力缺口，再通过 Development Build 或 config plugin 解决。
 
@@ -375,9 +397,9 @@ POC 需要覆盖：
 - 移动端仍能引用 `@journal/core`。
 - 根目录脚本能清楚区分 desktop、mobile 和 packages。
 
-### 阶段 4：`isomorphic-git` 同步 POC（已完成真实远端 POC）
+### 阶段 4：共享 Git 同步核心（已完成真实远端 POC，并进入产品链路）
 
-目标：验证移动端能否稳定使用 GitHub 私有仓库同步。
+目标：验证并沉淀桌面端、移动端共用的 GitHub 私有仓库同步核心。
 
 任务：
 
@@ -398,6 +420,8 @@ POC 需要覆盖：
 - [x] 用少量图片文件做真实远端同步测试。
 - [x] 验证 push 被远端新提交拒绝后的 fetch / merge / retry。
 - [x] OAuth 后置，不进入第一轮 POC。
+- [x] 把 Git 同步核心上移到 `packages/journal-sync`，桌面端和移动端共用。
+- [x] 桌面端通过 Electron main 注入 Node runtime，移动端通过 Expo runtime 注入平台能力。
 
 完成标志：
 
@@ -432,17 +456,18 @@ POC 需要覆盖：
 限制：
 
 - 本机没有连接 Android 设备或模拟器，所以这次没有在 Expo Go UI 上手动点击“同步”按钮。
-- Android bundle 已通过移动端 workspace 本地 Expo CLI 验证，移动端服务层和真实 GitHub 远端链路已通过；后续真机 UI 回归可以继续使用这个永久测试仓库。
+- Android bundle 已通过移动端 workspace 本地 Expo CLI 验证，移动端服务层和真实 GitHub 远端链路已通过；后续真机 UI 回归应继续使用专用测试仓库，不使用真实日记仓库。
 
-### 阶段 5：图片与导入导出
+### 阶段 5：图片与导入导出（图片导入已落地，导入导出待做）
 
 目标：让移动端记录真正有用。
 
 任务：
 
-- 接入图片选择或拍照。
-- 图片落盘到移动端本地目录。
-- 图片 metadata 写入 murmur image block。
+- [x] 接入图片选择或拍照。
+- [x] 图片落盘到移动端本地目录。
+- [x] 图片 metadata 写入 murmur image block。
+- [x] 图片路径作为 `media/...` changed paths 参与保存后同步。
 - 支持图片压缩或尺寸限制。
 - 支持导出 Markdown + media。
 - 支持导入桌面端导出的 Markdown + media。
@@ -457,7 +482,7 @@ POC 需要覆盖：
 
 | 风险 | 验证方式 |
 | --- | --- |
-| `isomorphic-git` 在 React Native 文件系统上不稳定 | 阶段 4 已完成服务层、Android bundle 和真实 GitHub 远端 POC；后续继续用永久测试仓库做 Android 真机 UI 回归 |
+| `isomorphic-git` 在 React Native 文件系统上不稳定 | 阶段 4 已完成服务层、Android bundle、共享核心和真实 GitHub 远端 POC；后续继续用专用测试仓库做真机 UI 回归 |
 | GitHub token 管理不安全 | 使用系统安全存储，避免明文落盘 |
 | 后续索引层与 Markdown 状态不一致 | 第一版不引入 SQLite；未来如果加索引，必须可从 Markdown 重新生成 |
 | 图片导致 repo 变重 | 第一版限制图片尺寸或压缩，不做视频和 Git LFS |
@@ -466,28 +491,30 @@ POC 需要覆盖：
 
 ## 12. 下一步执行清单
 
-下一步进入 Android 真机 UI 回归。
+下一步优先补齐真机回归和媒体治理。
 
 执行顺序：
 
-1. 使用永久测试仓库 `nazhenhuiyi/journal-sync-poc-20260608095939`。
-2. 在 Android 真机 Expo Go 中填写 repo URL、branch 和 token，执行手动同步。
-3. 验证页面同步状态、错误提示和保存后的 token 输入框清空行为。
-4. 断网或填错 token 触发失败，确认本地 Markdown 仍保留。
+1. 使用专用 GitHub 测试仓库，不使用真实日记仓库。
+2. 在 iOS 模拟器、Android 模拟器或真机中跑移动端 E2E / 手动回归。
+3. 验证保存后延迟同步、打开 app 拉取、进入后台前 flush、手动立即同步。
+4. 验证错误提示、危险远端地址拦截和保存后的 token 输入框清空行为。
+5. 补图片压缩或尺寸限制策略。
+6. 设计 Markdown + media 的导入导出包格式。
 
 ## 13. 仍需确认
 
 - 移动端第一版是先做 iOS，还是 iOS 和 Android 一起做。
-- 历史日记第一版是否允许编辑，还是只允许查看。
+- 历史日记是否允许编辑；当前移动端只展示列表预览。
 - 图片默认保存原图，还是默认压缩。
-- 手动同步是否作为唯一入口，还是打开 app 时也自动拉取；当前 POC 只做手动同步。
-- `isomorphic-git` POC 失败时，是否接受进入原生 Git 库路线。
+- 导入导出包的格式和冲突处理。
+- 真实数据规模下是否需要 repo / media 体积阈值和“重建本地同步副本”入口。
 
 ## 14. 参考资料
 
 - React Native 文档：https://reactnative.dev/docs/getting-started
 - Expo 工作流：https://docs.expo.dev/workflow/overview
-- Expo Router：https://docs.expo.dev/router/introduction
+- React Navigation：https://reactnavigation.org/
 - Expo ImagePicker：https://docs.expo.dev/versions/latest/sdk/imagepicker/
 - isomorphic-git：https://isomorphic-git.org/
 - isomorphic-git React Native 示例：https://github.com/isomorphic-git/examples/tree/master/ReactNativeGit

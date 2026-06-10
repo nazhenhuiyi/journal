@@ -107,7 +107,18 @@
 
 ## 5. 当前可执行流程
 
-正式验收脚本还没完全落地前，可以按下面方式做真实桌面端验收。
+优先使用已经落地的 Playwright Electron E2E：
+
+```sh
+npm run e2e:desktop
+npm run e2e:desktop:sync
+```
+
+`npm run e2e:desktop` 使用隔离 journal 目录、隔离 Electron userData，并设置 `JOURNAL_DISABLE_WEATHER=1`，适合日常界面和本地保存回归。
+
+`npm run e2e:desktop:sync` 使用真实 GitHub 测试仓库，需要 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`，适合验证应用层真实同步。不要用真实日记仓库跑这条测试。
+
+下面的手动流程只作为临场排查、视觉确认或远程调试 fallback。
 
 ### 5.1 重新构建桌面端
 
@@ -343,52 +354,40 @@ git -C ~/.journal ls-remote origin refs/heads/main
 
 优先使用语义和 `aria-label`。只有语义不够稳定时，再加测试标记。
 
-## 11. 未来脚本建议
+## 11. 脚本维护建议
 
-后面可以补三个命令：
-
-```json
-{
-  "scripts": {
-    "qa:desktop": "npm --workspace @journal/desktop run qa",
-    "qa:desktop:ui": "npm --workspace @journal/desktop run qa:ui",
-    "qa:desktop:sync": "npm --workspace @journal/desktop run qa:sync"
-  }
-}
-```
-
-桌面端内部：
+当前根目录已经有这些稳定入口：
 
 ```json
 {
   "scripts": {
-    "qa": "npm run qa:ui && npm run qa:sync",
-    "qa:ui": "tsx scripts/qa/desktop-ui-check.ts",
-    "qa:sync": "tsx scripts/qa/desktop-sync-check.ts"
+    "e2e:desktop": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts",
+    "e2e:desktop:sync": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop-sync.spec.ts",
+    "e2e:desktop:all": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts e2e/desktop-sync.spec.ts"
   }
 }
 ```
 
-脚本应该做这些事：
+继续维护这些脚本时要保证：
 
-- 自动选择空闲端口。
-- 单独启动网页开发服务器。
-- 手动启动 Electron，并打开远程调试端口。
-- 等待页面真正打开。
-- 封装“聚焦日记编辑器”和“输入正文”。
-- 封装 Git 检查：当前分支、未提交改动、本地远端是否一致、最新提交内容。
-- 失败时输出清楚摘要。
-- 退出时只清理本轮启动的进程。
+- 自动选择隔离 `JOURNAL_DIR` 和 `JOURNAL_USER_DATA_DIR`。
+- 默认关闭天气请求。
+- 启动真实 Electron 应用，而不是只测浏览器预览。
+- 使用 CodeMirror 的真实 textbox 输入路径。
+- 同步测试只使用专用 GitHub 测试仓库。
+- 失败时输出 journal 目录、关键日志和 Git 状态摘要，但不要把 GitHub token 写进截图、trace 或对话。
+- 退出时只清理本轮启动的进程和临时目录。
 
-## 12. 落地顺序
+如果以后需要补 `qa:*` 脚本，应复用现有 `e2e/desktopApp.ts` 的隔离启动能力，而不是重新写一套启动流程。
 
-建议按这个顺序做：
+## 12. 后续补强顺序
 
-1. 主进程支持指定日记目录、关闭自动同步、标记验收模式。
-2. 页面暴露“已就绪”和当前状态，方便脚本等待。
-3. 补齐关键控件的可访问名称。
-4. 先做界面验收脚本，默认使用临时目录。
-5. 再做同步验收脚本，使用专用 GitHub 测试仓库。
-6. 真实 `~/.journal` 验收只在用户明确要求时执行。
+建议按这个顺序继续补：
+
+1. 继续补齐关键控件的可访问名称，少依赖 CSS class。
+2. 页面暴露更稳定的“已就绪”和当前保存/同步状态，方便脚本等待。
+3. 给失败输出补结构化摘要：当前路由、保存状态、同步状态、dirty paths、最近 commit。
+4. 视觉确认仍以真实 Electron 窗口为准，浏览器预览只作为补充。
+5. 真实 `~/.journal` 验收只在用户明确要求时执行。
 
 这样既能提高验收效率，也能减少对真实日记和真实远端仓库的打扰。

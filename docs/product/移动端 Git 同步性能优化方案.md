@@ -104,12 +104,13 @@
 当前状态：
 
 - `mobileJournalStore.ts` 保存成功会返回 `entries/YYYY/MM/YYYY-MM-DD.md`。
-- `useMobileSync.ts` 会把 changed paths 传给 `syncMobileJournalWithGitHub`。
+- 图片导入会把 `media/YYYY/MM/...` 作为 additional changed paths 合并进保存结果。
+- `mobileSyncManager.ts` 会把 changed paths 传给 `syncMobileJournalWithGitHub`。
 - `gitCore.ts` 中 `commitTrackedChanges` 会用 `changedPaths` 限制 `statusMatrix`。
 
 建议补强：
 
-- 对图片、批注、manifest 的保存路径也统一返回 changed paths。
+- 对未来批注、manifest、导入导出包写入路径也统一返回 changed paths。
 - 对手动“全量同步”保留完整扫描，但保存后延迟同步尽量只传已知路径。
 - trace 里继续记录 `changedPathCount` 和 `collectDirtyPathsAfterSync`，方便定位是否走了全量 fallback。
 
@@ -142,15 +143,15 @@
 - 单文件变更行为保持不变。
 - 删除文件仍能正确从 index 移除。
 
-### P1：缓存已确认存在的父目录
+### P1：缓存已确认存在的父目录（已采用）
 
 目标：
 
 - 减少 Git 写 object 时对同一批父目录重复 `getInfoAsync`。
 
-建议做法：
+当前做法：
 
-- `createExpoGitFileSystem()` 内部维护一个 `existingDirectoryPaths = new Set<string>()`。
+- `createExpoGitFileSystem()` 内部维护一个 `knownDirectoryPaths = new Set<string>()`。
 - `ensureParentDirectory(path)` 如果 parent 已在 set 中，直接返回。
 - 成功创建目录或确认目录存在后，把 parent 加入 set。
 - `mkdirPath` 成功后把该目录加入 set。
@@ -245,9 +246,9 @@
 ## 推荐实施顺序
 
 1. 已完成：加 runtime-level `cache`，覆盖共享同步核心和移动端测试。
-2. 补强 changed paths，确认保存后同步不会退回全量扫描。
-3. 批量 `git.add`，改善批量文件场景。
-4. 给 Expo Git FS adapter 加父目录存在缓存。
+2. 已完成：保存日记和导入图片会传 known changed paths，保存后同步不默认退回全量扫描。
+3. 已完成：给 Expo Git FS adapter 加父目录存在缓存。
+4. 批量 `git.add`，改善批量文件场景。
 5. 评估现代 `Paths.info` / `File.info` / `Directory.info` 替换 legacy metadata API。
 6. clone 增加 `noTags`，再单独评估 `nonBlocking` 和 shallow clone。
 7. 建立 repo / media 体积指标和阈值策略。
