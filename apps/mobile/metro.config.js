@@ -10,8 +10,14 @@ const workspaceNodeModules = path.resolve(workspaceRoot, 'node_modules')
 const config = getDefaultConfig(projectRoot)
 const nativeWindInput = path.resolve(projectRoot, 'global.css')
 const nativeWindTailwindConfig = path.resolve(projectRoot, 'tailwind.config.js')
+const e2eHmrShimPath = path.resolve(projectRoot, 'src/shims/expoHmrE2e.ts')
 const expoSetupHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/setupHMR.ts')
+const workspaceExpoSetupHmrPath = path.resolve(workspaceNodeModules, 'expo/src/async-require/setupHMR.ts')
 const expoNativeHmrPath = path.resolve(appNodeModules, 'expo/src/async-require/hmr.native.ts')
+const isMobileE2e = Boolean(
+  process.env.JOURNAL_MOBILE_E2E_RUN_ID ||
+  process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID,
+)
 const packageEntries = {
   'webidl-conversions': path.resolve(
     workspaceNodeModules,
@@ -41,13 +47,24 @@ config.resolver.extraNodeModules = {
 }
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (
+    isMobileE2e &&
     platform !== 'web' &&
-    moduleName === './hmr' &&
-    path.normalize(context.originModulePath ?? '') === expoSetupHmrPath
+    isHmrClientModule(moduleName)
   ) {
     return {
       type: 'sourceFile',
-      filePath: expoNativeHmrPath,
+      filePath: e2eHmrShimPath,
+    }
+  }
+
+  if (
+    platform !== 'web' &&
+    moduleName === './hmr' &&
+    isExpoSetupHmrPath(context.originModulePath)
+  ) {
+    return {
+      type: 'sourceFile',
+      filePath: isMobileE2e ? e2eHmrShimPath : expoNativeHmrPath,
     }
   }
 
@@ -69,3 +86,18 @@ module.exports = withNativeWind(config, {
   forceWriteFileSystem: true,
   input: nativeWindInput,
 })
+
+function isExpoSetupHmrPath(originModulePath) {
+  const normalizedPath = path.normalize(originModulePath ?? '')
+
+  return normalizedPath === expoSetupHmrPath || normalizedPath === workspaceExpoSetupHmrPath
+}
+
+function isHmrClientModule(moduleName) {
+  const normalizedName = moduleName.replace(/\\/g, '/')
+
+  return normalizedName === 'react-native/Libraries/Utilities/HMRClient' ||
+    normalizedName === 'react-native/Libraries/Utilities/HMRClient.js' ||
+    normalizedName.endsWith('/Utilities/HMRClient') ||
+    normalizedName.endsWith('/Utilities/HMRClient.js')
+}

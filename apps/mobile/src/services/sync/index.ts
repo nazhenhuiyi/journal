@@ -37,3 +37,10 @@ export {
   loadPendingMobileSyncPaths,
   savePendingMobileSyncPaths,
 } from './pendingSyncPaths'
+export {
+  mobileSyncManager,
+  type MobileSyncActionResult,
+  type MobileSyncManagerState,
+  type MobileSyncRuntimeBinding,
+  type MobileSyncSaveState,
+} from './mobileSyncManager'

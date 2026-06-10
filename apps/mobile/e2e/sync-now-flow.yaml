@@ -1,32 +1,46 @@
 appId: ${APP_ID}
 env:
-  EXPO_URL: exp://127.0.0.1:8081
-  ENTRY_TEXT: Mobile E2E sync now saved from Maestro
+  MURMUR_TEXT: Mobile E2E sync now saved from Maestro
 ---
 - runFlow: _open-expo.yaml
 - tapOn:
-    id: long-entry-input
-- inputText: ${ENTRY_TEXT}
+    id: murmur-count-button
 - tapOn:
-    id: settings-button
-- assertVisible: 设置
+    id: murmur-draft-input
+- inputText: ${MURMUR_TEXT}
+- tapOn:
+    id: add-murmur-button
+    enabled: true
+- assertVisible: ${MURMUR_TEXT}
+- tapOn:
+    point: "50%,12%"
+- tapOn:
+    point: "50%,12%"
+- tapOn:
+    id: sync-status-button
+- assertVisible: 远端同步
+- tapOn:
+    id: open-sync-configuration-button
 - tapOn:
     id: sync-remote-url-input
 - eraseText: 200
 - inputText: ${REMOTE_URL}
-- tapOn:
-    id: Return
+- hideKeyboard
 - tapOn:
     id: sync-branch-input
 - eraseText
 - inputText: ${SYNC_BRANCH}
-- tapOn:
-    id: Return
+- hideKeyboard
 - tapOn:
     id: sync-token-input
 - inputText: ${SYNC_TOKEN}
+- hideKeyboard
 - tapOn:
-    id: Return
+    id: save-sync-config-button
+    enabled: true
+- tapOn:
+    point: "8%,12%"
+- assertVisible: 远端同步
 - tapOn:
     id: sync-now-button
     enabled: true

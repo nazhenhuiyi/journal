@@ -1,7 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { Settings2 } from 'lucide-react'
-import type { JournalSyncCoordinator } from '@journal/sync/scheduler'
 import SegmentedControl from '../components/SegmentedControl'
 import {
   parseJournalMarkdown,
@@ -12,6 +11,7 @@ import {
 import {
   renderJournalMarkdown,
 } from '../domain/markdown'
+import { desktopSyncManager } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
 import JournalWeatherHeader from './markdown-preview/JournalWeatherHeader'
@@ -172,8 +172,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
   const [isEditorComposing, setIsEditorComposing] = useState(false)
   const [hasLoadedJournal, setHasLoadedJournal] = useState(false)
   const [hasPendingJournalEdit, setHasPendingJournalEditState] = useState(false)
-  const coordinatorRef = useRef<JournalSyncCoordinator | null>(null)
-  const markLocalSaveRef = useRef<((changedPaths: readonly string[]) => void) | null>(null)
   const pendingImportedMediaPathsRef = useRef<string[]>([])
   const isEditorComposingRef = useRef(false)
   const isJournalDirtyRef = useRef(false)
@@ -196,7 +194,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     refreshTodayWeather,
     weatherStatus,
   } = useTodayWeather({
-    coordinatorRef,
     journalFileRef,
     saveRequestIdRef,
     setJournalFile,
@@ -345,7 +342,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
       const pendingImportedMediaPaths = pendingImportedMediaPathsRef.current
 
       if ((options.scheduleSync ?? true) && (didJournalFileWrite(savedFile) || pendingImportedMediaPaths.length > 0)) {
-        markLocalSaveRef.current?.(getJournalFileTrackedPaths(savedFile, pendingImportedMediaPaths))
+        desktopSyncManager.markLocalSave(getJournalFileTrackedPaths(savedFile, pendingImportedMediaPaths))
         pendingImportedMediaPathsRef.current = []
       }
 
@@ -371,7 +368,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     syncStatus,
   } = useDesktopJournalSync({
     automaticPushDelayMs: AUTOSAVE_DELAY_MS,
-    coordinatorRef,
     flushPendingSave,
     hasUnsavedLocalChanges: hasPendingUnsavedJournalChanges || isEditorComposing,
     isEditorComposingRef,
@@ -379,7 +375,6 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
     journalFileRef,
     lastJournalEditedAtRef,
     loadJournalForDate,
-    markLocalSaveRef,
   })
   const SyncStatusIcon = syncStatus.icon
 
@@ -495,7 +490,7 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
           journalFileRef.current = file
           setJournalFile(file)
           if (didJournalFileWrite(file) || pendingImportedMediaPaths.length > 0) {
-            markLocalSaveRef.current?.(getJournalFileTrackedPaths(file, pendingImportedMediaPaths))
+            desktopSyncManager.markLocalSave(getJournalFileTrackedPaths(file, pendingImportedMediaPaths))
             pendingImportedMediaPathsRef.current = []
           }
           setHasPendingJournalEdit(false)

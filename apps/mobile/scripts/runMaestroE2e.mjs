@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import net from 'node:net'
 import process from 'node:process'
 
 const maestroCommand = resolveMaestroCommand()
 const toolEnv = createToolEnv()
 const expoPort = Number(process.env.JOURNAL_MOBILE_E2E_EXPO_PORT || 8081)
-const expoHost = process.env.JOURNAL_MOBILE_E2E_EXPO_HOST || '127.0.0.1'
+const expoHost = process.env.JOURNAL_MOBILE_E2E_EXPO_HOST || 'localhost'
 const expoUrl = process.env.JOURNAL_MOBILE_E2E_EXPO_URL || `exp://${expoHost}:${expoPort}`
 const appId = process.env.JOURNAL_MOBILE_E2E_APP_ID || 'host.exp.Exponent'
 const e2eRunId = process.env.JOURNAL_MOBILE_E2E_RUN_ID || `maestro-${Date.now()}`
@@ -41,7 +41,21 @@ const flowPaths = flowArgs.length > 0
     ]
 const shouldRunSyncFlow = flowPaths.some(isSyncFlowPath)
 const githubRemote = syncRemoteUrl ? parseGitHubRemote(syncRemoteUrl) : null
+const shouldManageSyncBranch = Boolean(
+  shouldRunSyncFlow &&
+  hasGitHubSyncConfig &&
+  githubRemote &&
+  !explicitSyncBranch,
+)
+const runnerManagedMaestroEnvKeys = [
+  'APP_ID',
+  'EXPO_URL',
+  'REMOTE_URL',
+  'SYNC_BRANCH',
+  'SYNC_TOKEN',
+]
 
+validateMaestroFlowFiles(flowPaths)
 assertCommandAvailable(maestroCommand, [
   'Maestro CLI is required for mobile native E2E.',
   'Install it from https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli',
@@ -70,8 +84,15 @@ if (shouldRunSyncFlow) {
 }
 
 let expoProcess = null
+let didCreateSyncBranch = false
 
 try {
+  if (shouldManageSyncBranch) {
+    console.info(`Creating GitHub E2E branch ${syncBranch}.`)
+    await createGitHubE2eBranch(githubRemote, syncBranch, syncToken)
+    didCreateSyncBranch = true
+  }
+
   if (shouldStartExpo) {
     expoProcess = startExpoServer(expoPort)
     await waitForPort(expoHost, expoPort, 60_000)
@@ -99,18 +120,13 @@ try {
   )
 
   process.exitCode = maestroResult.status ?? 1
-
-  if (
-    shouldRunSyncFlow &&
-    githubRemote &&
-    !explicitSyncBranch &&
-    !shouldKeepSyncBranch
-  ) {
-    await deleteGitHubE2eBranch(githubRemote, syncBranch, syncToken)
-  }
 } finally {
   if (expoProcess) {
     expoProcess.kill('SIGTERM')
+  }
+
+  if (didCreateSyncBranch && githubRemote && !shouldKeepSyncBranch) {
+    await cleanupGitHubE2eBranch(githubRemote, syncBranch, syncToken)
   }
 }
 
@@ -164,14 +180,19 @@ function resolveJavaHome() {
 }
 
 function startExpoServer(port) {
+  const expoCli = resolveExpoCliInvocation()
   const env = {
     ...process.env,
     EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID: e2eRunId,
+    NODE_OPTIONS: appendNodeOption(
+      process.env.NODE_OPTIONS ?? '',
+      '--dns-result-order=ipv4first',
+    ),
   }
   const child = spawn(
-    'npx',
+    expoCli.command,
     [
-      'expo',
+      ...expoCli.args,
       'start',
       '--localhost',
       '--clear',
@@ -197,6 +218,36 @@ function startExpoServer(port) {
   })
 
   return child
+}
+
+function resolveExpoCliInvocation() {
+  const localExpoCliCandidates = [
+    `${process.cwd()}/node_modules/.bin/expo`,
+    `${process.cwd()}/../../node_modules/.bin/expo`,
+  ]
+  const localExpoCli = localExpoCliCandidates.find((candidate) => existsSync(candidate))
+
+  if (localExpoCli) {
+    return {
+      args: [localExpoCli],
+      command: process.execPath,
+    }
+  }
+
+  return {
+    args: ['expo'],
+    command: 'npx',
+  }
+}
+
+function appendNodeOption(currentValue, nextOption) {
+  const options = currentValue.split(/\s+/).filter(Boolean)
+
+  if (options.includes(nextOption)) {
+    return currentValue
+  }
+
+  return [...options, nextOption].join(' ')
 }
 
 function createMaestroEnvArgs() {
@@ -246,6 +297,24 @@ function parseGitHubRemote(remoteUrl) {
   }
 }
 
+async function createGitHubE2eBranch(remote, branch, token) {
+  const defaultBranchSha = await getOrCreateDefaultBranchSha(remote, token)
+  const response = await fetch(createGitHubApiUrl(remote, '/git/refs'), {
+    body: JSON.stringify({
+      ref: `refs/heads/${branch}`,
+      sha: defaultBranchSha,
+    }),
+    headers: createGitHubHeaders(token),
+    method: 'POST',
+  })
+
+  if (response.status === 201) {
+    return
+  }
+
+  throw new Error(`GitHub E2E branch creation failed with ${response.status}: ${await response.text()}`)
+}
+
 async function deleteGitHubE2eBranch(remote, branch, token) {
   const response = await fetch(
     createGitHubApiUrl(remote, `/git/refs/${encodeGitHubRefPath(branch)}`),
@@ -259,7 +328,89 @@ async function deleteGitHubE2eBranch(remote, branch, token) {
     return
   }
 
-  console.warn(`GitHub E2E branch cleanup failed with ${response.status}: ${await response.text()}`)
+  throw new Error(`GitHub E2E branch cleanup failed with ${response.status}: ${await response.text()}`)
+}
+
+async function cleanupGitHubE2eBranch(remote, branch, token) {
+  const maxAttempts = 3
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await deleteGitHubE2eBranch(remote, branch, token)
+      return
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        console.warn(`GitHub E2E branch cleanup failed: ${getErrorMessage(error)}`)
+        return
+      }
+
+      await delay(1_000 * attempt)
+    }
+  }
+}
+
+async function getOrCreateDefaultBranchSha(remote, token) {
+  const repository = await requestGitHubJson(remote, '', token)
+  const defaultBranch = typeof repository.default_branch === 'string'
+    ? repository.default_branch
+    : 'main'
+  const existingSha = await getGitHubBranchSha(remote, defaultBranch, token)
+
+  if (existingSha) {
+    return existingSha
+  }
+
+  const response = await fetch(createGitHubApiUrl(remote, '/contents/.journal-e2e-bootstrap.md'), {
+    body: JSON.stringify({
+      branch: defaultBranch,
+      content: Buffer.from('Journal sync E2E bootstrap repository.\n').toString('base64'),
+      message: 'Initialize Journal sync E2E repository',
+    }),
+    headers: createGitHubHeaders(token),
+    method: 'PUT',
+  })
+
+  if (response.status !== 201 && response.status !== 200) {
+    throw new Error(`GitHub E2E bootstrap failed with ${response.status}: ${await response.text()}`)
+  }
+
+  const createdSha = await getGitHubBranchSha(remote, defaultBranch, token)
+
+  if (!createdSha) {
+    throw new Error(`GitHub E2E bootstrap did not create ${defaultBranch}.`)
+  }
+
+  return createdSha
+}
+
+async function getGitHubBranchSha(remote, branch, token) {
+  const response = await fetch(createGitHubApiUrl(remote, `/git/ref/${encodeGitHubRefPath(branch)}`), {
+    headers: createGitHubHeaders(token),
+  })
+
+  if (response.status === 404 || response.status === 409) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new Error(`GitHub branch lookup failed with ${response.status}: ${await response.text()}`)
+  }
+
+  const payload = await response.json()
+
+  return typeof payload.object?.sha === 'string' ? payload.object.sha : null
+}
+
+async function requestGitHubJson(remote, pathName, token) {
+  const response = await fetch(createGitHubApiUrl(remote, pathName), {
+    headers: createGitHubHeaders(token),
+  })
+
+  if (!response.ok) {
+    throw new Error(`GitHub request failed with ${response.status}: ${await response.text()}`)
+  }
+
+  return await response.json()
 }
 
 function createGitHubApiUrl(remote, pathName) {
@@ -314,4 +465,43 @@ function delay(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
+}
+
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function validateMaestroFlowFiles(paths) {
+  const violations = []
+
+  for (const flowPath of paths) {
+    const contents = readFileSync(flowPath, 'utf8')
+    const managedEnvRegex = createManagedEnvRegex()
+
+    for (const match of contents.matchAll(managedEnvRegex)) {
+      violations.push(`${flowPath}: remove flow-level ${match[1]}; runMaestroE2e injects it`)
+    }
+
+    if (/exp:\/\/(?:127\.0\.0\.1|localhost|[0-9.]+):\d+/.test(contents)) {
+      violations.push(`${flowPath}: use \${EXPO_URL}; do not hardcode an Expo URL`)
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error([
+      'Mobile E2E flow configuration is managed by scripts/runMaestroE2e.mjs.',
+      ...violations,
+    ].join('\n'))
+    process.exit(1)
+  }
+}
+
+function createManagedEnvRegex() {
+  const keys = runnerManagedMaestroEnvKeys.map(escapeRegex).join('|')
+
+  return new RegExp(`^\\s+(${keys})\\s*:`, 'gm')
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
