@@ -19,18 +19,24 @@ type ReadFileOptions = string | { encoding?: string | null } | null | undefined
 type WriteFileOptions = string | { encoding?: string | null } | null | undefined
 
 export function createExpoGitFileSystem(): FsClient {
+  const knownDirectoryPaths = new Set<string>()
+
   return {
     promises: {
       lstat: statPath,
-      mkdir: mkdirPath,
+      mkdir: (path: string) => mkdirPath(path, knownDirectoryPaths),
       readFile,
       readlink,
       readdir,
-      rmdir,
+      rmdir: (path: string) => rmdir(path, knownDirectoryPaths),
       stat: statPath,
       symlink,
       unlink,
-      writeFile,
+      writeFile: (
+        path: string,
+        data: string | Uint8Array,
+        options?: WriteFileOptions,
+      ) => writeFile(path, data, options, knownDirectoryPaths),
     },
   }
 }
@@ -60,11 +66,16 @@ async function readFile(path: string, options?: ReadFileOptions) {
   }
 }
 
-async function writeFile(path: string, data: string | Uint8Array, options?: WriteFileOptions) {
+async function writeFile(
+  path: string,
+  data: string | Uint8Array,
+  options: WriteFileOptions,
+  knownDirectoryPaths: Set<string>,
+) {
   const encoding = getEncoding(options)
   const file = new File(path)
 
-  await ensureParentDirectory(path)
+  await ensureParentDirectory(path, knownDirectoryPaths)
 
   if (typeof data === 'string' && (!encoding || encoding === 'utf8' || encoding === 'utf-8')) {
     try {
@@ -90,10 +101,16 @@ async function writeFile(path: string, data: string | Uint8Array, options?: Writ
   }
 }
 
-async function ensureParentDirectory(path: string) {
+async function ensureParentDirectory(path: string, knownDirectoryPaths: Set<string>) {
   const parentPath = getParentPath(path)
 
   if (!parentPath) {
+    return
+  }
+
+  const normalizedParentPath = normalizeDirectoryPath(parentPath)
+
+  if (knownDirectoryPaths.has(normalizedParentPath)) {
     return
   }
 
@@ -104,10 +121,12 @@ async function ensureParentDirectory(path: string) {
       throw createFileSystemError('ENOTDIR', parentPath)
     }
 
+    knownDirectoryPaths.add(normalizedParentPath)
     return
   }
 
   await FileSystem.makeDirectoryAsync(parentPath, { intermediates: true })
+  knownDirectoryPaths.add(normalizedParentPath)
 }
 
 async function unlink(path: string) {
@@ -130,7 +149,7 @@ async function readdir(path: string) {
   return FileSystem.readDirectoryAsync(path)
 }
 
-async function mkdirPath(path: string) {
+async function mkdirPath(path: string, knownDirectoryPaths: Set<string>) {
   const info = await FileSystem.getInfoAsync(path)
 
   if (info.exists) {
@@ -138,9 +157,10 @@ async function mkdirPath(path: string) {
   }
 
   await FileSystem.makeDirectoryAsync(path, { intermediates: false })
+  knownDirectoryPaths.add(normalizeDirectoryPath(path))
 }
 
-async function rmdir(path: string) {
+async function rmdir(path: string, knownDirectoryPaths: Set<string>) {
   const info = await getExistingInfo(path)
 
   if (!info.isDirectory) {
@@ -154,6 +174,7 @@ async function rmdir(path: string) {
   }
 
   await FileSystem.deleteAsync(path, { idempotent: false })
+  removeKnownDirectoryPath(knownDirectoryPaths, path)
 }
 
 async function readlink(path: string) {
@@ -214,6 +235,20 @@ function getParentPath(path: string) {
   }
 
   return normalizedPath.slice(0, separatorIndex)
+}
+
+function removeKnownDirectoryPath(knownDirectoryPaths: Set<string>, path: string) {
+  const normalizedPath = normalizeDirectoryPath(path)
+
+  for (const knownPath of knownDirectoryPaths) {
+    if (knownPath === normalizedPath || knownPath.startsWith(`${normalizedPath}/`)) {
+      knownDirectoryPaths.delete(knownPath)
+    }
+  }
+}
+
+function normalizeDirectoryPath(path: string) {
+  return path.endsWith('/') ? path.slice(0, -1) : path
 }
 
 function createFileSystemError(code: string, path: string) {
