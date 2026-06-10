@@ -1,4 +1,4 @@
-import { type ComponentProps, useCallback, useRef, useState } from 'react'
+import { type ComponentProps, useCallback, useState } from 'react'
 import {
   Alert,
   Image as NativeImage,
@@ -21,7 +21,6 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
   useMobileJournal,
-  type MobileLocalSaveHandler,
   type SaveState,
 } from './hooks/useMobileJournal'
 import { useMobileSync } from './hooks/useMobileSync'
@@ -75,7 +74,6 @@ export default function App() {
   const [murmurDraft, setMurmurDraft] = useState('')
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
-  const onLocalSaveRef = useRef<MobileLocalSaveHandler | null>(null)
   const {
     addMurmur,
     addImagesToMurmur,
@@ -94,7 +92,7 @@ export default function App() {
     removeMurmurImage,
     today,
     updateMurmurImageCaption,
-  } = useMobileJournal({ onLocalSaveRef })
+  } = useMobileJournal()
   const {
     gitStatusError,
     handleSyncNow,
@@ -115,7 +113,6 @@ export default function App() {
   } = useMobileSync({
     checkForDateRollover,
     isLongEntryInputUnstable,
-    onLocalSaveRef,
     reloadTodayFromDisk,
     reloadTodayFromDiskIfChanged,
     saveCurrentJournalRef,

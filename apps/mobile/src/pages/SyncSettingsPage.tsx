@@ -124,6 +124,16 @@ export function SyncSettingsPage({
                   >
                     立即同步
                   </Button>
+                  <Button
+                    disabled={isSyncBusy}
+                    icon="settings-outline"
+                    onPress={onOpenSyncConfiguration}
+                    size="sm"
+                    testID="open-sync-configuration-button"
+                    variant="secondary"
+                  >
+                    配置
+                  </Button>
                 </View>
               </Section>
             )}
@@ -238,6 +248,7 @@ const styles = StyleSheet.create({
   actionCard: {
     backgroundColor: semanticColors.surface,
     borderRadius: 8,
+    gap: 10,
     padding: 16,
   },
   commitRow: {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { motion } from 'motion/react'
 import {
   AlertCircle,
@@ -11,38 +11,30 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { Link } from 'react-router'
-import type { SyncSnapshot } from '@journal/sync/scheduler'
+import { desktopSyncManager, type DesktopSyncManagerState } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
 
-type JournalSyncStore = NonNullable<Window['journalSync']>
-type JournalSyncStatus = Awaited<ReturnType<JournalSyncStore['loadStatus']>>
-
-const initialSyncSnapshot: SyncSnapshot = {
-  lastError: null,
-  lastSyncedAt: null,
-  pendingReason: null,
-  status: 'idle',
-}
-
-function getJournalSyncStore() {
-  return typeof window === 'undefined' ? undefined : window.journalSync
-}
-
 function SettingsPage() {
-  const [dirtyPaths, setDirtyPaths] = useState<string[]>([])
-  const [credentialMessage, setCredentialMessage] = useState('')
-  const [credentialStatus, setCredentialStatus] = useState<JournalSyncStatus['credentialStatus']>('missing')
-  const [hasStoredSyncToken, setHasStoredSyncToken] = useState(false)
-  const [isLoadingSyncSettings, setIsLoadingSyncSettings] = useState(true)
-  const [isSavingSyncSettings, setIsSavingSyncSettings] = useState(false)
-  const [isSyncingNow, setIsSyncingNow] = useState(false)
-  const [recentCommits, setRecentCommits] = useState<JournalSyncStatus['recentCommits']>([])
-  const [syncBranch, setSyncBranch] = useState('main')
-  const [syncMessage, setSyncMessage] = useState('')
-  const [syncRemoteUrl, setSyncRemoteUrl] = useState('')
-  const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot>(initialSyncSnapshot)
-  const [syncTokenDraft, setSyncTokenDraft] = useState('')
+  const {
+    branch: syncBranch,
+    credentialMessage,
+    credentialStatus,
+    dirtyPaths,
+    hasCredentials: hasStoredSyncToken,
+    isLoadingSettings: isLoadingSyncSettings,
+    isSavingSettings: isSavingSyncSettings,
+    isSyncingNow,
+    message: syncMessage,
+    recentCommits,
+    remoteUrl: syncRemoteUrl,
+    snapshot: syncSnapshot,
+    tokenDraft: syncTokenDraft,
+  } = useSyncExternalStore(
+    desktopSyncManager.subscribe,
+    desktopSyncManager.getState,
+    desktopSyncManager.getState,
+  )
   const syncStatus = getSyncStatusPresentation(
     syncSnapshot,
     syncMessage,
@@ -64,187 +56,8 @@ function SettingsPage() {
   }, [dirtyPaths])
 
   useEffect(() => {
-    let isCancelled = false
-
-    async function loadSyncStatus() {
-      const journalSync = getJournalSyncStore()
-
-      if (!journalSync) {
-        setSyncSnapshot({
-          ...initialSyncSnapshot,
-          lastError: '当前环境还不能同步。',
-          status: 'error',
-        })
-        setSyncMessage('当前环境还不能同步')
-        setIsLoadingSyncSettings(false)
-        return
-      }
-
-      try {
-        const status = await journalSync.loadStatus()
-
-        if (!isCancelled) {
-          applySyncStatus(status)
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setSyncSnapshot({
-            ...initialSyncSnapshot,
-            lastError: getErrorMessage(error),
-            status: 'error',
-          })
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingSyncSettings(false)
-        }
-      }
-    }
-
-    void loadSyncStatus()
-
-    return () => {
-      isCancelled = true
-    }
+    void desktopSyncManager.refreshStatus()
   }, [])
-
-  function applySyncStatus(status: JournalSyncStatus) {
-    setCredentialMessage(status.credentialMessage ?? '')
-    setCredentialStatus(status.credentialStatus)
-    setDirtyPaths(status.dirtyPaths)
-    setHasStoredSyncToken(status.hasCredentials)
-    setRecentCommits(status.recentCommits)
-    setSyncBranch(status.branch)
-    setSyncRemoteUrl(status.remoteUrl)
-    setSyncSnapshot(createSyncSnapshotFromStatus(status))
-  }
-
-  async function saveSyncSettings(options: { showSuccessMessage?: boolean } = {}) {
-    const journalSync = getJournalSyncStore()
-
-    if (!journalSync) {
-      setSyncSnapshot({
-        ...initialSyncSnapshot,
-        lastError: '当前环境还不能同步。',
-        status: 'error',
-      })
-      setSyncMessage('当前环境还不能同步')
-      return null
-    }
-
-    setIsSavingSyncSettings(true)
-    setSyncMessage('')
-
-    try {
-      const status = await journalSync.saveSettings({
-        syncBranch: syncBranch.trim() || 'main',
-        syncRemoteUrl: syncRemoteUrl.trim(),
-        syncToken: syncTokenDraft.trim(),
-      })
-
-      applySyncStatus(status)
-      setSyncTokenDraft('')
-
-      if (options.showSuccessMessage ?? true) {
-        setSyncMessage('同步配置已保存')
-      }
-
-      return status
-    } catch (error) {
-      setSyncSnapshot((currentSnapshot) => ({
-        ...currentSnapshot,
-        lastError: getErrorMessage(error),
-        status: 'error',
-      }))
-      setSyncMessage('同步配置保存失败')
-      return null
-    } finally {
-      setIsSavingSyncSettings(false)
-    }
-  }
-
-  async function handleSaveSyncSettings() {
-    await saveSyncSettings({ showSuccessMessage: true })
-  }
-
-  async function handleSyncNow() {
-    const journalSync = getJournalSyncStore()
-
-    if (!journalSync) {
-      setSyncSnapshot({
-        ...initialSyncSnapshot,
-        lastError: '当前环境还不能同步。',
-        status: 'error',
-      })
-      setSyncMessage('当前环境还不能同步')
-      return
-    }
-
-    setIsSyncingNow(true)
-    setSyncMessage('')
-
-    try {
-      const savedStatus = await saveSyncSettings({ showSuccessMessage: false })
-
-      if (!savedStatus) {
-        return
-      }
-
-      if (!savedStatus.remoteUrl.trim()) {
-        setSyncSnapshot({
-          ...initialSyncSnapshot,
-          status: 'needs-auth',
-        })
-        setSyncMessage('请先填写仓库地址')
-        return
-      }
-
-      if (
-        savedStatus.credentialStatus === 'corrupt' ||
-        savedStatus.credentialStatus === 'encryption-unavailable'
-      ) {
-        setSyncSnapshot(createSyncSnapshotFromStatus(savedStatus))
-        setSyncMessage(savedStatus.credentialMessage ?? getCredentialStatusLabel(savedStatus.credentialStatus))
-        return
-      }
-
-      if (!savedStatus.hasCredentials) {
-        setSyncSnapshot({
-          ...initialSyncSnapshot,
-          status: 'needs-auth',
-        })
-        setSyncMessage('请先保存 GitHub token')
-        return
-      }
-
-      setSyncSnapshot({
-        ...initialSyncSnapshot,
-        status: 'syncing',
-      })
-
-      const result = await journalSync.syncNow()
-      const refreshedStatus = await journalSync.loadStatus()
-
-      applySyncStatus(refreshedStatus)
-      setSyncMessage(result.changed ? '同步完成' : '已经是最新')
-      setSyncSnapshot(refreshedStatus.dirtyPaths.length > 0
-        ? createSyncSnapshotFromStatus(refreshedStatus)
-        : {
-            ...initialSyncSnapshot,
-            lastSyncedAt: new Date().toISOString(),
-            status: 'synced',
-          })
-    } catch (error) {
-      setSyncSnapshot({
-        ...initialSyncSnapshot,
-        lastError: getErrorMessage(error),
-        status: 'error',
-      })
-      setSyncMessage('同步失败')
-    } finally {
-      setIsSyncingNow(false)
-    }
-  }
 
   return (
     <>
@@ -331,14 +144,14 @@ function SettingsPage() {
             className="settings-form"
             onSubmit={(event) => {
               event.preventDefault()
-              void handleSaveSyncSettings()
+              void desktopSyncManager.saveConfiguration({ showSuccessMessage: true })
             }}
           >
             <label className="settings-field settings-field-wide">
               <span>仓库地址</span>
               <input
                 disabled={disabled}
-                onChange={(event) => setSyncRemoteUrl(event.target.value)}
+                onChange={(event) => desktopSyncManager.setSyncRemoteUrl(event.target.value)}
                 placeholder="https://github.com/you/journal-sync.git"
                 value={syncRemoteUrl}
               />
@@ -350,7 +163,7 @@ function SettingsPage() {
                 <GitBranch aria-hidden="true" size={16} strokeWidth={2.15} />
                 <input
                   disabled={disabled}
-                  onChange={(event) => setSyncBranch(event.target.value)}
+                  onChange={(event) => desktopSyncManager.setSyncBranch(event.target.value)}
                   placeholder="main"
                   value={syncBranch}
                 />
@@ -363,7 +176,7 @@ function SettingsPage() {
                 <KeyRound aria-hidden="true" size={16} strokeWidth={2.15} />
                 <input
                   disabled={disabled}
-                  onChange={(event) => setSyncTokenDraft(event.target.value)}
+                  onChange={(event) => desktopSyncManager.setSyncTokenDraft(event.target.value)}
                   placeholder={hasStoredSyncToken ? '已保存，留空不改' : 'ghp_...'}
                   type="password"
                   value={syncTokenDraft}
@@ -395,7 +208,7 @@ function SettingsPage() {
               <button
                 className="settings-primary-button"
                 disabled={disabled}
-                onClick={() => void handleSyncNow()}
+                onClick={() => void desktopSyncManager.syncNow()}
                 type="button"
               >
                 {isSyncingNow ? (
@@ -420,28 +233,8 @@ function SettingsPage() {
   )
 }
 
-function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
-  if (status.credentialStatus === 'corrupt' || status.credentialStatus === 'encryption-unavailable') {
-    return {
-      ...initialSyncSnapshot,
-      lastError: status.credentialMessage ?? getCredentialStatusLabel(status.credentialStatus),
-      status: 'error',
-    }
-  }
-
-  if (status.dirtyPaths.length > 0) {
-    return {
-      ...initialSyncSnapshot,
-      pendingReason: 'local-save',
-      status: 'pending',
-    }
-  }
-
-  return initialSyncSnapshot
-}
-
 function getTokenHint(
-  credentialStatus: JournalSyncStatus['credentialStatus'],
+  credentialStatus: DesktopSyncManagerState['credentialStatus'],
   credentialMessage: string,
   hasStoredSyncToken: boolean,
 ) {
@@ -456,7 +249,7 @@ function getTokenHint(
   return '保存 Token 后才能访问私有仓库。'
 }
 
-function getCredentialStatusLabel(status: JournalSyncStatus['credentialStatus']) {
+function getCredentialStatusLabel(status: DesktopSyncManagerState['credentialStatus']) {
   if (status === 'corrupt') {
     return 'GitHub token 无法读取，请重新保存。'
   }
@@ -466,10 +259,6 @@ function getCredentialStatusLabel(status: JournalSyncStatus['credentialStatus'])
   }
 
   return '请先保存 GitHub token。'
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '同步过程中出现未知错误。'
 }
 
 function formatCommitTime(value: string | null) {

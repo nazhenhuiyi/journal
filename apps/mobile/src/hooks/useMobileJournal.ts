@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import { Alert } from 'react-native'
 import type { ImageBlock, MurmurBlock } from '@journal/core'
 import { shouldDeferBackgroundSyncForInput } from '../services/inputStability'
+import { mobileSyncManager } from '../services/sync/mobileSyncManager'
 import {
   createMurmur,
   getLocalDateKey,
@@ -20,10 +21,6 @@ export type SaveCurrentJournalOptions = {
   showAlert?: boolean
 }
 
-export type MobileLocalSaveHandler = (changedPaths: readonly string[]) => void
-
-export type MobileLocalSaveHandlerRef = MutableRefObject<MobileLocalSaveHandler | null>
-
 export type SaveCurrentJournalRef = MutableRefObject<(
   (options?: SaveCurrentJournalOptions) => Promise<SaveDailyJournalResult | null>
 ) | null>
@@ -31,11 +28,7 @@ export type SaveCurrentJournalRef = MutableRefObject<(
 const dateRolloverCheckMs = 60_000
 const localSaveDebounceMs = 5_000
 
-type UseMobileJournalOptions = {
-  onLocalSaveRef: MobileLocalSaveHandlerRef
-}
-
-export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
+export function useMobileJournal() {
   const [today, setToday] = useState(() => getLocalDateKey())
   const [record, setRecord] = useState<MobileJournalRecord | null>(null)
   const [longEntryMarkdown, setLongEntryMarkdown] = useState('')
@@ -152,7 +145,7 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
       }
 
       if (shouldScheduleSync && savedRecord.didWrite) {
-        onLocalSaveRef.current?.(savedRecord.changedPaths)
+        mobileSyncManager.markLocalSave(savedRecord.changedPaths)
       }
 
       return savedRecord
@@ -166,7 +159,7 @@ export function useMobileJournal({ onLocalSaveRef }: UseMobileJournalOptions) {
 
       return null
     }
-  }, [longEntryMarkdown, murmurs, onLocalSaveRef, today])
+  }, [longEntryMarkdown, murmurs, today])
 
   useEffect(() => {
     saveCurrentJournalRef.current = (options?: SaveCurrentJournalOptions) => {

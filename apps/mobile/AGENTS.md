@@ -10,3 +10,4 @@
 - 不要在移动端重复实现共享 Git 流程、Markdown 数据结构或同步调度规则；这类逻辑优先放到共享包。
 - 修改移动端保存或同步链路时，要确认本地保存、输入稳定窗口、离开 App 补保存、20 秒延迟推送之间的关系。
 - 移动端测试使用 Vitest。运行 `npm --workspace @journal/mobile run test` 和 `npm --workspace @journal/mobile run typecheck`。
+- Maestro 产物里的 `commands-*.json` 可能包含通过 `-e` 注入的 GitHub token；排查失败时优先看截图和 `maestro.log`，不要把 commands JSON 原样输出到对话里。

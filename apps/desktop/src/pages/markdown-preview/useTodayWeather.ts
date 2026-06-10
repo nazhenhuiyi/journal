@@ -4,14 +4,13 @@ import {
   parseJournalMarkdown,
   type DayFrontMatter,
 } from '@journal/core'
-import type { JournalSyncCoordinator } from '@journal/sync/scheduler'
+import { desktopSyncManager } from '../../services/sync/desktopSyncManager'
 import type { WeatherStatus } from './JournalWeatherHeader'
 import { stripManagedFrontMatter } from './managedJournalMarkdown'
 
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
 
 type UseTodayWeatherInput = {
-  coordinatorRef: MutableRefObject<JournalSyncCoordinator | null>
   journalFileRef: MutableRefObject<JournalFile | null>
   saveRequestIdRef: MutableRefObject<number>
   setJournalFile: Dispatch<SetStateAction<JournalFile | null>>
@@ -26,7 +25,6 @@ type UseTodayWeatherInput = {
 }
 
 export function useTodayWeather({
-  coordinatorRef,
   journalFileRef,
   saveRequestIdRef,
   setJournalFile,
@@ -97,7 +95,7 @@ export function useTodayWeather({
       setJournalFile(refreshedFile)
       setWeatherStatus(refreshedFrontMatter.weather?.text ? 'ready' : 'failed')
       if (didJournalFileWrite(refreshedFile)) {
-        coordinatorRef.current?.markLocalSave(getJournalFileTrackedPaths(refreshedFile))
+        desktopSyncManager.markLocalSave(getJournalFileTrackedPaths(refreshedFile))
       }
     } catch {
       if (journalFileRef.current?.date === loadedFile.date) {
@@ -105,7 +103,6 @@ export function useTodayWeather({
       }
     }
   }, [
-    coordinatorRef,
     journalFileRef,
     saveRequestIdRef,
     setJournalFile,
