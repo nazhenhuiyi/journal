@@ -13,6 +13,20 @@ export {
   stripJournalFrontMatter,
 } from './parseJournalMarkdown'
 export {
+  createReviewFile,
+  normalizeReviewFile,
+} from './reviewFiles'
+export {
+  createReviewMoments,
+  getSolarTermForDate,
+} from './reviewMoments'
+export {
+  BUILT_IN_THEMES,
+  getBuiltInThemeById,
+  getThemeLabel,
+  normalizeThemeIds,
+} from './themes'
+export {
   serializeJournalMarkdownBody,
   serializeMurmurBlock,
 } from './serializeJournalMarkdown'
@@ -44,9 +58,16 @@ export type {
   MarkdownDiagnostic,
   MurmurBlock,
   ParsedJournalEntry,
+  ReviewFile,
+  BuiltInTheme,
+  ReviewAnchor,
+  ReviewAnchorType,
+  ReviewMoment,
+  ReviewSourceDay,
   ResolvedAnnotationRange,
   ResolvedTextSelector,
   TextPosition,
   TextQuote,
   TextSelector,
+  ThemeInputMode,
 } from './types'

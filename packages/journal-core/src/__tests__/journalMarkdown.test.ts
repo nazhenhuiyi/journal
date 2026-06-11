@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createReviewMoments,
+  getSolarTermForDate,
   hasMeaningfulJournalChange,
   parseJournalMarkdown,
   serializeJournalFrontMatter,
@@ -40,6 +42,7 @@ time: 2026-04-24T21:38:00+08:00
       {
         id: 'm_20260424_213800',
         time: '2026-04-24T21:38:00+08:00',
+        themes: [],
         body: '窗外下雨了，声音很轻。',
         images: [],
       },
@@ -64,6 +67,7 @@ customNote: 保留`)
       {
         id: 'm_20260429_213800',
         time: '2026-04-29T21:38:00+08:00',
+        themes: ['sky-now', 'light-shadow'],
         body: '窗外下雨了。',
         images: [
           {
@@ -83,6 +87,7 @@ customNote: 保留`)
     ])
 
     expect(markdown).toContain(':::murmur\nid: m_20260429_213800')
+    expect(markdown).toContain('themes: [sky-now, light-shadow]')
     expect(markdown).toContain('::image\nid: img_20260429_213801')
     expect(markdown).toContain('locationSource: exif')
     expect(parseJournalMarkdown(markdown).murmurs[0].images[0]).toMatchObject({
@@ -94,6 +99,135 @@ customNote: 保留`)
         source: 'exif',
       },
       tags: ['雨', '窗户'],
+    })
+    expect(parseJournalMarkdown(markdown).murmurs[0].themes).toEqual(['sky-now', 'light-shadow'])
+  })
+
+  it('parses legacy murmurs without themes as an empty theme list', () => {
+    const parsed = parseJournalMarkdown(`:::murmur
+id: m_1
+time: 2026-06-08T09:00:00.000Z
+---
+一句碎碎念。
+:::`)
+
+    expect(parsed.murmurs[0]).toMatchObject({
+      id: 'm_1',
+      themes: [],
+    })
+  })
+
+  it('creates anchored review moments without using negative text hooks', () => {
+    const moments = createReviewMoments([
+      {
+        date: '2025-05-21',
+        frontMatter: {
+          date: '2025-05-21',
+          weather: {
+            text: '阴天',
+          },
+        },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20250521_183000',
+            time: '2025-05-21T18:30:00+08:00',
+            themes: ['sky-now'],
+            body: '风吹过树影很好。',
+            images: [],
+          },
+          {
+            id: 'm_20250521_190000',
+            time: '2025-05-21T19:00:00+08:00',
+            themes: ['small-thing'],
+            body: '今天真的很痛苦，快撑不住了。',
+            images: [],
+          },
+        ],
+      },
+      {
+        date: '2025-06-10',
+        frontMatter: { date: '2025-06-10' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20250610_070000',
+            time: '2025-06-10T07:00:00+08:00',
+            themes: ['sky-now'],
+            body: '云有一点发紫。',
+            images: [],
+          },
+        ],
+      },
+    ], {
+      today: '2026-05-21',
+    })
+
+    expect(moments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          anchors: expect.arrayContaining([
+            expect.objectContaining({ label: '小满', type: 'solarTerm' }),
+            expect.objectContaining({ label: '阴天', type: 'weather' }),
+            expect.objectContaining({ label: '傍晚', type: 'timeOfDay' }),
+            expect.objectContaining({ label: '此刻的天空', type: 'theme' }),
+          ]),
+          subtitle: '你写过一句：风吹过树影很好',
+          title: '那年今日，阴天',
+        }),
+        expect.objectContaining({
+          anchors: expect.arrayContaining([
+            expect.objectContaining({ label: '清晨', type: 'timeOfDay' }),
+            expect.objectContaining({ label: '此刻的天空', type: 'theme' }),
+          ]),
+          subtitle: '最近一次是 6 月 10 日，清晨',
+          title: '你留下过一些天空',
+        }),
+      ]),
+    )
+    expect(moments.map((moment) => moment.subtitle).join('\n')).not.toContain('撑不住')
+  })
+
+  it('calculates solar terms from year-specific calendar dates', () => {
+    expect(getSolarTermForDate('2026-04-04')).toBeNull()
+    expect(getSolarTermForDate('2026-04-05')).toEqual({
+      label: '清明',
+      value: 'term-07',
+    })
+    expect(getSolarTermForDate('2026-12-21')).toBeNull()
+    expect(getSolarTermForDate('2026-12-22')).toEqual({
+      label: '冬至',
+      value: 'term-00',
+    })
+    expect(getSolarTermForDate('not-a-date')).toBeNull()
+  })
+
+  it('matches review moments by solar term even when the Gregorian day shifts', () => {
+    const moments = createReviewMoments([
+      {
+        date: '2025-04-04',
+        frontMatter: { date: '2025-04-04' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20250404_091000',
+            time: '2025-04-04T09:10:00+08:00',
+            themes: [],
+            body: '路边的树忽然很亮。',
+            images: [],
+          },
+        ],
+      },
+    ], {
+      today: '2026-04-05',
+    })
+
+    expect(moments[0]).toMatchObject({
+      anchors: expect.arrayContaining([
+        expect.objectContaining({ label: '清明', type: 'solarTerm' }),
+      ]),
+      sourceDays: ['2025-04-04'],
+      title: '清明那天',
     })
   })
 

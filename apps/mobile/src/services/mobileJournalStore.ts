@@ -1,14 +1,20 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import {
+  createReviewFile,
+  createReviewMoments,
   createJournalMarkdownWithFrontMatter,
   hasMeaningfulJournalChange,
+  normalizeReviewFile,
   parseJournalMarkdown,
+  normalizeThemeIds,
   serializeJournalMarkdownBody,
   stripManagedFrontMatter,
   type DayFrontMatter,
   type ImageLocation,
   type MarkdownDiagnostic,
   type MurmurBlock,
+  type ReviewFile,
+  type ReviewSourceDay,
 } from '@journal/core'
 import { getMobileE2eRunId } from './e2eEnvironment'
 
@@ -25,6 +31,12 @@ export type MobileJournalRecord = {
 export type SaveDailyJournalResult = MobileJournalRecord & {
   changedPaths: string[]
   didWrite: boolean
+}
+
+export type LoadDailyReviewResult = {
+  changedPaths: string[]
+  didWrite: boolean
+  review: ReviewFile | null
 }
 
 type SaveJournalInput = {
@@ -84,12 +96,18 @@ export function getLocalDateKey(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-export function createMurmur(date: string, body: string, now = new Date()): MurmurBlock {
+export function createMurmur(
+  date: string,
+  body: string,
+  options: { now?: Date; themes?: readonly string[] } = {},
+): MurmurBlock {
+  const now = options.now ?? new Date()
   const timestamp = now.toISOString()
 
   return {
     id: createMurmurId(date, now),
     time: timestamp,
+    themes: normalizeThemeIds(options.themes),
     body: body.trim(),
     images: [],
   }
@@ -158,6 +176,70 @@ export async function listDailyJournals(): Promise<MobileJournalRecord[]> {
   }
 
   return records.sort((first, second) => second.date.localeCompare(first.date))
+}
+
+export async function loadDailyReview(date: string): Promise<ReviewFile | null> {
+  const filePath = await getReviewFilePath(date, false)
+  const fileInfo = await FileSystem.getInfoAsync(filePath)
+
+  if (!fileInfo.exists) {
+    return null
+  }
+
+  try {
+    const contents = await FileSystem.readAsStringAsync(filePath)
+    const parsed = JSON.parse(contents) as unknown
+    const review = normalizeReviewFile(parsed)
+
+    return review?.date === date ? review : null
+  } catch {
+    return null
+  }
+}
+
+export async function loadOrCreateDailyReview({
+  date,
+  sourceDays,
+}: {
+  date: string
+  sourceDays: readonly ReviewSourceDay[]
+}): Promise<LoadDailyReviewResult> {
+  const existingReview = await loadDailyReview(date)
+
+  if (existingReview) {
+    return {
+      changedPaths: [],
+      didWrite: false,
+      review: existingReview,
+    }
+  }
+
+  const moments = createReviewMoments(sourceDays, {
+    maxMoments: 5,
+    today: date,
+  })
+
+  if (moments.length === 0) {
+    return {
+      changedPaths: [],
+      didWrite: false,
+      review: null,
+    }
+  }
+
+  const review = createReviewFile({
+    date,
+    moments,
+  })
+  const filePath = await getReviewFilePath(date, true)
+
+  await FileSystem.writeAsStringAsync(filePath, `${JSON.stringify(review, null, 2)}\n`)
+
+  return {
+    changedPaths: [getReviewRepositoryPath(date)],
+    didWrite: true,
+    review,
+  }
 }
 
 export async function saveDailyJournal(input: SaveJournalInput): Promise<SaveDailyJournalResult> {
@@ -320,6 +402,12 @@ export function getEntryRepositoryPath(date: string) {
   return `entries/${year}/${month}/${date}.md`
 }
 
+export function getReviewRepositoryPath(date: string) {
+  const [year, month] = date.split('-')
+
+  return `reviews/${year}/${month}/${date}.json`
+}
+
 export function resolveJournalMediaFileUri(src: string) {
   const normalizedSrc = src.trim().replace(/^\.?\//, '')
 
@@ -337,6 +425,17 @@ async function getEntryFilePath(date: string) {
   await FileSystem.makeDirectoryAsync(entriesDirectory, { intermediates: true })
 
   return `${entriesDirectory}${date}.md`
+}
+
+async function getReviewFilePath(date: string, shouldEnsureDirectory: boolean) {
+  const [year, month] = date.split('-')
+  const reviewsDirectory = `${getJournalWorktreeDirectory()}reviews/${year}/${month}/`
+
+  if (shouldEnsureDirectory) {
+    await FileSystem.makeDirectoryAsync(reviewsDirectory, { intermediates: true })
+  }
+
+  return `${reviewsDirectory}${date}.json`
 }
 
 export async function ensureJournalWorktreeDirectory() {

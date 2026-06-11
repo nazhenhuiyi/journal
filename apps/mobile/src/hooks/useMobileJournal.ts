@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Alert } from 'react-native'
-import type { DayFrontMatter, ImageBlock, MurmurBlock } from '@journal/core'
+import {
+  normalizeThemeIds,
+  type DayFrontMatter,
+  type ImageBlock,
+  type MurmurBlock,
+} from '@journal/core'
 import { shouldDeferBackgroundSyncForInput } from '../services/inputStability'
 import { mobileSyncManager } from '../services/sync/mobileSyncManager'
 import {
@@ -219,7 +224,7 @@ export function useMobileJournal() {
     })
   ), [])
 
-  const addMurmur = useCallback(async (draft: string) => {
+  const addMurmur = useCallback(async (draft: string, themes: readonly string[] = []) => {
     const body = draft.trim()
 
     if (!body) {
@@ -227,7 +232,9 @@ export function useMobileJournal() {
     }
 
     const previousMurmurs = murmurs
-    const nextMurmurs = [...previousMurmurs, createMurmur(today, body)]
+    const nextMurmurs = [...previousMurmurs, createMurmur(today, body, {
+      themes: normalizeThemeIds(themes),
+    })]
 
     journalVersionRef.current += 1
     setMurmurs(nextMurmurs)
@@ -246,10 +253,12 @@ export function useMobileJournal() {
     body = '',
     images,
     murmurId,
+    themes = [],
   }: {
     body?: string
     images: readonly ImportedMobileJournalImage[]
     murmurId?: string | null
+    themes?: readonly string[]
   }) => {
     if (images.length === 0) {
       return false
@@ -269,7 +278,9 @@ export function useMobileJournal() {
       : [
           ...previousMurmurs,
           {
-            ...createMurmur(today, body),
+            ...createMurmur(today, body, {
+              themes: normalizeThemeIds(themes),
+            }),
             images: imageBlocks,
           },
         ]

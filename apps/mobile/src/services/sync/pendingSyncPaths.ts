@@ -52,6 +52,7 @@ function normalizePendingPaths(paths: readonly unknown[]) {
 function isSafePendingJournalPath(path: string) {
   return /^entries\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.md$/.test(path) ||
     /^annotations\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/.test(path) ||
+    /^reviews\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/.test(path) ||
     path === 'manifest.json' ||
     (path.startsWith('media/') && !path.split('/').some(isUnsafePathSegment))
 }

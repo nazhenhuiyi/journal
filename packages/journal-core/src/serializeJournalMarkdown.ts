@@ -1,4 +1,5 @@
 import type { ImageBlock, MurmurBlock } from './types'
+import { normalizeThemeIds } from './themes'
 
 export function serializeJournalMarkdownBody(longEntryMarkdown: string, murmurs: MurmurBlock[]) {
   const chunks = [longEntryMarkdown.trimEnd()]
@@ -11,12 +12,18 @@ export function serializeJournalMarkdownBody(longEntryMarkdown: string, murmurs:
 }
 
 export function serializeMurmurBlock(murmur: MurmurBlock) {
+  const themes = normalizeThemeIds(murmur.themes)
   const lines = [
     ':::murmur',
     `id: ${sanitizeMetadataValue(murmur.id)}`,
     `time: ${sanitizeMetadataValue(murmur.time)}`,
-    '---',
   ]
+
+  if (themes.length > 0) {
+    lines.push(`themes: [${themes.map((theme) => sanitizeMetadataValue(theme)).join(', ')}]`)
+  }
+
+  lines.push('---')
   const body = murmur.body.trim()
 
   if (body) {

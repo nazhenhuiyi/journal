@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createMurmur,
+  getReviewRepositoryPath,
   importMobileJournalImagesForDate,
   listDailyJournals,
   loadDailyJournal,
+  loadDailyReview,
+  loadOrCreateDailyReview,
   saveDailyJournal,
   updateDailyJournalFrontMatter,
 } from './mobileJournalStore'
@@ -22,6 +26,7 @@ const mockFileSystem = vi.hoisted(() => ({
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
 
 const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
+const reviewPath = 'file:///app/journal-worktree/reviews/2026/06/2026-06-10.json'
 
 describe('mobileJournalStore', () => {
   beforeEach(() => {
@@ -119,6 +124,18 @@ describe('mobileJournalStore', () => {
     expect(savedRecord.updatedAt).not.toBeNull()
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledOnce()
     expect(mockFileSystem.files.get(entryPath)).toContain('今天写一点。')
+  })
+
+  it('creates themed text murmurs', () => {
+    const murmur = createMurmur('2026-06-08', '傍晚的云有一点发紫。', {
+      now: new Date(2026, 5, 8, 18, 30, 0),
+      themes: ['sky-now', 'sky-now', 'light-shadow'],
+    })
+
+    expect(murmur).toMatchObject({
+      body: '傍晚的云有一点发紫。',
+      themes: ['sky-now', 'light-shadow'],
+    })
   })
 
   it('copies imported images into the mobile worktree media directory', async () => {
@@ -222,6 +239,7 @@ describe('mobileJournalStore', () => {
         {
           id: 'm_20260608_213800',
           time: '2026-06-08T21:38:00.000Z',
+          themes: ['quick-photo'],
           body: '',
           images: [
             {
@@ -241,6 +259,7 @@ describe('mobileJournalStore', () => {
       'media/2026/06/img_20260608_213800.jpg',
     ])
     expect(mockFileSystem.files.get(entryPath)).toContain('caption: 雨窗')
+    expect(mockFileSystem.files.get(entryPath)).toContain('themes: [quick-photo]')
   })
 
   it('does not rewrite when only managed timestamps would change', async () => {
@@ -327,6 +346,7 @@ time: 2026-06-08T21:38:00.000Z
     expect(savedRecord.murmurs[0]).toMatchObject({
       body: '窗边在下雨。',
       id: 'm_20260608_213800',
+      themes: [],
     })
     expect(mockFileSystem.files.get(entryPath)).toContain('weather:')
     expect(mockFileSystem.files.get(entryPath)).toContain('location:')
@@ -389,7 +409,15 @@ date: 2026-06-08
 updatedAt: 2026-06-09T08:00:00.000Z
 ---
 
-六月九日。`,
+六月九日。
+
+:::murmur
+id: m_20260609_080000
+time: 2026-06-09T08:00:00.000Z
+themes: [small-thing]
+---
+早上想到一句话。
+:::`,
     )
     mockFileSystem.files.set(
       'file:///app/journal-worktree/entries/2026/06/not-a-journal.txt',
@@ -404,8 +432,184 @@ updatedAt: 2026-06-09T08:00:00.000Z
     ])
     expect(records[0]).toMatchObject({
       longEntryMarkdown: '六月九日。',
+      murmurs: [
+        expect.objectContaining({
+          themes: ['small-thing'],
+        }),
+      ],
       updatedAt: '2026-06-09T08:00:00.000Z',
     })
+  })
+
+  it('creates a sparse daily review when generated moments are non-empty', async () => {
+    const result = await loadOrCreateDailyReview({
+      date: '2026-06-10',
+      sourceDays: [
+        {
+          date: '2025-06-10',
+          frontMatter: {
+            date: '2025-06-10',
+            weather: { text: '阴天' },
+          },
+          longEntryMarkdown: '',
+          murmurs: [
+            {
+              body: '风吹过树影很好。',
+              id: 'm_20250610_183000',
+              images: [],
+              themes: ['sky-now'],
+              time: '2025-06-10T18:30:00+08:00',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result.didWrite).toBe(true)
+    expect(result.changedPaths).toEqual(['reviews/2026/06/2026-06-10.json'])
+    expect(result.review).toMatchObject({
+      date: '2026-06-10',
+      moments: [
+        expect.objectContaining({
+          sourceDays: ['2025-06-10'],
+          title: '那年今日，阴天',
+        }),
+      ],
+      version: 1,
+    })
+    expect(mockFileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+      'file:///app/journal-worktree/reviews/2026/06/',
+      { intermediates: true },
+    )
+    expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
+  })
+
+  it('does not create an empty daily review file', async () => {
+    const result = await loadOrCreateDailyReview({
+      date: '2026-06-10',
+      sourceDays: [],
+    })
+
+    expect(result).toEqual({
+      changedPaths: [],
+      didWrite: false,
+      review: null,
+    })
+    expect(mockFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('reuses an existing valid daily review file', async () => {
+    const existingReview = {
+      date: '2026-06-10',
+      generatedAt: '2026-06-10T20:00:00.000Z',
+      moments: [
+        {
+          anchors: [],
+          id: 'single-2025-06-09',
+          kind: 'single',
+          sourceDays: ['2025-06-09'],
+          themes: [],
+          title: '6 月 9 日',
+          widgetEligible: true,
+        },
+      ],
+      version: 1,
+    }
+
+    mockFileSystem.files.set(reviewPath, JSON.stringify(existingReview))
+
+    const result = await loadOrCreateDailyReview({
+      date: '2026-06-10',
+      sourceDays: [
+        {
+          date: '2025-06-10',
+          frontMatter: { date: '2025-06-10' },
+          longEntryMarkdown: '',
+          murmurs: [
+            {
+              body: '云有一点发紫。',
+              id: 'm_20250610_070000',
+              images: [],
+              themes: ['sky-now'],
+              time: '2025-06-10T07:00:00+08:00',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result).toEqual({
+      changedPaths: [],
+      didWrite: false,
+      review: existingReview,
+    })
+    expect(mockFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
+    await expect(loadDailyReview('2026-06-10')).resolves.toEqual(existingReview)
+  })
+
+  it('regenerates a malformed daily review when moments are available', async () => {
+    mockFileSystem.files.set(reviewPath, '{bad json')
+
+    const result = await loadOrCreateDailyReview({
+      date: '2026-06-10',
+      sourceDays: [
+        {
+          date: '2025-06-10',
+          frontMatter: { date: '2025-06-10' },
+          longEntryMarkdown: '',
+          murmurs: [
+            {
+              body: '云有一点发紫。',
+              id: 'm_20250610_070000',
+              images: [],
+              themes: ['sky-now'],
+              time: '2025-06-10T07:00:00+08:00',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result.didWrite).toBe(true)
+    expect(result.changedPaths).toEqual([getReviewRepositoryPath('2026-06-10')])
+    expect(mockFileSystem.files.get(reviewPath)).toContain('"date": "2026-06-10"')
+  })
+
+  it('regenerates a review file whose stored moments normalize to empty', async () => {
+    mockFileSystem.files.set(reviewPath, JSON.stringify({
+      date: '2026-06-10',
+      generatedAt: '2026-06-10T20:00:00.000Z',
+      moments: [
+        { id: '', kind: 'single', sourceDays: ['2025-06-10'], title: '坏数据' },
+        { id: 'single-bad', kind: 'single', sourceDays: ['bad'], title: '坏来源' },
+      ],
+      version: 1,
+    }))
+
+    const result = await loadOrCreateDailyReview({
+      date: '2026-06-10',
+      sourceDays: [
+        {
+          date: '2025-06-10',
+          frontMatter: { date: '2025-06-10' },
+          longEntryMarkdown: '',
+          murmurs: [
+            {
+              body: '云有一点发紫。',
+              id: 'm_20250610_070000',
+              images: [],
+              themes: ['sky-now'],
+              time: '2025-06-10T07:00:00+08:00',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result.didWrite).toBe(true)
+    expect(result.changedPaths).toEqual([getReviewRepositoryPath('2026-06-10')])
+    expect(result.review?.moments).toHaveLength(1)
+    expect(mockFileSystem.files.get(reviewPath)).toContain('"id": "anniversary-2025-06-10"')
   })
 })
 

@@ -320,6 +320,7 @@ function createMurmur(date: string, existingMurmurs: MurmurBlock[]): MurmurBlock
   return {
     id,
     time: now.toISOString(),
+    themes: [],
     body: '',
     images: [],
   }

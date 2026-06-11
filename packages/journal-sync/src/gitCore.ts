@@ -135,6 +135,7 @@ const trackedPathPrefixes = [
   'annotations/',
   'entries/',
   'media/',
+  'reviews/',
 ]
 const trackedPathFiles = new Set(['manifest.json'])
 const trackedStatusFilepaths = [
@@ -143,6 +144,7 @@ const trackedStatusFilepaths = [
 ]
 const journalEntryPathPattern = /^entries\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.md$/
 const journalAnnotationPathPattern = /^annotations\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/
+const journalReviewPathPattern = /^reviews\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/
 
 export function createJournalGitAuthenticatedHttpClient(
   http: HttpClient,
@@ -1814,6 +1816,7 @@ function isTrackedJournalPath(filepath: string) {
   return trackedPathFiles.has(filepath) ||
     journalEntryPathPattern.test(filepath) ||
     journalAnnotationPathPattern.test(filepath) ||
+    journalReviewPathPattern.test(filepath) ||
     isTrackedJournalMediaPath(filepath)
 }
 

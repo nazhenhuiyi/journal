@@ -116,8 +116,58 @@ export type ImageBlock = {
 export type MurmurBlock = {
   id: string
   time: string
+  themes: string[]
   body: string
   images: ImageBlock[]
+}
+
+export type ThemeInputMode = 'mixed' | 'photo' | 'text'
+
+export type BuiltInTheme = {
+  id: string
+  label: string
+  entrySubtitle: string
+  inputMode: ThemeInputMode
+}
+
+export type ReviewAnchorType =
+  | 'date'
+  | 'solarTerm'
+  | 'weather'
+  | 'timeOfDay'
+  | 'season'
+  | 'personal'
+  | 'theme'
+
+export type ReviewAnchor = {
+  type: ReviewAnchorType
+  label: string
+  value?: string
+}
+
+export type ReviewMoment = {
+  id: string
+  sourceDays: string[]
+  themes: string[]
+  anchors: ReviewAnchor[]
+  kind: 'single' | 'cluster' | 'anniversary'
+  title: string
+  subtitle?: string
+  widgetEligible: boolean
+}
+
+export type ReviewFile = {
+  version: 1
+  date: string
+  generatedAt: string
+  moments: ReviewMoment[]
+}
+
+export type ReviewSourceDay = {
+  date: string
+  frontMatter: DayFrontMatter
+  longEntryMarkdown: string
+  murmurs: MurmurBlock[]
 }
 
 export type MarkdownDiagnostic = {
@@ -153,6 +203,7 @@ export type JournalIndexEntry = {
   murmurs: {
     id: string
     time: string
+    themes: string[]
     excerpt: string
     imageCount: number
   }[]
