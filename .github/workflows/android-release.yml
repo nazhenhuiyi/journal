@@ -43,6 +43,15 @@ jobs:
       - name: Prepare build directory
         run: mkdir -p builds
 
+      - name: Verify Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "::error title=Missing EXPO_TOKEN secret::Add an Expo access token named EXPO_TOKEN to repository secrets before pushing a mobile-v* tag."
+            exit 1
+          fi
+
       - name: Build Android APK
         working-directory: apps/mobile
         env:
