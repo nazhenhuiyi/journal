@@ -57,6 +57,22 @@ describe('journal smart merge driver', () => {
     expect(result.mergedText).toContain('>>>>>>> desktop')
   })
 
+  it('treats missing merge driver contents as empty text', async () => {
+    const driver = createJournalMergeDriver()
+    const result = await driver({
+      branches: ['base', 'main', 'origin/main'],
+      contents: [
+        undefined as unknown as string,
+        'local journal text\n',
+        'remote journal text\n',
+      ],
+      path: 'entries/2026/06/2026-06-09.md',
+    })
+
+    expect(result.mergedText).toContain('local journal text')
+    expect(result.mergedText).toContain('remote journal text')
+  })
+
   it('keeps both murmur blocks when both sides append different murmurs at the same location', async () => {
     const stats = createJournalMergeStats()
     const driver = createJournalMergeDriver('theirs', stats)

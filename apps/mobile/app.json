@@ -46,6 +46,7 @@
         }
       ],
       "./plugins/withAndroidWorkManagerResolution",
+      "./plugins/withAndroidArm64Only",
       [
         "expo-widgets",
         {

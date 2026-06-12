@@ -1,4 +1,5 @@
 import type { MergeDriverCallback } from 'isomorphic-git'
+import { getMergeDriverContents } from './mergeDriverContent'
 
 export type FallbackMergeSide = 'ours' | 'theirs'
 
@@ -53,8 +54,7 @@ export function createFallbackMergeDriver(
   fallbackSide: FallbackMergeSide = 'theirs',
 ): MergeDriverCallback {
   return ({ contents, path }) => {
-    const ours = contents.length >= 3 ? contents[1] : contents[0] ?? ''
-    const theirs = contents.length >= 3 ? contents[2] : contents[1] ?? ''
+    const { ours, theirs } = getMergeDriverContents(contents)
     const result = chooseFallbackMergeContent({
       fallbackSide,
       ours,
