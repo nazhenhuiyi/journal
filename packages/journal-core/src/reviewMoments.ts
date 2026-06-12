@@ -30,9 +30,28 @@ type DayCandidate = {
   timeAnchor?: ReviewAnchor
 }
 
+type RelativeDateMomentRule = {
+  id: string
+  label: string
+  getDate: (today: string) => string | null
+}
+
 const defaultMaxMoments = 5
 const dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/
 const negativeSnippetPattern = /(崩溃|绝望|痛苦|讨厌|恨|焦虑|抑郁|难受|想死|自杀|死亡|糟糕|烂透|完蛋|撑不住)/
+const millisecondsPerDay = 86_400_000
+const relativeDateMomentRules: RelativeDateMomentRule[] = [
+  {
+    getDate: getPreviousWeekDateKey,
+    id: 'last-week',
+    label: '上周的今天',
+  },
+  {
+    getDate: getPreviousMonthDateKey,
+    id: 'last-month',
+    label: '上个月的今天',
+  },
+]
 
 export function createReviewMoments(
   sourceDays: readonly ReviewSourceDay[],
@@ -60,6 +79,20 @@ export function createReviewMoments(
 
   if (clusterMoment) {
     moments.push(clusterMoment)
+  }
+
+  if (today) {
+    for (const relativeDateMoment of createRelativeDateMoments(days, today)) {
+      if (moments.length >= maxMoments) {
+        break
+      }
+
+      if (hasMomentForSourceDay(moments, relativeDateMoment.sourceDays[0])) {
+        continue
+      }
+
+      moments.push(relativeDateMoment)
+    }
   }
 
   for (const day of days) {
@@ -212,6 +245,35 @@ function createThemeClusterMoment(days: ReviewSourceDay[]) {
     themes: [themeId],
     title: `你留下过一些${shortThemeLabel}`,
     widgetEligible: true,
+  })
+}
+
+function createRelativeDateMoments(days: ReviewSourceDay[], today: string) {
+  return relativeDateMomentRules.flatMap((rule) => {
+    const sourceDate = rule.getDate(today)
+    const sourceDay = sourceDate
+      ? days.find((day) => day.date === sourceDate)
+      : undefined
+
+    if (!sourceDay) {
+      return []
+    }
+
+    const candidate = createDayCandidate(sourceDay)
+
+    return [createMoment({
+      anchors: [
+        createDateAnchor(sourceDay.date, rule.label),
+        ...createContextAnchors(sourceDay, candidate),
+      ],
+      id: `${rule.id}-${sourceDay.date}`,
+      kind: 'relative',
+      sourceDays: [sourceDay.date],
+      subtitle: createCandidateSubtitle(candidate),
+      themes: candidate.themes,
+      title: createAnchoredTitle(rule.label, sourceDay, candidate),
+      widgetEligible: true,
+    })]
   })
 }
 
@@ -420,6 +482,80 @@ function formatDateShort(dateKey: string) {
   }
 
   return `${Number(month)} 月 ${Number(day)} 日`
+}
+
+function getPreviousWeekDateKey(dateKey: string) {
+  const parsed = parseDateKey(dateKey)
+
+  if (!parsed) {
+    return null
+  }
+
+  const date = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day) - 7 * millisecondsPerDay)
+
+  return formatDateKey(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  )
+}
+
+function getPreviousMonthDateKey(dateKey: string) {
+  const parsed = parseDateKey(dateKey)
+
+  if (!parsed) {
+    return null
+  }
+
+  const targetYear = parsed.month === 1 ? parsed.year - 1 : parsed.year
+  const targetMonth = parsed.month === 1 ? 12 : parsed.month - 1
+
+  if (parsed.day > getDaysInMonth(targetYear, targetMonth)) {
+    return null
+  }
+
+  return formatDateKey(targetYear, targetMonth, parsed.day)
+}
+
+function parseDateKey(dateKey: string) {
+  const dateKeyMatch = dateKeyPattern.exec(dateKey)
+
+  if (!dateKeyMatch) {
+    return null
+  }
+
+  const [, yearText, monthText, dayText] = dateKeyMatch
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+
+  if (
+    !Number.isInteger(year) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > getDaysInMonth(year, month)
+  ) {
+    return null
+  }
+
+  return {
+    day,
+    month,
+    year,
+  }
+}
+
+function getDaysInMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function formatDateKey(year: number, month: number, day: number) {
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-')
 }
 
 function normalizeOptionalString(value: unknown) {

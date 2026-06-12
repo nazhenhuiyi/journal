@@ -2,17 +2,17 @@
   "expo": {
     "name": "Journal",
     "slug": "journal-mobile",
+    "scheme": "journal",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "app.zilin.journal",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.zilin.journal",
-      "versionCode": 1,
-      "edgeToEdgeEnabled": true
+      "package": "app.zilin.journal",
+      "versionCode": 1
     },
     "plugins": [
       [
@@ -29,7 +29,55 @@
           "locationWhenInUsePermission": "允许 Journal 使用当前位置，为今天的日记记录天气。"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Xiaolai.ttf"
+          ]
+        }
+      ],
+      "./plugins/withAndroidWorkManagerResolution",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "app.zilin.journal.widgets",
+          "groupIdentifier": "group.app.zilin.journal",
+          "frequentUpdates": true,
+          "widgets": [
+            {
+              "name": "JournalMomentWidget",
+              "displayName": "且留",
+              "description": "留下一点此刻，或看见一张旧纸条。",
+              "supportedFamilies": [
+                "systemMedium"
+              ]
+            }
+          ]
+        }
+      ],
+      "./plugins/withExpoWidgetsTargetVersion",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "JournalMoment",
+              "label": "且留",
+              "description": "此刻入口与旧日浮现",
+              "minWidth": "280dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeWidth": "480dp",
+              "maxResizeHeight": "140dp",
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

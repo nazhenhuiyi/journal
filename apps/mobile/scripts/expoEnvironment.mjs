@@ -8,11 +8,18 @@ import { fileURLToPath } from 'node:url'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 export const projectRoot = path.resolve(scriptDirectory, '..')
-export const expoCli = path.join(projectRoot, 'node_modules/.bin/expo')
+const workspaceRoot = path.resolve(projectRoot, '../..')
+const projectExpoCli = path.join(projectRoot, 'node_modules/.bin/expo')
+const workspaceExpoCli = path.join(workspaceRoot, 'node_modules/.bin/expo')
+export const expoCli = existsSync(projectExpoCli) ? projectExpoCli : workspaceExpoCli
 export const defaultExpoHost = '127.0.0.1'
 export const defaultExpoPort = 8081
 
-const expoPackageJson = path.join(projectRoot, 'node_modules/expo/package.json')
+const projectExpoPackageJson = path.join(projectRoot, 'node_modules/expo/package.json')
+const workspaceExpoPackageJson = path.join(workspaceRoot, 'node_modules/expo/package.json')
+const expoPackageJson = existsSync(projectExpoPackageJson)
+  ? projectExpoPackageJson
+  : workspaceExpoPackageJson
 
 export function createExpoCliInvocation() {
   assertMobileExpoSdk()
@@ -32,8 +39,8 @@ export function assertMobileExpoSdk() {
 
   const expoPackage = JSON.parse(readFileSync(expoPackageJson, 'utf8'))
 
-  if (!String(expoPackage.version).startsWith('54.')) {
-    console.error(`Expected the mobile workspace Expo SDK 54, but found expo ${expoPackage.version}.`)
+  if (!String(expoPackage.version).startsWith('56.')) {
+    console.error(`Expected the mobile workspace Expo SDK 56, but found expo ${expoPackage.version}.`)
     process.exit(1)
   }
 

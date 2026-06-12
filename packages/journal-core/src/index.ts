@@ -17,6 +17,10 @@ export {
   normalizeReviewFile,
 } from './reviewFiles'
 export {
+  createJournalWidgetSnapshot,
+  normalizeJournalWidgetSnapshot,
+} from './journalWidgetSnapshot'
+export {
   createReviewMoments,
   getSolarTermForDate,
 } from './reviewMoments'
@@ -52,6 +56,8 @@ export type {
   DayFrontMatter,
   ImageBlock,
   ImageLocation,
+  JournalWidgetAction,
+  JournalWidgetSnapshot,
   JournalIndexEntry,
   JournalIndexFile,
   LinePosition,

@@ -150,7 +150,7 @@ export type ReviewMoment = {
   sourceDays: string[]
   themes: string[]
   anchors: ReviewAnchor[]
-  kind: 'single' | 'cluster' | 'anniversary'
+  kind: 'single' | 'cluster' | 'anniversary' | 'relative'
   title: string
   subtitle?: string
   widgetEligible: boolean
@@ -168,6 +168,30 @@ export type ReviewSourceDay = {
   frontMatter: DayFrontMatter
   longEntryMarkdown: string
   murmurs: MurmurBlock[]
+}
+
+export type JournalWidgetAction =
+  | {
+      type: 'write'
+      themeId: string
+    }
+  | {
+      type: 'reviewDay'
+      date: string
+    }
+  | {
+      type: 'review'
+    }
+
+export type JournalWidgetSnapshot = {
+  version: 1
+  date: string
+  generatedAt: string
+  mode: 'theme-entry' | 'review-moment'
+  title: string
+  subtitle?: string
+  footnote?: string
+  action: JournalWidgetAction
 }
 
 export type MarkdownDiagnostic = {

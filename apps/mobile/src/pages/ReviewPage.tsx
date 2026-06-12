@@ -14,7 +14,7 @@ import {
   loadOrCreateDailyReview,
   type MobileJournalRecord,
 } from '../services/mobileJournalStore'
-import { mobileSyncManager } from '../services/sync/mobileSyncManager'
+import { journalEffects } from '../services/journalEffects'
 import { PageShell } from './PageShell'
 
 type ReviewPageProps = {
@@ -51,29 +51,35 @@ export function ReviewPage({
 
     listDailyJournals()
       .then((loadedRecords) => {
-        const reviewSourceDays = mergeCurrentDay(loadedRecords, {
+        const currentDay: ReviewSourceDay = {
           date: today,
           frontMatter: currentFrontMatter,
           longEntryMarkdown,
           murmurs,
-        })
+        }
+        const reviewSourceDays = mergeCurrentDay(loadedRecords, currentDay)
 
         return loadOrCreateDailyReview({
           date: today,
           sourceDays: reviewSourceDays,
-        })
+        }).then((result) => ({
+          currentDay,
+          result,
+        }))
       })
-      .then((result) => {
-        if (!result) {
+      .then((loadedReview) => {
+        if (!loadedReview) {
           return
         }
 
-        if (result.didWrite) {
-          mobileSyncManager.markLocalSave(result.changedPaths)
-        }
+        void journalEffects.afterReviewLoaded({
+          currentDay: loadedReview.currentDay,
+          date: today,
+          result: loadedReview.result,
+        })
 
         if (isActive) {
-          setMoments(result.review?.moments ?? [])
+          setMoments(loadedReview.result.review?.moments ?? [])
         }
       })
       .catch((error) => {

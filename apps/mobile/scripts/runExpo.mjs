@@ -39,7 +39,7 @@ const child = spawn(
   ],
   {
     cwd: invocation.cwd,
-    env: createExpoEnv(),
+    env: createExpoEnv(createExpoEnvOverrides(expoArgs)),
     stdio: 'inherit',
   },
 )
@@ -55,6 +55,24 @@ child.on('exit', (code, signal) => {
 
 function shouldReuseIosServer(args) {
   return args[0] === 'start' && args.includes('--ios') && args.includes('--localhost')
+}
+
+function createExpoEnvOverrides(args) {
+  if (!shouldUseIosLocalhost(args)) {
+    return {}
+  }
+
+  const port = String(readPort(args))
+
+  return {
+    EXPO_PACKAGER_HOSTNAME: defaultExpoHost,
+    RCT_METRO_PORT: port,
+    REACT_NATIVE_PACKAGER_HOSTNAME: defaultExpoHost,
+  }
+}
+
+function shouldUseIosLocalhost(args) {
+  return args[0] === 'run:ios' || shouldReuseIosServer(args)
 }
 
 function openIosSimulator(url) {

@@ -24,7 +24,7 @@ Journal 可以支持 Android 桌面小组件。推荐优先采用 `react-native-
 - React Native：`0.81.5`
 - React：`19.1.0`
 - `newArchEnabled: true`
-- Android package：`com.zilin.journal`
+- Android package：`app.zilin.journal`
 - 入口文件：`apps/mobile/index.ts`
 - 本地日记读写：`apps/mobile/src/services/mobileJournalStore.ts`
 - 同步核心：移动端调用 `@journal/sync`，平台层只保留 Expo 文件系统、SecureStore、AppState 和 UI 状态适配

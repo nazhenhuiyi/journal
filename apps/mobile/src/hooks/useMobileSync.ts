@@ -4,6 +4,8 @@ import {
   mobileSyncManager,
   type MobileSyncManagerState,
 } from '../services/sync/mobileSyncManager'
+import { journalEffects } from '../services/journalEffects'
+import { getLocalDateKey } from '../services/mobileJournalStore'
 import type {
   SaveCurrentJournalRef,
   SaveState,
@@ -36,6 +38,19 @@ export function useMobileSync({
     const unbind = mobileSyncManager.bindJournalRuntime({
       getSaveState: () => saveStateRef.current,
       isInputUnstable: isLongEntryInputUnstable,
+      onRemoteUpdatesApplied: () => {
+        void journalEffects.afterRemoteUpdatesApplied({
+          date: getLocalDateKey(),
+        })
+      },
+      refreshAfterJournalSaved: async ({ reason, record }) => {
+        const result = await journalEffects.afterJournalSavedForSync({
+          reason,
+          record,
+        })
+
+        return result.reviewResult.changedPaths
+      },
       reloadTodayFromDisk,
       reloadTodayFromDiskIfChanged,
       saveCurrentJournal: async (options) => saveCurrentJournalRef.current?.(options) ?? null,

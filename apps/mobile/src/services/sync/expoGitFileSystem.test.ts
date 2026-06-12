@@ -124,7 +124,7 @@ describe('createExpoGitFileSystem', () => {
     const result = await fs.promises.readFile('/repo/.git/index')
 
     expect(Buffer.isBuffer(result)).toBe(true)
-    expect(Buffer.from(result).equals(Buffer.from(binary))).toBe(true)
+    expect((result as Buffer).equals(Buffer.from(binary))).toBe(true)
     expect(mockModernFileSystem.state.fileBytes).toHaveBeenCalledWith('/repo/.git/index')
   })
 
@@ -137,7 +137,7 @@ describe('createExpoGitFileSystem', () => {
 
     const result = await fs.promises.readFile('/repo/.git/index')
 
-    expect(Buffer.from(result).equals(binary)).toBe(true)
+    expect((result as Buffer).equals(binary)).toBe(true)
     expect(mockLegacyFileSystem.readAsStringAsync).toHaveBeenCalledWith('/repo/.git/index', {
       encoding: 'base64',
     })

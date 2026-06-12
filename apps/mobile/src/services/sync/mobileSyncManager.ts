@@ -23,15 +23,23 @@ import {
   savePendingMobileSyncPaths,
 } from './pendingSyncPaths'
 import type { SaveDailyJournalResult } from '../mobileJournalStore'
+import type { JournalSavedReason } from '../journalEffects'
 
 export type MobileSyncSaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
 export type MobileSyncRuntimeBinding = {
   getSaveState: () => MobileSyncSaveState
   isInputUnstable: () => boolean
+  onRemoteUpdatesApplied: () => void
+  refreshAfterJournalSaved: (input: {
+    reason: JournalSavedReason
+    record: SaveDailyJournalResult
+  }) => Promise<readonly string[]>
   reloadTodayFromDisk: () => Promise<void>
   reloadTodayFromDiskIfChanged: () => Promise<boolean>
   saveCurrentJournal: (options?: {
+    emitEvent?: boolean
+    reason?: JournalSavedReason
     scheduleSync?: boolean
     showAlert?: boolean
   }) => Promise<SaveDailyJournalResult | null>
@@ -341,12 +349,20 @@ class MobileSyncManager {
 
     if (binding?.getSaveState() === 'dirty') {
       const savedRecord = await binding.saveCurrentJournal({
+        emitEvent: false,
+        reason: 'background-flush',
         scheduleSync: false,
         showAlert: false,
       })
 
       if (savedRecord?.didWrite) {
-        this.coordinator.markLocalSave(savedRecord.changedPaths)
+        const changedPaths = await this.collectSavedJournalChangedPaths(
+          binding,
+          'background-flush',
+          savedRecord,
+        )
+
+        this.coordinator.markLocalSave(changedPaths)
       }
     }
 
@@ -484,6 +500,10 @@ class MobileSyncManager {
         didReloadFromDisk = await binding.reloadTodayFromDiskIfChanged()
       }
 
+      if (result.updatedWorktree || didReloadFromDisk) {
+        binding?.onRemoteUpdatesApplied()
+      }
+
       return {
         changed: result.updatedWorktree || didReloadFromDisk,
       }
@@ -505,6 +525,8 @@ class MobileSyncManager {
       }
 
       const savedRecord = await binding.saveCurrentJournal({
+        emitEvent: false,
+        reason: 'sync',
         scheduleSync: false,
         showAlert: operation === 'full',
       })
@@ -517,8 +539,14 @@ class MobileSyncManager {
       }
 
       if (savedRecord.didWrite) {
-        operationChangedPaths = mergeChangedPaths(operationChangedPaths, savedRecord.changedPaths)
-        this.coordinator.recordPendingChangedPaths(savedRecord.changedPaths)
+        const changedPaths = await this.collectSavedJournalChangedPaths(
+          binding,
+          'sync',
+          savedRecord,
+        )
+
+        operationChangedPaths = mergeChangedPaths(operationChangedPaths, changedPaths)
+        this.coordinator.recordPendingChangedPaths(changedPaths)
       }
     }
 
@@ -540,6 +568,10 @@ class MobileSyncManager {
       await binding.reloadTodayFromDisk()
     }
 
+    if (result.mergeCommitOid || result.mergeResult) {
+      binding?.onRemoteUpdatesApplied()
+    }
+
     return {
       changed: Boolean(result.localCommitOid || result.mergeResult || result.retriedPush),
     }
@@ -547,6 +579,24 @@ class MobileSyncManager {
 
   private hasCompleteConfiguration() {
     return Boolean(this.state.syncRemoteUrl.trim() && this.state.hasStoredSyncToken)
+  }
+
+  private async collectSavedJournalChangedPaths(
+    binding: MobileSyncRuntimeBinding,
+    reason: JournalSavedReason,
+    record: SaveDailyJournalResult,
+  ) {
+    try {
+      const effectChangedPaths = await binding.refreshAfterJournalSaved({
+        reason,
+        record,
+      })
+
+      return mergeChangedPaths(record.changedPaths, effectChangedPaths)
+    } catch (error) {
+      console.error(error)
+      return record.changedPaths
+    }
   }
 
   private setState(nextState: Partial<MobileSyncManagerState>) {

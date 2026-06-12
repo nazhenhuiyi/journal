@@ -25,6 +25,7 @@ const reviewAnchorTypes = new Set<ReviewAnchorType>([
 const reviewMomentKinds = new Set<ReviewMoment['kind']>([
   'anniversary',
   'cluster',
+  'relative',
   'single',
 ])
 

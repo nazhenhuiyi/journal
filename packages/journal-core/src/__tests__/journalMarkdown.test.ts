@@ -231,6 +231,101 @@ time: 2026-06-08T09:00:00.000Z
     })
   })
 
+  it('creates relative date moments before generic single-day moments', () => {
+    const moments = createReviewMoments([
+      {
+        date: '2026-06-18',
+        frontMatter: { date: '2026-06-18' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20260618_200000',
+            time: '2026-06-18T20:00:00+08:00',
+            themes: [],
+            body: '昨天看见月亮。',
+            images: [],
+          },
+        ],
+      },
+      {
+        date: '2026-06-12',
+        frontMatter: { date: '2026-06-12' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20260612_140000',
+            time: '2026-06-12T14:00:00+08:00',
+            themes: [],
+            body: '上周喝到好茶。',
+            images: [],
+          },
+        ],
+      },
+      {
+        date: '2026-05-19',
+        frontMatter: { date: '2026-05-19' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20260519_090000',
+            time: '2026-05-19T09:00:00+08:00',
+            themes: [],
+            body: '五月的风很亮。',
+            images: [],
+          },
+        ],
+      },
+    ], {
+      today: '2026-06-19',
+    })
+
+    expect(moments.map((moment) => moment.id)).toEqual([
+      'last-week-2026-06-12',
+      'last-month-2026-05-19',
+      'single-2026-06-18',
+    ])
+    expect(moments[0]).toMatchObject({
+      anchors: expect.arrayContaining([
+        expect.objectContaining({ label: '上周的今天', type: 'date' }),
+        expect.objectContaining({ label: '午后', type: 'timeOfDay' }),
+      ]),
+      kind: 'relative',
+      subtitle: '你写过一句：上周喝到好茶',
+      title: '上周的今天，午后',
+      widgetEligible: true,
+    })
+    expect(moments[1]).toMatchObject({
+      anchors: expect.arrayContaining([
+        expect.objectContaining({ label: '上个月的今天', type: 'date' }),
+      ]),
+      kind: 'relative',
+      title: '上个月的今天，上午',
+    })
+  })
+
+  it('does not create a previous-month moment when the same day does not exist', () => {
+    const moments = createReviewMoments([
+      {
+        date: '2026-02-28',
+        frontMatter: { date: '2026-02-28' },
+        longEntryMarkdown: '',
+        murmurs: [
+          {
+            id: 'm_20260228_090000',
+            time: '2026-02-28T09:00:00+08:00',
+            themes: [],
+            body: '二月末也很好。',
+            images: [],
+          },
+        ],
+      },
+    ], {
+      today: '2026-03-31',
+    })
+
+    expect(moments.map((moment) => moment.id)).not.toContain('last-month-2026-02-28')
+  })
+
   it('ignores managed timestamps when detecting meaningful changes', () => {
     const previous = `---
 date: 2026-06-08

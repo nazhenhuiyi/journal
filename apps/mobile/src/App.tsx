@@ -1,7 +1,9 @@
-import { type ComponentProps, useCallback, useState } from 'react'
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
+  AppState,
   Image as NativeImage,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -23,7 +25,10 @@ import {
   type JournalSyncStatusTone,
   type SyncSnapshot,
 } from '@journal/sync'
-import { NavigationContainer } from '@react-navigation/native'
+import {
+  NavigationContainer,
+  type NavigationContainerRef,
+} from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
   useMobileJournal,
@@ -44,6 +49,11 @@ import {
   importMobileJournalImagesForDate,
   resolveJournalMediaFileUri,
 } from './services/mobileJournalStore'
+import { journalEffects } from './services/journalEffects'
+import {
+  parseJournalDeepLink,
+  type ParsedJournalDeepLink,
+} from './widgets/journalWidgetLinks'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
 type HeaderStatusTone = 'blue' | 'danger' | 'green' | 'plain'
@@ -80,6 +90,9 @@ function returnToToday(navigation: TodayFallbackNavigation) {
 }
 
 export default function App() {
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null)
+  const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
+  const initialActiveEventDateRef = useRef<string | null>(null)
   const [murmurDraft, setMurmurDraft] = useState('')
   const [murmurDraftInputHeight, setMurmurDraftInputHeight] = useState(murmurDraftInputMinHeight)
   const [selectedMurmurThemeIds, setSelectedMurmurThemeIds] = useState<string[]>([])
@@ -155,6 +168,30 @@ export default function App() {
     ? getBuiltInThemeById(selectedMurmurThemeIds[0])
     : null
 
+  const currentDayForEvents = useMemo(() => {
+    if (!record) {
+      return null
+    }
+
+    return {
+      date: today,
+      frontMatter: record.frontMatter,
+      longEntryMarkdown,
+      murmurs,
+    }
+  }, [longEntryMarkdown, murmurs, record, today])
+
+  const emitAppActiveEvent = useCallback(() => {
+    if (!currentDayForEvents) {
+      return
+    }
+
+    void journalEffects.refreshForAppActive({
+      currentDay: currentDayForEvents,
+      date: today,
+    })
+  }, [currentDayForEvents, today])
+
   useMobileWeather({
     frontMatter: record?.frontMatter ?? null,
     isLongEntryInputUnstable,
@@ -173,6 +210,40 @@ export default function App() {
     setSelectedMurmurThemeIds(normalizeThemeIds([themeId]))
     setIsMurmurPanelVisible(true)
   }, [])
+
+  const applyJournalDeepLink = useCallback((deepLink: ParsedJournalDeepLink) => {
+    const navigation = navigationRef.current
+
+    if (!navigation?.isReady()) {
+      pendingDeepLinkRef.current = deepLink
+      return
+    }
+
+    if (deepLink.type === 'write') {
+      navigation.navigate('Today')
+      openMurmurPanelForTheme(deepLink.themeId)
+      return
+    }
+
+    if (deepLink.type === 'reviewDay') {
+      navigation.navigate('ReviewDay', { date: deepLink.date })
+      return
+    }
+
+    navigation.navigate('Review')
+  }, [openMurmurPanelForTheme])
+
+  const handleJournalDeepLink = useCallback((url: string | null) => {
+    if (!url) {
+      return
+    }
+
+    const deepLink = parseJournalDeepLink(url)
+
+    if (deepLink) {
+      applyJournalDeepLink(deepLink)
+    }
+  }, [applyJournalDeepLink])
 
   const closeMurmurPanel = useCallback((shouldClearDraft = false) => {
     setIsMurmurPanelVisible(false)
@@ -265,8 +336,51 @@ export default function App() {
     }
   }, [addImagesToMurmur, isBusy, isImportingImages, murmurDraft, selectedMurmurThemeIds, today])
 
+  useEffect(() => {
+    void Linking.getInitialURL()
+      .then(handleJournalDeepLink)
+      .catch((error) => {
+        console.error(error)
+      })
+
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleJournalDeepLink(event.url)
+    })
+
+    return () => subscription.remove()
+  }, [handleJournalDeepLink])
+
+  useEffect(() => {
+    if (!currentDayForEvents || saveState !== 'idle' || initialActiveEventDateRef.current === today) {
+      return
+    }
+
+    initialActiveEventDateRef.current = today
+    emitAppActiveEvent()
+  }, [currentDayForEvents, emitAppActiveEvent, saveState, today])
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        emitAppActiveEvent()
+      }
+    })
+
+    return () => subscription.remove()
+  }, [emitAppActiveEvent])
+
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      onReady={() => {
+        const pendingDeepLink = pendingDeepLinkRef.current
+
+        if (pendingDeepLink) {
+          pendingDeepLinkRef.current = null
+          applyJournalDeepLink(pendingDeepLink)
+        }
+      }}
+      ref={navigationRef}
+    >
       <Stack.Navigator
         screenOptions={{
           animation: 'slide_from_right',
