@@ -53,11 +53,14 @@ describe('pendingSyncPaths', () => {
       'entries/2026/06/2026-06-08.md.tmp',
       '../manifest.json',
       'media/2026/06/photo.jpg',
+      'reviews/2026/06/2026-06-10.json',
+      'reviews/2026/06/2026-06-10.json.tmp',
     ])
 
     await expect(loadPendingMobileSyncPaths()).resolves.toEqual([
       'entries/2026/06/2026-06-08.md',
       'media/2026/06/photo.jpg',
+      'reviews/2026/06/2026-06-10.json',
     ])
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
       pendingPath,

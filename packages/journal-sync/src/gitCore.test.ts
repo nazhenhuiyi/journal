@@ -345,6 +345,8 @@ describe('journal git sync core', () => {
       ['annotations/2026/06/2026-06-09.json.tmp', 0, 2, 0],
       ['media/2026/06/photo.jpg.tmp', 0, 2, 0],
       ['media/2026/06/photo.jpg', 1, 1, 1],
+      ['reviews/2026/06/2026-06-10.json.tmp', 0, 2, 0],
+      ['reviews/2026/06/2026-06-10.json', 1, 2, 1],
     ])
 
     const status = await getJournalGitSyncStatus(createRuntime(), {
@@ -353,6 +355,7 @@ describe('journal git sync core', () => {
 
     expect(status.dirtyPaths).toEqual([
       'entries/2026/06/2026-06-09.md',
+      'reviews/2026/06/2026-06-10.json',
     ])
   })
 
@@ -587,7 +590,7 @@ describe('journal git sync core', () => {
     const runtime = createRuntime()
 
     mockGit.statusMatrix.mockResolvedValueOnce([
-      ['entries/2026/06/2026-06-09.md', 1, 2, 1],
+      ['reviews/2026/06/2026-06-10.json', 1, 2, 1],
     ])
 
     const commitOid = await commitJournalChanges(
@@ -597,18 +600,18 @@ describe('journal git sync core', () => {
       },
       'Sync journal changes',
       {
-        changedPaths: ['entries/2026/06/2026-06-09.md'],
+        changedPaths: ['reviews/2026/06/2026-06-10.json'],
       },
     )
 
     expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
     expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
       cache: runtime.cache,
-      filepaths: ['entries/2026/06/2026-06-09.md'],
+      filepaths: ['reviews/2026/06/2026-06-10.json'],
     }))
     expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
       cache: runtime.cache,
-      filepath: 'entries/2026/06/2026-06-09.md',
+      filepath: 'reviews/2026/06/2026-06-10.json',
     }))
     expect(mockGit.commit).toHaveBeenCalledWith(expect.objectContaining({
       cache: runtime.cache,
@@ -1128,7 +1131,7 @@ describe('journal git sync core', () => {
       value: 'refs/heads/main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
-      filepaths: ['annotations', 'entries', 'manifest.json', 'media'],
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media', 'reviews'],
       force: true,
       ref: 'refs/heads/main',
     }))

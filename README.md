@@ -53,7 +53,7 @@ npm run build:mobile:android
 npm run build:mobile:android:aab
 ```
 
-Android 包名现在是 `com.zilin.journal`，配置在 `apps/mobile/app.json`。这个值决定安卓是否把新版识别为同一个应用，第一次安装后不要随意修改。
+Android 包名现在是 `app.zilin.journal`，配置在 `apps/mobile/app.json`。这个值决定安卓是否把新版识别为同一个应用，第一次安装后不要随意修改。
 
 ## 目录
 

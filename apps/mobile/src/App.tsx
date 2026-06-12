@@ -1,7 +1,9 @@
-import { type ComponentProps, useCallback, useState } from 'react'
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
+  AppState,
   Image as NativeImage,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -10,14 +12,23 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
-import type { DayFrontMatter, ImageBlock, MurmurBlock } from '@journal/core'
+import {
+  getBuiltInThemeById,
+  normalizeThemeIds,
+  type DayFrontMatter,
+  type ImageBlock,
+  type MurmurBlock,
+} from '@journal/core'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusTone,
   type SyncSnapshot,
 } from '@journal/sync'
-import { NavigationContainer } from '@react-navigation/native'
+import {
+  NavigationContainer,
+  type NavigationContainerRef,
+} from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
   useMobileJournal,
@@ -30,6 +41,7 @@ import { Button } from './ui/Button'
 import { cn } from './ui/cn'
 import { JournalListPage } from './pages/JournalListPage'
 import { ReviewPage } from './pages/ReviewPage'
+import { ReviewDayPage } from './pages/ReviewDayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SyncSettingsPage } from './pages/SyncSettingsPage'
 import { Screen } from './ui/Screen'
@@ -37,6 +49,11 @@ import {
   importMobileJournalImagesForDate,
   resolveJournalMediaFileUri,
 } from './services/mobileJournalStore'
+import { journalEffects } from './services/journalEffects'
+import {
+  parseJournalDeepLink,
+  type ParsedJournalDeepLink,
+} from './widgets/journalWidgetLinks'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
 type HeaderStatusTone = 'blue' | 'danger' | 'green' | 'plain'
@@ -48,6 +65,7 @@ type RootStackParamList = {
   Today: undefined
   JournalList: undefined
   Review: undefined
+  ReviewDay: { date: string }
   Settings: undefined
   SyncSettings: undefined
 }
@@ -72,8 +90,12 @@ function returnToToday(navigation: TodayFallbackNavigation) {
 }
 
 export default function App() {
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null)
+  const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
+  const initialActiveEventDateRef = useRef<string | null>(null)
   const [murmurDraft, setMurmurDraft] = useState('')
   const [murmurDraftInputHeight, setMurmurDraftInputHeight] = useState(murmurDraftInputMinHeight)
+  const [selectedMurmurThemeIds, setSelectedMurmurThemeIds] = useState<string[]>([])
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [isMurmurPanelVisible, setIsMurmurPanelVisible] = useState(false)
   const {
@@ -142,6 +164,33 @@ export default function App() {
   const paperDateLine = formatPaperDateLine(today)
   const weatherLineLabel = formatWeatherLineLabel(record?.frontMatter.weather)
   const paperHeaderLine = [paperDateLine, weatherLineLabel].filter(Boolean).join(' · ')
+  const selectedMurmurTheme = selectedMurmurThemeIds[0]
+    ? getBuiltInThemeById(selectedMurmurThemeIds[0])
+    : null
+
+  const currentDayForEvents = useMemo(() => {
+    if (!record) {
+      return null
+    }
+
+    return {
+      date: today,
+      frontMatter: record.frontMatter,
+      longEntryMarkdown,
+      murmurs,
+    }
+  }, [longEntryMarkdown, murmurs, record, today])
+
+  const emitAppActiveEvent = useCallback(() => {
+    if (!currentDayForEvents) {
+      return
+    }
+
+    void journalEffects.refreshForAppActive({
+      currentDay: currentDayForEvents,
+      date: today,
+    })
+  }, [currentDayForEvents, today])
 
   useMobileWeather({
     frontMatter: record?.frontMatter ?? null,
@@ -157,21 +206,62 @@ export default function App() {
     setIsMurmurPanelVisible(true)
   }, [])
 
+  const openMurmurPanelForTheme = useCallback((themeId: string) => {
+    setSelectedMurmurThemeIds(normalizeThemeIds([themeId]))
+    setIsMurmurPanelVisible(true)
+  }, [])
+
+  const applyJournalDeepLink = useCallback((deepLink: ParsedJournalDeepLink) => {
+    const navigation = navigationRef.current
+
+    if (!navigation?.isReady()) {
+      pendingDeepLinkRef.current = deepLink
+      return
+    }
+
+    if (deepLink.type === 'write') {
+      navigation.navigate('Today')
+      openMurmurPanelForTheme(deepLink.themeId)
+      return
+    }
+
+    if (deepLink.type === 'reviewDay') {
+      navigation.navigate('ReviewDay', { date: deepLink.date })
+      return
+    }
+
+    navigation.navigate('Review')
+  }, [openMurmurPanelForTheme])
+
+  const handleJournalDeepLink = useCallback((url: string | null) => {
+    if (!url) {
+      return
+    }
+
+    const deepLink = parseJournalDeepLink(url)
+
+    if (deepLink) {
+      applyJournalDeepLink(deepLink)
+    }
+  }, [applyJournalDeepLink])
+
   const closeMurmurPanel = useCallback((shouldClearDraft = false) => {
     setIsMurmurPanelVisible(false)
 
     if (shouldClearDraft) {
       setMurmurDraft('')
+      setSelectedMurmurThemeIds([])
     }
   }, [])
 
   const handleAddMurmur = useCallback(async () => {
-    const didAdd = await addMurmur(murmurDraft)
+    const didAdd = await addMurmur(murmurDraft, selectedMurmurThemeIds)
 
     if (didAdd) {
       setMurmurDraft('')
+      setSelectedMurmurThemeIds([])
     }
-  }, [addMurmur, murmurDraft])
+  }, [addMurmur, murmurDraft, selectedMurmurThemeIds])
 
   const handleImportMurmurImages = useCallback(async (
     source: ImageImportSource,
@@ -229,10 +319,12 @@ export default function App() {
         body: murmurDraft,
         images: importedImages,
         murmurId,
+        themes: murmurId ? [] : selectedMurmurThemeIds,
       })
 
       if (didAdd && !murmurId) {
         setMurmurDraft('')
+        setSelectedMurmurThemeIds([])
       }
     } catch (error) {
       console.error(error)
@@ -242,10 +334,53 @@ export default function App() {
     } finally {
       setActiveImageImport(null)
     }
-  }, [addImagesToMurmur, isBusy, isImportingImages, murmurDraft, today])
+  }, [addImagesToMurmur, isBusy, isImportingImages, murmurDraft, selectedMurmurThemeIds, today])
+
+  useEffect(() => {
+    void Linking.getInitialURL()
+      .then(handleJournalDeepLink)
+      .catch((error) => {
+        console.error(error)
+      })
+
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleJournalDeepLink(event.url)
+    })
+
+    return () => subscription.remove()
+  }, [handleJournalDeepLink])
+
+  useEffect(() => {
+    if (!currentDayForEvents || saveState !== 'idle' || initialActiveEventDateRef.current === today) {
+      return
+    }
+
+    initialActiveEventDateRef.current = today
+    emitAppActiveEvent()
+  }, [currentDayForEvents, emitAppActiveEvent, saveState, today])
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        emitAppActiveEvent()
+      }
+    })
+
+    return () => subscription.remove()
+  }, [emitAppActiveEvent])
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      onReady={() => {
+        const pendingDeepLink = pendingDeepLinkRef.current
+
+        if (pendingDeepLink) {
+          pendingDeepLinkRef.current = null
+          applyJournalDeepLink(pendingDeepLink)
+        }
+      }}
+      ref={navigationRef}
+    >
       <Stack.Navigator
         screenOptions={{
           animation: 'slide_from_right',
@@ -371,6 +506,12 @@ export default function App() {
                           今天还没有碎碎念。
                         </Text>
                       ) : null}
+                      {selectedMurmurTheme ? (
+                        <ThemeSelectionBanner
+                          label={selectedMurmurTheme.label}
+                          onClear={() => setSelectedMurmurThemeIds([])}
+                        />
+                      ) : null}
                       <TextInput
                         accessibilityLabel="碎碎念正文"
                         autoFocus={murmurs.length === 0}
@@ -470,9 +611,31 @@ export default function App() {
         <Stack.Screen name="Review">
           {({ navigation }) => (
             <ReviewPage
+              currentFrontMatter={record?.frontMatter ?? { date: today }}
               longEntryMarkdown={longEntryMarkdown}
-              murmurCount={murmurs.length}
               onBack={() => returnToToday(navigation)}
+              onOpenSourceDay={(date) => navigation.navigate('ReviewDay', { date })}
+              onStartThemeEntry={(themeId) => {
+                returnToToday(navigation)
+                openMurmurPanelForTheme(themeId)
+              }}
+              murmurs={murmurs}
+              today={today}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="ReviewDay">
+          {({ navigation, route }) => (
+            <ReviewDayPage
+              date={route.params.date}
+              onBack={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack()
+                  return
+                }
+
+                navigation.replace('Review')
+              }}
             />
           )}
         </Stack.Screen>
@@ -545,6 +708,33 @@ function MurmurCountButton({
       <Text className="text-sm font-semibold text-foreground">碎碎念</Text>
       <Text className="text-sm font-semibold text-text-tertiary">· {count} 条</Text>
     </Pressable>
+  )
+}
+
+function ThemeSelectionBanner({
+  label,
+  onClear,
+}: {
+  label: string
+  onClear: () => void
+}) {
+  return (
+    <View className="mb-4 flex-row items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-2">
+      <Text className="shrink text-sm font-semibold text-foreground">
+        放进「{label}」
+      </Text>
+      <Pressable
+        accessibilityLabel="清除已选此刻入口"
+        accessibilityRole="button"
+        className="h-7 w-7 items-center justify-center rounded-full"
+        onPress={onClear}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.72 : 1,
+        })}
+      >
+        <Ionicons color={semanticColors['text-tertiary']} name="close" size={16} />
+      </Pressable>
+    </View>
   )
 }
 
@@ -685,8 +875,19 @@ function MurmurItem({
       {murmur.body.trim() ? (
         <Text className="text-base leading-6 text-foreground">{murmur.body}</Text>
       ) : null}
+      {murmur.themes.length > 0 ? (
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          {murmur.themes.map((themeId) => (
+            <View className="rounded-full bg-surface-muted px-2.5 py-1" key={themeId}>
+              <Text className="text-xs font-semibold text-text-tertiary">
+                {getBuiltInThemeById(themeId)?.label ?? themeId}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {murmur.images.length > 0 ? (
-        <View className="gap-3" style={{ marginTop: murmur.body.trim() ? spacingPixels['3.5'] : 0 }}>
+        <View className="gap-3" style={{ marginTop: murmur.body.trim() || murmur.themes.length > 0 ? spacingPixels['3.5'] : 0 }}>
           {murmur.images.map((image) => (
             <MurmurImageItem
               image={image}

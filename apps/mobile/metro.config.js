@@ -25,7 +25,6 @@ const packageEntries = {
 }
 
 config.watchFolders = [workspaceRoot]
-config.resolver.disableHierarchicalLookup = true
 config.resolver.nodeModulesPaths = [
   appNodeModules,
   workspaceNodeModules,

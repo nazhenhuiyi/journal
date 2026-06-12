@@ -410,7 +410,7 @@ describe('mobile git sync', () => {
       ref: 'main',
     }))
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
-      filepaths: ['annotations', 'entries', 'manifest.json', 'media'],
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media', 'reviews'],
       force: true,
       ref: 'refs/heads/main',
     }))

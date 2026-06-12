@@ -6,6 +6,7 @@ import type {
   MurmurBlock,
   ParsedJournalEntry,
 } from './types'
+import { normalizeThemeIds } from './themes'
 
 const murmurStartPattern = /^:::murmur\s*$/m
 const frontMatterFence = '---'
@@ -216,6 +217,7 @@ function parseMurmurBlock(
   return {
     id: metadata.id ?? '',
     time: metadata.time ?? '',
+    themes: normalizeThemeIds(parseTags(metadata.themes)),
     body: extracted.body,
     images: extracted.images,
   }

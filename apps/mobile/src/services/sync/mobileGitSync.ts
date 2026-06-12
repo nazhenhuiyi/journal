@@ -140,7 +140,9 @@ export async function syncMobileJournalWithGitHub(
 }
 
 async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
-  globalThis.Buffer = Buffer
+  const globalWithBuffer = globalThis as typeof globalThis & { Buffer: typeof Buffer }
+
+  globalWithBuffer.Buffer = Buffer
   const trace = createMobileGitTraceLogger()
 
   return {

@@ -45,6 +45,7 @@ collections: [雨天]
 :::murmur
 id: m_20260424_213800
 time: 2026-04-24T21:38:00+08:00
+themes: [sky-now, light-shadow]
 ---
 窗外下雨了。
 这一条碎碎念故意写得长一点，超过原本会被截断的长度，并且保留 **Markdown**。
@@ -91,6 +92,7 @@ date: 2026-04-26
           excerpt: '窗外下雨了。\n这一条碎碎念故意写得长一点，超过原本会被截断的长度，并且保留 **Markdown**。',
           id: 'm_20260424_213800',
           imageCount: 1,
+          themes: ['sky-now', 'light-shadow'],
           time: '2026-04-24T21:38:00+08:00',
         },
       ],
@@ -105,6 +107,7 @@ date: 2026-04-26
     expect(index[1]).not.toHaveProperty('excerpt')
     expect(index[1].searchableText).toContain('雨夜和台灯')
     expect(index[1].searchableText).toContain('长日记正文。')
+    expect(index[1].searchableText).toContain('此刻的天空')
     expect(index[1].searchableText).toContain('窗户')
     expect(index[1].searchableText).not.toContain('桌面很安静')
     expect(index[0].tags).toEqual(['灯'])

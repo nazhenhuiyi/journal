@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
+  getThemeLabel,
   parseJournalMarkdown,
   type DayFrontMatter,
   type JournalIndexEntry,
@@ -129,6 +130,7 @@ function createJournalIndexEntry({
     excerpt: murmur.body,
     id: murmur.id,
     imageCount: murmur.images.length,
+    themes: murmur.themes,
     time: murmur.time,
   }))
   const images = parsedEntry.murmurs.flatMap((murmur) =>
@@ -179,6 +181,7 @@ function buildSearchableText(
     longEntryMarkdown,
     ...murmurs.flatMap((murmur) => [
       murmur.body,
+      ...murmur.themes.map(getThemeLabel),
       ...murmur.images.flatMap((image) => [image.caption, image.location?.name, ...image.tags]),
     ]),
     frontMatter.title,
