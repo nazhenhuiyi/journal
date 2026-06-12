@@ -1,0 +1,76 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      TAG_NAME: ${{ github.ref_name }}
+      APK_PATH: builds/qieliu-${{ github.ref_name }}.apk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare build directory
+        run: mkdir -p builds
+
+      - name: Build Android APK
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx --yes eas-cli@20.1.0 build \
+            --local \
+            --platform android \
+            --profile preview \
+            --output "../../${APK_PATH}" \
+            --non-interactive
+
+      - name: Create release notes
+        run: |
+          {
+            echo "Tag: ${TAG_NAME}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Android package: app.zilin.journal"
+            echo
+            echo "This is a directly installable Android APK for testing."
+          } > release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${TAG_NAME}" "${APK_PATH}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${TAG_NAME}" \
+            --notes-file release-notes.md \
+            --verify-tag
