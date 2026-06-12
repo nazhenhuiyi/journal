@@ -1,10 +1,14 @@
-const { withAppBuildGradle } = require('expo/config-plugins')
+const {
+  withAppBuildGradle,
+  withGradleProperties,
+} = require('expo/config-plugins')
 
 const marker = '// @journal/android-arm64-only'
 const arm64Abi = 'arm64-v8a'
+const reactNativeArchitecturesProperty = 'reactNativeArchitectures'
 
 module.exports = function withAndroidArm64Only(config) {
-  return withAppBuildGradle(config, (expoConfig) => {
+  let nextConfig = withAppBuildGradle(config, (expoConfig) => {
     const buildGradle = expoConfig.modResults
 
     if (buildGradle.language !== 'groovy') {
@@ -14,6 +18,17 @@ module.exports = function withAndroidArm64Only(config) {
     buildGradle.contents = addArm64AbiFilter(buildGradle.contents)
     return expoConfig
   })
+
+  nextConfig = withGradleProperties(nextConfig, (expoConfig) => {
+    expoConfig.modResults = setGradleProperty(
+      expoConfig.modResults,
+      reactNativeArchitecturesProperty,
+      arm64Abi,
+    )
+    return expoConfig
+  })
+
+  return nextConfig
 }
 
 function addArm64AbiFilter(contents) {
@@ -39,4 +54,22 @@ ${indent}}
   return contents.replace(defaultConfigLine, `${defaultConfigLine}${block}`)
 }
 
+function setGradleProperty(properties, key, value) {
+  const property = properties.find((item) => item.type === 'property' && item.key === key)
+
+  if (property) {
+    property.value = value
+    return properties
+  }
+
+  properties.push({
+    type: 'property',
+    key,
+    value,
+  })
+
+  return properties
+}
+
 module.exports.addArm64AbiFilter = addArm64AbiFilter
+module.exports.setGradleProperty = setGradleProperty
