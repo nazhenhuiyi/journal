@@ -13,6 +13,7 @@ apps/mobile/dist
 dist
 dist-electron
 release
+builds/
 dist-ssr
 *.local
 
