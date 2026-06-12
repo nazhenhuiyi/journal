@@ -14,6 +14,7 @@ import {
   chooseFallbackMergeContent,
   type FallbackMergeSide,
 } from './lastWriteWins'
+import { getMergeDriverContents } from './mergeDriverContent'
 
 export type JournalMergeStats = {
   conflictPaths: number
@@ -53,9 +54,7 @@ export function createJournalMergeDriver(
   stats: JournalMergeStats = createJournalMergeStats(),
 ): MergeDriverCallback {
   return ({ branches, contents, path }) => {
-    const base = contents.length >= 3 ? contents[0] : ''
-    const ours = contents.length >= 3 ? contents[1] : contents[0] ?? ''
-    const theirs = contents.length >= 3 ? contents[2] : contents[1] ?? ''
+    const { base, ours, theirs } = getMergeDriverContents(contents)
 
     if (isMarkdownPath(path)) {
       stats.markdownPaths += 1

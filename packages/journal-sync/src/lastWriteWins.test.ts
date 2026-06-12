@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { chooseFallbackMergeContent } from './lastWriteWins'
+import {
+  chooseFallbackMergeContent,
+  createFallbackMergeDriver,
+} from './lastWriteWins'
 
 describe('chooseFallbackMergeContent', () => {
   it('does not use journal markdown updatedAt to choose a whole-file winner', () => {
@@ -75,6 +78,24 @@ describe('chooseFallbackMergeContent', () => {
       content: 'local',
       reason: 'fallback',
       side: 'ours',
+    })
+  })
+
+  it('treats missing merge driver contents as empty text', async () => {
+    const driver = createFallbackMergeDriver('ours')
+    const result = await driver({
+      branches: ['base', 'ours', 'theirs'],
+      contents: [
+        '',
+        undefined as unknown as string,
+        'remote',
+      ],
+      path: 'media/2026/06/img.txt',
+    })
+
+    expect(result).toEqual({
+      cleanMerge: true,
+      mergedText: '',
     })
   })
 })
