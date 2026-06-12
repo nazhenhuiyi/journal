@@ -1,32 +1,44 @@
 {
   "expo": {
-    "name": "Journal",
+    "name": "且留",
     "slug": "journal-mobile",
+    "description": "万物有迹，心事且留。",
     "scheme": "journal",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/brand/icon.png",
+    "backgroundColor": "#F8F2E9",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/brand/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F2E9"
+    },
     "ios": {
       "bundleIdentifier": "app.zilin.journal",
       "supportsTablet": true
     },
     "android": {
       "package": "app.zilin.journal",
-      "versionCode": 1
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-icon.png",
+        "backgroundColor": "#F8F2E9"
+      }
     },
     "plugins": [
       [
         "expo-image-picker",
         {
-          "cameraPermission": "允许 Journal 使用相机，把拍下的照片保存到你的日记里。",
+          "cameraPermission": "允许且留使用相机，把拍下的照片保存到你的日记里。",
           "microphonePermission": false,
-          "photosPermission": "允许 Journal 选择照片，把它们保存到你的日记里。"
+          "photosPermission": "允许且留选择照片，把它们保存到你的日记里。"
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "允许 Journal 使用当前位置，为今天的日记记录天气。"
+          "locationWhenInUsePermission": "允许且留使用当前位置，为今天的日记记录天气。"
         }
       ],
       "expo-secure-store",

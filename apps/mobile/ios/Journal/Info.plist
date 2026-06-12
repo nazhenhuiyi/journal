@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Journal</string>
+    <string>且留</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -60,7 +60,7 @@
       <string>_expo._tcp</string>
     </array>
     <key>NSCameraUsageDescription</key>
-    <string>允许 Journal 使用相机，把拍下的照片保存到你的日记里。</string>
+    <string>允许且留使用相机，把拍下的照片保存到你的日记里。</string>
     <key>NSFaceIDUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSLocalNetworkUsageDescription</key>
@@ -70,11 +70,11 @@
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>允许 Journal 使用当前位置，为今天的日记记录天气。</string>
+    <string>允许且留使用当前位置，为今天的日记记录天气。</string>
     <key>NSMotionUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to detect your current motion activity</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>允许 Journal 选择照片，把它们保存到你的日记里。</string>
+    <string>允许且留选择照片，把它们保存到你的日记里。</string>
     <key>NSSupportsLiveActivities</key>
     <true/>
     <key>NSSupportsLiveActivitiesFrequentUpdates</key>
