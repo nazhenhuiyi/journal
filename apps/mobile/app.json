@@ -9,11 +9,6 @@
     "icon": "./assets/brand/icon.png",
     "backgroundColor": "#F8F2E9",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/brand/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8F2E9"
-    },
     "ios": {
       "bundleIdentifier": "app.zilin.journal",
       "supportsTablet": true
@@ -88,6 +83,14 @@
               "updatePeriodMillis": 1800000
             }
           ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F2E9"
         }
       ]
     ],
