@@ -10,4 +10,4 @@
 - 同步操作要保持单飞：同一时间只跑一个 Git 操作；新的请求应该排队或标记 pending。
 - 重试要克制，不能形成密集提交或密集推送。
 - 冲突策略目前是：日记 Markdown 使用 diff3 文本合并；批注 JSON 和无法文本合并的文件使用 fallback 选边；true conflict 保留冲突标记并停止自动 push。修改冲突策略前，要同时更新测试和产品文档。
-- 测试使用 Vitest。运行 `npm --workspace @journal/sync run test` 和 `npm --workspace @journal/sync run typecheck`。
+- 测试使用 Vitest。运行 `pnpm --filter @journal/sync run test` 和 `pnpm --filter @journal/sync run typecheck`。

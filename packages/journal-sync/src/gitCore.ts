@@ -1343,7 +1343,7 @@ function parseReflogCommitLine(line: string): JournalGitRecentCommit | null {
   const [meta, rawMessage = ''] = line.split('\t', 2)
   const fields = meta.trim().split(/\s+/)
   const oid = fields[1]
-  const timestamp = Number(fields.at(-2))
+  const timestamp = Number(fields[fields.length - 2])
 
   if (!oid || !/^[0-9a-f]{40}$/i.test(oid) || /^0+$/.test(oid)) {
     return null

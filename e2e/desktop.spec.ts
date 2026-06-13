@@ -149,7 +149,8 @@ test('desktop calendar opens historical entries and saves edits for a selected d
     await calendarLink.click()
 
     await expect(page).toHaveURL(/#\/calendar/)
-    await expect(page.getByRole('heading', { name: '日历书架' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '日历' })).toBeVisible()
+    await page.getByRole('button', { name: '三月 2 篇' }).click()
     await expect(page.getByRole('heading', { name: '三月' })).toBeVisible()
     await expect(page.getByText('2 / 31 天有记录')).toBeVisible()
 
@@ -179,7 +180,7 @@ test('desktop calendar opens historical entries and saves edits for a selected d
     ).toContain(appendedText)
 
     await page.getByRole('button', { name: '返回日历' }).click()
-    await expect(page.getByRole('heading', { name: '日历书架' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '日历' })).toBeVisible()
   } finally {
     await closeIsolatedDesktopApp(context)
   }
@@ -195,8 +196,11 @@ test('desktop settings reports unconfigured Git sync state and validates unsafe 
     await expect(syncButton).toBeVisible()
     await syncButton.click()
     await expect(page).toHaveURL(/#\/settings/)
-    await expect(page.locator('[aria-label="同步设置"]')).toBeVisible()
-    await expect(page.locator('.settings-sync-status')).toContainText('Git 同步未配置')
+    const syncSettings = page.locator('[aria-label="同步设置"]')
+
+    await expect(syncSettings).toBeVisible()
+    await expect(syncSettings).toContainText('远端同步')
+    await expect(syncSettings).toContainText('未配置')
     await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible()
     await expect(page.getByRole('button', { name: '立即同步' })).toBeVisible()
 

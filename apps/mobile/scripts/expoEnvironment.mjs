@@ -33,7 +33,7 @@ export function createExpoCliInvocation() {
 
 export function assertMobileExpoSdk() {
   if (!existsSync(expoCli) || !existsSync(expoPackageJson)) {
-    console.error('Mobile Expo CLI is missing. Run npm install from the repository root first.')
+    console.error('Mobile Expo CLI is missing. Run pnpm install from the repository root first.')
     process.exit(1)
   }
 

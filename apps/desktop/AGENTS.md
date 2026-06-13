@@ -12,5 +12,5 @@
 - 同步范围只关注 `entries/`、`media/`、`annotations/`、`manifest.json`。真实仓库里其他未跟踪历史目录不要误判成同步失败。
 - 保持桌面端最小宽度为 `1180px`，位置在 `src/index.css` 和 `electron/main.ts`。
 - 组件样式默认使用 TailwindCSS；全局变量、应用级基础样式或 Tailwind 会降低可读性的情况，再使用普通 CSS。
-- 测试使用 Vitest。完整校验从仓库根目录运行 `npm test`，不要传 Jest 专用参数，比如 `--runInBand`。
+- 测试使用 Vitest。完整校验从仓库根目录运行 `pnpm test`，不要传 Jest 专用参数，比如 `--runInBand`。
 - 桌面端验收流程参考 [Electron 桌面端验收工具链.md](/Users/zilin/agent-projects/journal/docs/product/Electron 桌面端验收工具链.md)。
