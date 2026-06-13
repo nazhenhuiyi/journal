@@ -1,0 +1,47 @@
+appId: ${APP_ID}
+---
+- runFlow: _open-expo.yaml
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- tapOn:
+    id: back-to-today-button
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- pressKey: Back
+- assertVisible: 日记列表
+- tapOn:
+    id: back-to-today-button
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- tapOn:
+    id: back-to-today-button
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- tapOn:
+    id: back-to-today-button
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- pressKey: Back
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- pressKey: Back
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾
+- pressKey: Back
+- assertVisible: 日记列表
+- tapOn:
+    id: review-button
+- assertVisible: 回顾

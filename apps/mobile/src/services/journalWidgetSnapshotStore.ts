@@ -12,6 +12,7 @@ import {
   type LoadDailyReviewResult,
   type MobileJournalRecord,
 } from './mobileJournalStore'
+import { appendMobileE2eSuffix } from './e2eEnvironment'
 import { updateNativeJournalWidgets } from '../widgets/journalWidgetNative'
 
 export type RefreshJournalWidgetSnapshotInput = {
@@ -80,7 +81,7 @@ export function getJournalWidgetSnapshotFilePath() {
     throw new Error('File system document directory is unavailable.')
   }
 
-  return `${FileSystem.documentDirectory}${widgetSnapshotFileName}`
+  return `${FileSystem.documentDirectory}${appendMobileE2eSuffix(widgetSnapshotFileName)}`
 }
 
 async function updateNativeJournalWidgetsBestEffort(snapshot: JournalWidgetSnapshot) {

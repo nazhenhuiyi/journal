@@ -131,25 +131,33 @@ npm run e2e:sync:github
 
 ## Mobile native E2E
 
-移动端 E2E 使用 [Maestro](https://docs.maestro.dev/platform-support/react-native)，目标是真机或模拟器里的 React Native / Expo Go，而不是 Expo Web。Expo 官方 EAS 文档也以 [Maestro 作为 E2E 示例](https://docs.expo.dev/eas/workflows/reference/e2e-tests)。
+移动端 E2E 使用 [Maestro](https://docs.maestro.dev/platform-support/react-native)，目标是真机或模拟器里的 React Native development build，而不是 Expo Web。当前应用依赖 keyboard controller、widget、SecureStore 和 dev-client，默认验收统一跑 development build。
 
-运行前安装 Maestro CLI，并确保至少有一个 iOS Simulator、Android Emulator 或真机可用。默认命令会启动 Expo native dev server，并通过 Expo Go 开发 URL 打开应用：
+真机调试、development build、`adb reverse`、日志截图和键盘遮挡回归经验见 [移动端真机调试手册](./移动端真机调试手册.md)。
+
+运行前安装 Maestro CLI，并确保至少有一个 iOS Simulator、Android Emulator 或真机可用。默认命令会启动 Expo native dev server，并通过 development client deep link 打开已安装的 development build：
 
 ```sh
 npm run e2e:mobile
 ```
 
-如果 `maestro` 或 Java 17 没有出现在当前 shell 的 `PATH`，runner 会优先尝试 `~/.maestro/bin/maestro` 和 Homebrew `openjdk@17`；也可以显式设置 `MAESTRO_CLI` 或 `JAVA_HOME`。
+运行前需要让当前 shell 能直接使用 Maestro 和 Java 17+。如果不想把 Maestro 放进 `PATH`，可以显式设置 `MAESTRO_CLI`；如果系统默认 Java 不是 17+，先设置 `JAVA_HOME`。
 
 默认使用：
 
 - `JOURNAL_MOBILE_E2E_EXPO_PORT=8081`
-- `JOURNAL_MOBILE_E2E_EXPO_URL=exp://127.0.0.1:8081`
-- `JOURNAL_MOBILE_E2E_APP_ID=host.exp.Exponent`（iOS Expo Go；Android Expo Go 可改为 `host.exp.exponent`）
+- `JOURNAL_MOBILE_E2E_EXPO_URL=http://127.0.0.1:8081`
+- `JOURNAL_MOBILE_E2E_OPEN_URL=exp+journal-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081`
+- `JOURNAL_MOBILE_E2E_APP_ID=app.zilin.journal.debug`（Android 本地 development build；iOS development build 可覆盖为 `app.zilin.journal`）
+- `JOURNAL_MOBILE_E2E_DEVICE_ID=70eefe42`：Android development build E2E 必填；先用 `adb devices -l` 确认目标设备 serial。
+- `JOURNAL_MOBILE_E2E_REINSTALL_DRIVER=1`：默认复用 Maestro 已安装的设备端 driver；只有 driver 异常或首次安装失败时再打开这个开关强制重装。
 
-默认命令没有 GitHub 配置时会跳过移动端同步 flow，只跑不访问外网的移动端核心路径和同步配置校验。要运行真实 GitHub 同步 flow，提供移动端专用 env，或复用共享 GitHub E2E env：
+Android 真机跑默认 URL 前，需要先做 `adb reverse tcp:8081 tcp:8081`。Android Emulator 如果不使用 reverse，可以把 `JOURNAL_MOBILE_E2E_EXPO_URL` 和 `JOURNAL_MOBILE_E2E_OPEN_URL` 改成 `10.0.2.2` 对应的 development client URL。
+
+默认命令不会跑真实 GitHub 同步 flow，只跑不访问外网的移动端核心路径和同步配置校验。要运行真实 GitHub 同步 flow，必须显式开启，并提供移动端专用 env：
 
 ```sh
+JOURNAL_MOBILE_E2E_ENABLE_SYNC=1 \
 JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL=https://github.com/you/journal-sync.git \
 JOURNAL_MOBILE_E2E_SYNC_TOKEN=ghp_xxx \
 npm run e2e:mobile
@@ -158,17 +166,20 @@ npm run e2e:mobile
 可选项：
 
 - `JOURNAL_MOBILE_E2E_SYNC_BRANCH=mobile-e2e/manual`：指定同步分支；不指定时默认使用 `mobile-e2e/<runId>` 临时分支。
-- `JOURNAL_MOBILE_E2E_SYNC_BRANCH_PREFIX=mobile-e2e`：修改自动临时分支前缀。
 - `JOURNAL_MOBILE_E2E_SYNC_KEEP_BRANCH=1`：保留自动创建的临时分支用于排查；默认会在运行后清理。
-- `JOURNAL_E2E_GITHUB_REMOTE_URL` / `JOURNAL_E2E_GITHUB_TOKEN`：如果没有移动端专用 env，runner 会复用这两个共享同步 E2E env。
 
 如果你已经自己启动了 Expo，可以跳过自动启动：
 
 ```sh
 JOURNAL_MOBILE_E2E_SKIP_EXPO_START=1 \
-JOURNAL_MOBILE_E2E_EXPO_URL=exp://127.0.0.1:8081 \
+EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID=manual-mobile-e2e \
+JOURNAL_MOBILE_E2E_EXPO_URL=http://127.0.0.1:8081 \
 npm run e2e:mobile
 ```
+
+跳过自动启动时，已经运行的 Expo server 必须带同一个 `EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID`。否则应用会落回默认移动端数据目录，runner 会直接失败。
+
+每次移动端 E2E 都会使用 run id 隔离本地 worktree、同步配置 key、pending paths 和 widget snapshot，避免写到正常调试数据。
 
 当前覆盖：
 
@@ -177,7 +188,7 @@ npm run e2e:mobile
 - 新增碎碎念，验证碎碎念列表出现新内容。
 - 进入日记列表，验证今天的长日记内容出现在列表预览中。
 - 进入回顾页，验证长日记和碎碎念摘要入口可见。
-- 提供 GitHub env 时，输入未保存正文后进入设置页，填写真实 GitHub 同步配置和 token，点击“立即同步”，验证同步触发会先保存本地内容、完成真实 GitHub 同步状态，并在回到今日后显示已同步。
+- 显式开启真实同步 flow 时，输入未保存正文后进入设置页，使用 E2E 注入的同步配置和 token，点击“立即同步”，验证同步触发会先保存本地内容、完成真实 GitHub 同步状态，并在回到今日后显示已同步。
 - 进入设置页，填写包含凭据的危险远端地址，验证同步配置保存失败状态。
 
 ## 脚本速查

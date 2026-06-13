@@ -1,36 +1,29 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import net from 'node:net'
 import process from 'node:process'
 import {
   createExpoCliInvocation,
-  createExpoEnv,
 } from './expoEnvironment.mjs'
 
 const maestroCommand = resolveMaestroCommand()
-const toolEnv = createToolEnv()
+const toolEnv = { ...process.env }
 const expoPort = Number(process.env.JOURNAL_MOBILE_E2E_EXPO_PORT || 8081)
-const expoHost = process.env.JOURNAL_MOBILE_E2E_EXPO_HOST || 'localhost'
-const expoUrl = process.env.JOURNAL_MOBILE_E2E_EXPO_URL || `exp://${expoHost}:${expoPort}`
-const appId = process.env.JOURNAL_MOBILE_E2E_APP_ID || 'host.exp.Exponent'
-const e2eRunId = process.env.JOURNAL_MOBILE_E2E_RUN_ID || `maestro-${Date.now()}`
-const syncRemoteUrl = (
-  process.env.JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL ||
-  process.env.JOURNAL_E2E_GITHUB_REMOTE_URL ||
-  ''
-).trim()
-const syncToken = (
-  process.env.JOURNAL_MOBILE_E2E_SYNC_TOKEN ||
-  process.env.JOURNAL_E2E_GITHUB_TOKEN ||
-  ''
-).trim()
+const expoUrl = process.env.JOURNAL_MOBILE_E2E_EXPO_URL || `http://127.0.0.1:${expoPort}`
+const expoOpenUrl = process.env.JOURNAL_MOBILE_E2E_OPEN_URL || createDevelopmentClientOpenUrl(expoUrl)
+const appId = process.env.JOURNAL_MOBILE_E2E_APP_ID || 'app.zilin.journal.debug'
+const deviceId = process.env.JOURNAL_MOBILE_E2E_DEVICE_ID?.trim() || ''
+const shouldReinstallMaestroDriver = process.env.JOURNAL_MOBILE_E2E_REINSTALL_DRIVER === '1'
+const publicE2eRunId = process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID?.trim() || ''
+const requestedE2eRunId = process.env.JOURNAL_MOBILE_E2E_RUN_ID?.trim() || ''
+const e2eRunId = requestedE2eRunId || publicE2eRunId || `maestro-${Date.now()}`
+const shouldEnableSyncFlow = process.env.JOURNAL_MOBILE_E2E_ENABLE_SYNC === '1'
+const syncRemoteUrl = (process.env.JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL || '').trim()
+const syncToken = (process.env.JOURNAL_MOBILE_E2E_SYNC_TOKEN || '').trim()
 const explicitSyncBranch = process.env.JOURNAL_MOBILE_E2E_SYNC_BRANCH?.trim() || ''
-const syncBranchPrefix = (
-  process.env.JOURNAL_MOBILE_E2E_SYNC_BRANCH_PREFIX?.trim() || 'mobile-e2e'
-).replace(/\/+$/, '') || 'mobile-e2e'
-const syncBranch = explicitSyncBranch || `${syncBranchPrefix}/${sanitizeGitBranchSegment(e2eRunId)}`
+const syncBranch = explicitSyncBranch || `mobile-e2e/${sanitizeGitBranchSegment(e2eRunId)}`
 const shouldKeepSyncBranch = process.env.JOURNAL_MOBILE_E2E_SYNC_KEEP_BRANCH === '1'
 const hasGitHubSyncConfig = Boolean(syncRemoteUrl && syncToken)
 const shouldStartExpo = process.env.JOURNAL_MOBILE_E2E_SKIP_EXPO_START !== '1'
@@ -40,7 +33,7 @@ const flowPaths = flowArgs.length > 0
   ? flowArgs
   : [
       'e2e/today-writing-flow.yaml',
-      ...(hasGitHubSyncConfig ? [syncFlowPath] : []),
+      ...(shouldEnableSyncFlow ? [syncFlowPath] : []),
       'e2e/settings-sync-validation.yaml',
     ]
 const shouldRunSyncFlow = flowPaths.some(isSyncFlowPath)
@@ -53,23 +46,33 @@ const shouldManageSyncBranch = Boolean(
 )
 const runnerManagedMaestroEnvKeys = [
   'APP_ID',
-  'EXPO_URL',
+  'EXPO_OPEN_URL',
   'REMOTE_URL',
   'SYNC_BRANCH',
   'SYNC_TOKEN',
 ]
 
 validateMaestroFlowFiles(flowPaths)
-assertCommandAvailable(maestroCommand, [
-  'Maestro CLI is required for mobile native E2E.',
-  'Install it from https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli',
-])
+const preflightErrors = [
+  ...getAndroidDevicePreflightErrors(),
+  ...getMaestroPreflightErrors(maestroCommand),
+]
+
+if (preflightErrors.length > 0) {
+  console.error(preflightErrors.join('\n'))
+  process.exit(1)
+}
+
+if (shouldRunSyncFlow && !shouldEnableSyncFlow) {
+  console.error('Mobile sync E2E is opt-in. Set JOURNAL_MOBILE_E2E_ENABLE_SYNC=1 to run sync-now-flow.yaml.')
+  process.exit(1)
+}
 
 if (shouldRunSyncFlow && !hasGitHubSyncConfig) {
   console.error([
     'Mobile sync E2E requires real GitHub configuration.',
-    'Set JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL and JOURNAL_MOBILE_E2E_SYNC_TOKEN,',
-    'or reuse JOURNAL_E2E_GITHUB_REMOTE_URL and JOURNAL_E2E_GITHUB_TOKEN.',
+    'Set JOURNAL_MOBILE_E2E_ENABLE_SYNC=1,',
+    'JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL, and JOURNAL_MOBILE_E2E_SYNC_TOKEN.',
   ].join('\n'))
   process.exit(1)
 }
@@ -79,8 +82,27 @@ if (shouldRunSyncFlow && hasGitHubSyncConfig && !githubRemote) {
   process.exit(1)
 }
 
-if (!hasGitHubSyncConfig && flowArgs.length === 0) {
-  console.warn('Skipping mobile GitHub sync E2E because no GitHub remote/token env is configured.')
+if (!shouldEnableSyncFlow && flowArgs.length === 0) {
+  console.info('Skipping mobile GitHub sync E2E. Set JOURNAL_MOBILE_E2E_ENABLE_SYNC=1 to run it.')
+}
+
+if (!shouldStartExpo) {
+  if (!publicE2eRunId) {
+    console.error([
+      'JOURNAL_MOBILE_E2E_SKIP_EXPO_START=1 requires an already-running Expo server with',
+      'EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID set. Restart Expo through this runner,',
+      'or export the same EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID that was used to start it.',
+    ].join('\n'))
+    process.exit(1)
+  }
+
+  if (requestedE2eRunId && requestedE2eRunId !== publicE2eRunId) {
+    console.error([
+      'JOURNAL_MOBILE_E2E_RUN_ID does not match EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID.',
+      'Use the same run id for the already-running Expo server and the Maestro runner.',
+    ].join('\n'))
+    process.exit(1)
+  }
 }
 
 if (shouldRunSyncFlow) {
@@ -99,18 +121,15 @@ try {
 
   if (shouldStartExpo) {
     expoProcess = startExpoServer(expoPort)
-    await waitForPort(expoHost, expoPort, 60_000)
-  } else if (!process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID) {
-    console.warn(
-      'JOURNAL_MOBILE_E2E_SKIP_EXPO_START=1 is set without EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID. ' +
-        'The already-running Expo server may use the default mobile data directory.',
-    )
+    await waitForPort('127.0.0.1', expoPort, 60_000)
   }
 
   const maestroResult = spawnSync(
     maestroCommand,
     [
       'test',
+      ...createMaestroDriverArgs(),
+      ...createMaestroDeviceArgs(),
       ...createMaestroEnvArgs(),
       ...flowPaths,
     ],
@@ -134,61 +153,93 @@ try {
   }
 }
 
-function assertCommandAvailable(command, messageLines) {
+function getMaestroPreflightErrors(command) {
   const result = spawnSync(command, ['--version'], {
+    encoding: 'utf8',
     env: toolEnv,
-    stdio: 'ignore',
   })
 
   if (result.status === 0) {
-    return
+    return []
   }
 
-  console.error(messageLines.join('\n'))
-  process.exit(1)
+  const detail = (result.stderr || result.stdout || '').trim()
+
+  return [
+    'Maestro CLI with Java 17+ is required for mobile native E2E.',
+    'Put maestro on PATH or set MAESTRO_CLI.',
+    'Put Java 17+ on PATH or set JAVA_HOME before running this script.',
+    detail ? `Maestro check failed: ${detail}` : '',
+  ].filter(Boolean)
+}
+
+function getAndroidDevicePreflightErrors() {
+  if (appId !== 'app.zilin.journal.debug') {
+    return []
+  }
+
+  if (!deviceId) {
+    return [
+      'Android development build E2E requires JOURNAL_MOBILE_E2E_DEVICE_ID.',
+      'Run adb devices -l and pass the target device serial explicitly.',
+    ]
+  }
+
+  const result = spawnSync('adb', ['devices', '-l'], {
+    encoding: 'utf8',
+    env: toolEnv,
+  })
+
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || '').trim()
+
+    return [
+      'adb is required to preflight the Android development build target.',
+      detail ? `adb devices failed: ${detail}` : '',
+    ].filter(Boolean)
+  }
+
+  const deviceLine = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith(`${deviceId} `))
+
+  if (!deviceLine) {
+    return [
+      `Android device ${deviceId} is not connected or authorized.`,
+      'Run adb devices -l before mobile E2E.',
+    ]
+  }
+
+  if (!new RegExp(`^${escapeRegex(deviceId)}\\s+device\\b`).test(deviceLine)) {
+    return [
+      `Android device ${deviceId} is not ready: ${deviceLine}`,
+      'Unlock the device and accept the USB debugging prompt.',
+    ]
+  }
+
+  return []
 }
 
 function resolveMaestroCommand() {
   const explicitCommand = process.env.MAESTRO_CLI?.trim()
 
-  if (explicitCommand) {
-    return explicitCommand
-  }
-
-  const homeCommand = process.env.HOME ? `${process.env.HOME}/.maestro/bin/maestro` : ''
-
-  return homeCommand && existsSync(homeCommand) ? homeCommand : 'maestro'
-}
-
-function createToolEnv() {
-  const javaHome = process.env.JAVA_HOME?.trim() || resolveJavaHome()
-  const env = {
-    ...process.env,
-  }
-
-  if (javaHome) {
-    env.JAVA_HOME = javaHome
-    env.PATH = `${javaHome}/bin:${env.PATH ?? ''}`
-  }
-
-  return env
-}
-
-function resolveJavaHome() {
-  const candidates = [
-    '/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
-    '/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
-  ]
-
-  return candidates.find((candidate) => existsSync(`${candidate}/bin/java`)) ?? ''
+  return explicitCommand || 'maestro'
 }
 
 function startExpoServer(port) {
   const expoCli = createExpoCliInvocation()
   const env = {
-    ...createExpoEnv(),
+    ...process.env,
     EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID: e2eRunId,
   }
+
+  if (shouldRunSyncFlow) {
+    env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_BRANCH = syncBranch
+    env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL = syncRemoteUrl
+    env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_TOKEN = syncToken
+  }
+
   const child = spawn(
     expoCli.command,
     [
@@ -224,7 +275,7 @@ function startExpoServer(port) {
 function createMaestroEnvArgs() {
   const args = [
     '-e',
-    `EXPO_URL=${expoUrl}`,
+    `EXPO_OPEN_URL=${expoOpenUrl}`,
     '-e',
     `APP_ID=${appId}`,
   ]
@@ -241,6 +292,18 @@ function createMaestroEnvArgs() {
   }
 
   return args
+}
+
+function createDevelopmentClientOpenUrl(url) {
+  return `exp+journal-mobile://expo-development-client/?url=${encodeURIComponent(url)}`
+}
+
+function createMaestroDeviceArgs() {
+  return deviceId ? ['--udid', deviceId] : []
+}
+
+function createMaestroDriverArgs() {
+  return shouldReinstallMaestroDriver ? [] : ['--no-reinstall-driver']
 }
 
 function isSyncFlowPath(flowPath) {
@@ -453,8 +516,8 @@ function validateMaestroFlowFiles(paths) {
       violations.push(`${flowPath}: remove flow-level ${match[1]}; runMaestroE2e injects it`)
     }
 
-    if (/exp:\/\/(?:127\.0\.0\.1|localhost|[0-9.]+):\d+/.test(contents)) {
-      violations.push(`${flowPath}: use \${EXPO_URL}; do not hardcode an Expo URL`)
+    if (/(?:exp|https?):\/\/(?:127\.0\.0\.1|localhost|[0-9.]+):\d+/.test(contents)) {
+      violations.push(`${flowPath}: use runner-managed EXPO_OPEN_URL; do not hardcode an Expo URL`)
     }
   }
 

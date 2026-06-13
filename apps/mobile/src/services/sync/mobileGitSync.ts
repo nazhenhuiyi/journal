@@ -26,6 +26,10 @@ import {
   loadGitHubSyncCredentials,
   type GitHubSyncCredentials,
 } from './secureSyncCredentials'
+import {
+  createMobileGitHttpTraceDetails,
+  createMobileSyncTrace,
+} from './mobileSyncTrace'
 
 export type MobileGitSyncConfig = JournalGitSyncConfig
 export type MobileGitOperationOptions = JournalGitOperationOptions
@@ -143,7 +147,7 @@ async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
   const globalWithBuffer = globalThis as typeof globalThis & { Buffer: typeof Buffer }
 
   globalWithBuffer.Buffer = Buffer
-  const trace = createMobileGitTraceLogger()
+  const trace = createMobileSyncTrace()
 
   return {
     cache: {},
@@ -168,7 +172,7 @@ function createMobileGitHttpClient(trace?: JournalGitTrace): typeof http {
         )
 
         trace?.({
-          details: createGitHttpTraceDetails(request, response.statusCode),
+          details: createMobileGitHttpTraceDetails(request, response.statusCode),
           durationMs: Date.now() - startedAt,
           name: 'http.gitRequest',
           ok: true,
@@ -177,7 +181,7 @@ function createMobileGitHttpClient(trace?: JournalGitTrace): typeof http {
         return response
       } catch (error) {
         trace?.({
-          details: createGitHttpTraceDetails(request),
+          details: createMobileGitHttpTraceDetails(request),
           durationMs: Date.now() - startedAt,
           errorMessage: getErrorMessage(error),
           name: 'http.gitRequest',
@@ -203,13 +207,17 @@ async function requestGitHttpWithExpoFetch(
   const bytes = new Uint8Array(await response.arrayBuffer())
 
   return {
-    body: [bytes] as unknown as AsyncIterableIterator<Uint8Array>,
+    body: createGitHttpResponseBody(bytes),
     headers: parseResponseHeaders(response.headers),
     method,
     statusCode: response.status,
     statusMessage: response.statusText,
     url: response.url || request.url,
   }
+}
+
+async function* createGitHttpResponseBody(bytes: Uint8Array): AsyncIterableIterator<Uint8Array> {
+  yield bytes
 }
 
 async function collectGitHttpBody(body: Parameters<typeof http.request>[0]['body']) {
@@ -261,67 +269,6 @@ function withMobileAuthorDefaults(config: MobileGitSyncConfig): MobileGitSyncCon
     authorName: config.authorName ?? defaultAuthorName,
     commitMessage: config.commitMessage ?? defaultCommitMessage,
   }
-}
-
-function createMobileGitTraceLogger(): JournalGitTrace | undefined {
-  const nodeEnv = (globalThis as typeof globalThis & {
-    process?: { env?: { NODE_ENV?: string } }
-  }).process?.env?.NODE_ENV
-
-  if (nodeEnv === 'test') {
-    return undefined
-  }
-
-  return (event) => {
-    const details = event.details ? ` ${JSON.stringify(event.details)}` : ''
-    const error = event.errorMessage ? ` error=${event.errorMessage}` : ''
-    const status = event.ok ? 'ok' : 'error'
-
-    console.info(`[journal-sync] ${event.name} ${status} ${event.durationMs}ms${details}${error}`)
-  }
-}
-
-function createGitHttpTraceDetails(
-  request: Parameters<typeof http.request>[0],
-  statusCode: number | null = null,
-) {
-  return {
-    host: getGitHttpHost(request.url),
-    method: request.method ?? 'GET',
-    service: getGitHttpService(request.url),
-    statusCode,
-  }
-}
-
-function getGitHttpHost(url: string) {
-  try {
-    return new URL(url).hostname
-  } catch {
-    return 'unknown'
-  }
-}
-
-function getGitHttpService(url: string) {
-  try {
-    const parsedUrl = new URL(url)
-    const service = parsedUrl.searchParams.get('service')
-
-    if (service) {
-      return service
-    }
-
-    if (parsedUrl.pathname.endsWith('/git-upload-pack')) {
-      return 'git-upload-pack'
-    }
-
-    if (parsedUrl.pathname.endsWith('/git-receive-pack')) {
-      return 'git-receive-pack'
-    }
-  } catch {
-    // Keep trace details intentionally non-fatal.
-  }
-
-  return 'unknown'
 }
 
 function getErrorMessage(error: unknown) {

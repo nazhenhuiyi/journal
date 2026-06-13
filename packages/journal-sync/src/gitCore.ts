@@ -658,8 +658,9 @@ async function fetchRemote(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  traceName = 'remote.fetch',
 ) {
-  return traceGitStep(runtime, 'remote.fetch', () => getGit(runtime).fetch({
+  return traceGitStep(runtime, traceName, () => getGit(runtime).fetch({
     cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
@@ -731,34 +732,17 @@ async function getRemoteBranchOid(
   return refs.find((serverRef) => serverRef.ref === remoteBranchRef)?.oid ?? null
 }
 
-async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
+async function mergeRemoteBranch(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+) {
   const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
   const mergeStats = createJournalMergeStats()
 
   try {
-    const mergeResult = await traceGitStep(runtime, 'remote.merge', () => getGit(runtime).merge({
-      abortOnConflict: false,
-      allowUnrelatedHistories: true,
-      author: {
-        email: config.authorEmail ?? defaultAuthorEmail,
-        name: config.authorName ?? defaultAuthorName,
-      },
-      cache: runtime.cache,
-      dir: runtime.dir,
-      fs: runtime.fs,
-      mergeDriver: createJournalMergeDriver('theirs', mergeStats),
-      ours: getLocalBranchRef(branch),
-      theirs: getRemoteTrackingBranchRef(remote, branch),
-    }), (result) => ({
-      branch,
-      conflictPaths: mergeStats.conflictPaths,
-      fallbackPaths: mergeStats.fallbackPaths,
-      journalStructurePaths: mergeStats.journalStructurePaths,
-      markdownPaths: mergeStats.markdownPaths,
-      remote,
-      result: getMergeResultKind(result),
-    }))
+    const mergeResult = await runRemoteMerge(runtime, config, mergeStats, 'remote.merge')
 
     await traceGitStep(runtime, 'merge.strategy', async () => null, {
       clean: mergeStats.conflictPaths === 0,
@@ -772,6 +756,42 @@ async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitS
 
     return mergeResult
   } catch (error) {
+    if (isRecoverableInternalMergeError(error)) {
+      const retryStats = createJournalMergeStats()
+
+      await traceGitStep(runtime, 'remote.mergeRepair', async () => {
+        await clearRemoteTrackingBranchRef(runtime, remote, branch)
+        await fetchRemote(runtime, config, credentials, 'remote.refetchAfterMergeError')
+        return null
+      }, {
+        branch,
+        error: getErrorMessage(error),
+        remote,
+      })
+
+      try {
+        const retryResult = await runRemoteMerge(runtime, config, retryStats, 'remote.mergeRetry')
+
+        await traceGitStep(runtime, 'merge.strategy', async () => null, {
+          clean: retryStats.conflictPaths === 0,
+          conflictPaths: retryStats.conflictPaths,
+          fallbackPaths: retryStats.fallbackPaths,
+          journalStructurePaths: retryStats.journalStructurePaths,
+          markdownPaths: retryStats.markdownPaths,
+          result: getMergeResultKind(retryResult),
+          strategy: 'markdown-diff3-fallback-lww',
+        })
+
+        return retryResult
+      } catch (retryError) {
+        if (isRecoverableInternalMergeError(retryError)) {
+          await throwRecoverableMergeFailure(runtime, config, credentials, retryError)
+        }
+
+        throw createMergeRecoveryError(retryError)
+      }
+    }
+
     if (isMergeConflictError(error)) {
       const conflictPathCount = getMergeConflictPathCount(error) ?? mergeStats.conflictPaths
 
@@ -794,6 +814,106 @@ async function mergeRemoteBranch(runtime: JournalGitRuntime, config: JournalGitS
     }
 
     throw error
+  }
+}
+
+async function runRemoteMerge(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  mergeStats: ReturnType<typeof createJournalMergeStats>,
+  traceName: string,
+) {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+  const mergeDetails = await traceMergeInputs(runtime, traceName, branch, remote)
+
+  return traceGitStep(runtime, traceName, () => getGit(runtime).merge({
+    abortOnConflict: false,
+    allowUnrelatedHistories: true,
+    author: {
+      email: config.authorEmail ?? defaultAuthorEmail,
+      name: config.authorName ?? defaultAuthorName,
+    },
+    cache: runtime.cache,
+    dir: runtime.dir,
+    fs: runtime.fs,
+    mergeDriver: createJournalMergeDriver('theirs', mergeStats),
+    ours: getLocalBranchRef(branch),
+    theirs: getRemoteTrackingBranchRef(remote, branch),
+  }), (result) => ({
+    ...mergeDetails,
+    branch,
+    conflictPaths: mergeStats.conflictPaths,
+    fallbackPaths: mergeStats.fallbackPaths,
+    journalStructurePaths: mergeStats.journalStructurePaths,
+    missingContentPaths: mergeStats.missingContentPaths,
+    markdownPaths: mergeStats.markdownPaths,
+    remote,
+    result: getMergeResultKind(result),
+  }), mergeDetails)
+}
+
+async function throwRecoverableMergeFailure(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  retryError: unknown,
+): Promise<never> {
+  const details = await traceGitStep(
+    runtime,
+    'remote.mergeRecoveryDiagnostics',
+    () => collectRecoverableMergeFailureDetails(runtime, config, credentials),
+    (diagnostics) => diagnostics,
+  )
+
+  if (details.unrelated === true) {
+    throw createUnrelatedHistoriesError(retryError)
+  }
+
+  throw createMergeRecoveryError(retryError)
+}
+
+async function collectRecoverableMergeFailureDetails(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+) {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+  const branchOid = await getLocalBranchCommitOid(runtime, branch)
+  let remoteOid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
+  let refetchedRemoteTracking = false
+  let baseOid: string | null = null
+  let baseCount: number | null = null
+
+  if (!remoteOid && config.remoteUrl) {
+    await fetchRemote(runtime, config, credentials, 'remote.refetchForMergeRecovery')
+    remoteOid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
+    refetchedRemoteTracking = true
+  }
+
+  if (branchOid && remoteOid) {
+    const baseOids = await getGit(runtime).findMergeBase({
+      cache: runtime.cache,
+      dir: runtime.dir,
+      fs: runtime.fs,
+      oids: [branchOid, remoteOid],
+    })
+
+    baseOid = baseOids[0] ?? null
+    baseCount = baseOids.length
+  }
+
+  return {
+    baseOid: shortTraceOid(baseOid),
+    bases: baseCount,
+    branch,
+    localOid: shortTraceOid(branchOid),
+    refetchedRemoteTracking,
+    remote,
+    remoteOid: shortTraceOid(remoteOid),
+    remoteTrackingRef: getRemoteTrackingBranchRef(remote, branch),
+    unrelated: baseCount === null ? null : baseCount === 0,
   }
 }
 
@@ -845,6 +965,7 @@ async function pullRemoteIntoWorktree(
     const { mergeCommitOid, mergeResult, updatedWorktree } = await mergeRemoteBranchAndCommitChanges(
       runtime,
       config,
+      credentials,
     )
 
     return {
@@ -1041,6 +1162,7 @@ async function pushRemoteWithRetry(
   const retryMergeResult = await mergeRemoteBranchAndCommitChanges(
     runtime,
     input.config,
+    input.credentials,
   )
   await traceGitStep(runtime, 'push.retryMerge', async () => retryMergeResult, (result) => ({
     mergeCommit: Boolean(result.mergeCommitOid),
@@ -1064,10 +1186,11 @@ async function pushRemoteWithRetry(
 async function mergeRemoteBranchAndCommitChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
 ) {
   const branch = getBranchName(config.branch ?? defaultBranch)
   const beforeMergeOid = await getLocalBranchCommitOid(runtime, branch)
-  const mergeResult = await mergeRemoteBranch(runtime, config)
+  const mergeResult = await mergeRemoteBranch(runtime, config, credentials)
 
   if (!mergeResult || isAlreadyMergedMergeResult(mergeResult)) {
     return {
@@ -1593,12 +1716,139 @@ async function isLocalBranchAtRemoteTracking(
   return Boolean(localBranchOid && remoteTrackingOid && localBranchOid === remoteTrackingOid)
 }
 
+async function clearRemoteTrackingBranchRef(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+) {
+  const ref = getRemoteTrackingBranchRef(remote, branch)
+
+  await traceGitStep(runtime, 'remote.clearTrackingRef', async () => {
+    try {
+      await getGit(runtime).deleteRef({
+        dir: runtime.dir,
+        fs: runtime.fs,
+        ref,
+      })
+      return true
+    } catch {
+      return false
+    }
+  }, (deleted) => ({
+    branch: getBranchName(branch),
+    deleted,
+    remote,
+  }))
+}
+
 async function fileExists(runtime: JournalGitRuntime, path: string) {
   try {
     await (runtime.fs as unknown as PromiseGitFileSystem).promises.stat(path)
     return true
   } catch {
     return false
+  }
+}
+
+async function traceMergeInputs(
+  runtime: JournalGitRuntime,
+  traceName: string,
+  branch: string,
+  remote: string,
+) {
+  const startedAt = Date.now()
+
+  try {
+    const details = await collectMergeInputDetails(runtime, branch, remote, traceName)
+
+    emitGitTrace(runtime, {
+      details,
+      durationMs: Date.now() - startedAt,
+      name: 'remote.mergeInputs',
+      ok: true,
+    })
+
+    return details
+  } catch (error) {
+    emitGitTrace(runtime, {
+      details: createErrorTraceDetails(error, { attempt: traceName, branch, remote }),
+      durationMs: Date.now() - startedAt,
+      errorMessage: getErrorMessage(error),
+      name: 'remote.mergeInputs',
+      ok: false,
+    })
+
+    return {
+      attempt: traceName,
+      branch,
+      remote,
+    }
+  }
+}
+
+async function collectMergeInputDetails(
+  runtime: JournalGitRuntime,
+  branch: string,
+  remote: string,
+  traceName: string,
+): Promise<JournalGitTraceDetails> {
+  const localRef = getLocalBranchRef(branch)
+  const remoteTrackingRef = getRemoteTrackingBranchRef(remote, branch)
+  const upstreamRemoteKey = `branch.${branch}.remote`
+  const upstreamMergeKey = `branch.${branch}.merge`
+  const [
+    headOid,
+    localOid,
+    remoteTrackingOid,
+    upstreamRemote,
+    upstreamMerge,
+  ] = await Promise.all([
+    resolveRefForTrace(runtime, 'HEAD'),
+    resolveRefForTrace(runtime, localRef),
+    resolveRefForTrace(runtime, remoteTrackingRef),
+    getConfigForTrace(runtime, upstreamRemoteKey),
+    getConfigForTrace(runtime, upstreamMergeKey),
+  ])
+
+  return {
+    attempt: traceName,
+    branch,
+    headOid,
+    localOid,
+    localRef,
+    remote,
+    remoteTrackingOid,
+    remoteTrackingRef,
+    upstreamMerge,
+    upstreamRemote,
+  }
+}
+
+async function resolveRefForTrace(runtime: JournalGitRuntime, ref: string) {
+  try {
+    const oid = await getGit(runtime).resolveRef({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      ref,
+    })
+
+    return shortTraceOid(oid)
+  } catch (error) {
+    return `unresolved:${compactErrorMessage(error)}`
+  }
+}
+
+async function getConfigForTrace(runtime: JournalGitRuntime, path: string) {
+  try {
+    const value = await getGit(runtime).getConfig({
+      dir: runtime.dir,
+      fs: runtime.fs,
+      path,
+    })
+
+    return typeof value === 'string' && value ? value : 'unset'
+  } catch (error) {
+    return `unreadable:${compactErrorMessage(error)}`
   }
 }
 
@@ -1616,6 +1866,27 @@ function getRemoteBranchRef(branch: string) {
 
 function getRemoteTrackingBranchRef(remote: string, branch: string) {
   return `refs/remotes/${remote}/${getBranchName(branch)}`
+}
+
+function isRecoverableInternalMergeError(error: unknown) {
+  const message = getErrorMessage(error)
+
+  return (
+    message.includes("Cannot read property 'match' of undefined") ||
+    message.includes("Cannot read properties of undefined (reading 'match')")
+  )
+}
+
+function createMergeRecoveryError(error: unknown) {
+  return new Error(
+    `Git merge failed after refreshing remote tracking refs: ${getErrorMessage(error)}`,
+  )
+}
+
+function createUnrelatedHistoriesError(error: unknown) {
+  return new Error(
+    `Local and remote journal histories do not share a common ancestor. Sync stopped before merging or pushing; choose one history or run a one-time repair before syncing again. Original merge error: ${getErrorMessage(error)}`,
+  )
 }
 
 function isSafeShortRefFileName(branch: string) {
@@ -1655,6 +1926,7 @@ async function traceGitStep<T>(
   name: string,
   operation: () => Promise<T>,
   details?: JournalGitTraceDetailsInput<T>,
+  errorDetails?: JournalGitTraceDetails,
 ): Promise<T> {
   const startedAt = Date.now()
 
@@ -1671,6 +1943,10 @@ async function traceGitStep<T>(
     return result
   } catch (error) {
     emitGitTrace(runtime, {
+      details: createErrorTraceDetails(
+        error,
+        errorDetails ?? (typeof details === 'function' ? undefined : details),
+      ),
       durationMs: Date.now() - startedAt,
       errorMessage: getErrorMessage(error),
       name,
@@ -1696,6 +1972,27 @@ function createTraceDetails<T>(
   return typeof details === 'function' ? details(result) : details
 }
 
+function createErrorTraceDetails(
+  error: unknown,
+  details?: JournalGitTraceDetails,
+): JournalGitTraceDetails {
+  const errorRecord = isRecord(error) ? error : null
+  const errorName = error instanceof Error ? error.name : typeof error
+  const errorCaller = errorRecord && typeof errorRecord.caller === 'string'
+    ? errorRecord.caller
+    : null
+  const errorCode = getErrorCode(error)
+  const errorStackTop = getErrorStackTop(error)
+
+  return {
+    ...(details ?? {}),
+    errorCaller,
+    errorCode,
+    errorName,
+    errorStackTop,
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -1712,6 +2009,33 @@ function encodeBase64(value: string) {
   }
 
   return runtimeGlobals.Buffer.from(value, 'utf8').toString('base64')
+}
+
+function shortTraceOid(value: string | null) {
+  if (!value) {
+    return 'missing'
+  }
+
+  return /^[0-9a-f]{40}$/i.test(value) ? value.slice(0, 12) : value
+}
+
+function compactErrorMessage(error: unknown) {
+  return getErrorMessage(error)
+    .replace(/\s+/g, ' ')
+    .slice(0, 160)
+}
+
+function getErrorStackTop(error: unknown) {
+  if (!(error instanceof Error) || !error.stack) {
+    return null
+  }
+
+  return error.stack
+    .split('\n')
+    .slice(0, 6)
+    .map((line) => line.trim())
+    .join(' | ')
+    .slice(0, 700)
 }
 
 function isDirtyStatusRow([, headStatus, workdirStatus, stageStatus]: StatusRow) {

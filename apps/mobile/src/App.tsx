@@ -12,6 +12,7 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import {
   getBuiltInThemeById,
   normalizeThemeIds,
@@ -26,6 +27,7 @@ import {
   type SyncSnapshot,
 } from '@journal/sync'
 import {
+  CommonActions,
   NavigationContainer,
   type NavigationContainerRef,
 } from '@react-navigation/native'
@@ -74,19 +76,42 @@ type ImageImportSource = 'camera' | 'library'
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const murmurDraftInputMinHeight = 92
 
-type TodayFallbackNavigation = {
+type ResetNavigation = {
+  dispatch: (action: ReturnType<typeof CommonActions.reset>) => void
+}
+type BackNavigation = ResetNavigation & {
   canGoBack: () => boolean
   goBack: () => void
-  replace: (routeName: 'Today') => void
+}
+type RootStackResetRoute =
+  | { name: 'Today' }
+  | { name: 'JournalList' }
+  | { name: 'Review' }
+  | { name: 'ReviewDay', params: RootStackParamList['ReviewDay'] }
+  | { name: 'Settings' }
+  | { name: 'SyncSettings' }
+
+function returnToToday(navigation: ResetNavigation) {
+  resetNavigationStack(navigation, [{ name: 'Today' }])
 }
 
-function returnToToday(navigation: TodayFallbackNavigation) {
+function resetNavigationStack(
+  navigation: ResetNavigation,
+  routes: RootStackResetRoute[],
+) {
+  navigation.dispatch(CommonActions.reset({
+    index: routes.length - 1,
+    routes,
+  }))
+}
+
+function goBackOrReturnToToday(navigation: BackNavigation) {
   if (navigation.canGoBack()) {
     navigation.goBack()
     return
   }
 
-  navigation.replace('Today')
+  returnToToday(navigation)
 }
 
 export default function App() {
@@ -220,17 +245,23 @@ export default function App() {
     }
 
     if (deepLink.type === 'write') {
-      navigation.navigate('Today')
+      resetNavigationStack(navigation, [{ name: 'Today' }])
       openMurmurPanelForTheme(deepLink.themeId)
       return
     }
 
     if (deepLink.type === 'reviewDay') {
-      navigation.navigate('ReviewDay', { date: deepLink.date })
+      resetNavigationStack(navigation, [
+        { name: 'Today' },
+        { name: 'ReviewDay', params: { date: deepLink.date } },
+      ])
       return
     }
 
-    navigation.navigate('Review')
+    resetNavigationStack(navigation, [
+      { name: 'Today' },
+      { name: 'Review' },
+    ])
   }, [openMurmurPanelForTheme])
 
   const handleJournalDeepLink = useCallback((url: string | null) => {
@@ -391,95 +422,109 @@ export default function App() {
       >
         <Stack.Screen name="Today">
           {({ navigation }) => (
-            <Screen bottomColor={semanticColors.surface}>
-              <View className="flex-1 gap-1.5 pt-4">
-                <View className="flex-row items-center justify-between px-5">
-                  <View className="flex-row items-center gap-1">
-                    <TopNavButton
-                      icon="calendar-outline"
-                      label="日记列表"
-                      onPress={() => navigation.navigate('JournalList')}
-                      testID="journal-list-button"
-                    />
-                    <TopNavButton
-                      icon="sparkles-outline"
-                      label="回顾"
-                      onPress={() => navigation.navigate('Review')}
-                      testID="review-button"
-                    />
-                  </View>
-                  <View className="flex-row items-center gap-1">
-                    <InlineStatusButton
-                      status={headerStatus}
-                      onPress={() => navigation.navigate('SyncSettings')}
-                      testID="sync-status-button"
-                    />
-                    <HeaderIconButton
-                      icon="settings-outline"
-                      label="设置"
-                      onPress={() => navigation.navigate('Settings')}
-                      testID="settings-button"
-                    />
-                  </View>
-                </View>
-
-                <View
-                  className="flex-1 rounded-lg bg-surface"
-                  style={{
-                    paddingBottom: spacingPixels['6'],
-                    paddingHorizontal: spacingPixels['6'],
-                    paddingTop: spacingPixels['4'],
-                  }}
-                >
-                  <View className="mb-5 flex-row items-center justify-between gap-4">
-                    <View className="shrink">
-                      <Text className="text-sm font-semibold text-foreground">
-                        {paperHeaderLine}
-                      </Text>
+            <Screen
+              bottomColor={semanticColors.surface}
+              keyboardAvoidingEnabled={false}
+            >
+              <KeyboardAwareScrollView
+                bottomOffset={spacingPixels['8']}
+                contentContainerStyle={{ flexGrow: 1 }}
+                disableScrollOnKeyboardHide
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+              >
+                <View className="flex-1 gap-1.5 pt-4" style={{ minHeight: 0 }}>
+                  <View className="flex-row items-center justify-between px-5">
+                    <View className="flex-row items-center gap-1">
+                      <TopNavButton
+                        icon="calendar-outline"
+                        label="日记列表"
+                        onPress={() => navigation.navigate('JournalList')}
+                        testID="journal-list-button"
+                      />
+                      <TopNavButton
+                        icon="sparkles-outline"
+                        label="回顾"
+                        onPress={() => navigation.navigate('Review')}
+                        testID="review-button"
+                      />
                     </View>
-                    <MurmurCountButton
-                      count={murmurs.length}
-                      onPress={openMurmurPanel}
-                      testID="murmur-count-button"
+                    <View className="flex-row items-center gap-1">
+                      <InlineStatusButton
+                        status={headerStatus}
+                        onPress={() => navigation.navigate('SyncSettings')}
+                        testID="sync-status-button"
+                      />
+                      <HeaderIconButton
+                        icon="settings-outline"
+                        label="设置"
+                        onPress={() => navigation.navigate('Settings')}
+                        testID="settings-button"
+                      />
+                    </View>
+                  </View>
+
+                  <View
+                    className="flex-1 rounded-lg bg-surface"
+                    style={{
+                      minHeight: 0,
+                      paddingBottom: spacingPixels['6'],
+                      paddingHorizontal: spacingPixels['6'],
+                      paddingTop: spacingPixels['4'],
+                    }}
+                  >
+                    <View className="mb-5 flex-row items-center justify-between gap-4">
+                      <View className="shrink">
+                        <Text className="text-sm font-semibold text-foreground">
+                          {paperHeaderLine}
+                        </Text>
+                      </View>
+                      <MurmurCountButton
+                        count={murmurs.length}
+                        onPress={openMurmurPanel}
+                        testID="murmur-count-button"
+                      />
+                    </View>
+                    {markdownDiagnosticSummary ? (
+                      <Text className="mb-4 text-sm leading-5 text-danger">
+                        {markdownDiagnosticSummary}
+                      </Text>
+                    ) : null}
+                    <TextInput
+                      accessibilityLabel="日记正文"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      className="flex-1 text-[18px] leading-8 text-foreground"
+                      importantForAutofill="no"
+                      keyboardType="default"
+                      multiline
+                      onBlur={() => {
+                        isLongEntryFocusedRef.current = false
+                      }}
+                      onChangeText={handleLongEntryChange}
+                      onFocus={() => {
+                        isLongEntryFocusedRef.current = true
+                      }}
+                      placeholder="写一点今天真正留下来的东西。"
+                      placeholderTextColor={semanticColors['text-quaternary']}
+                      scrollEnabled
+                      spellCheck={false}
+                      style={{
+                        margin: 0,
+                        minHeight: 0,
+                        padding: 0,
+                        paddingBottom: spacingPixels['8'],
+                        paddingTop: 0,
+                      }}
+                      textAlignVertical="top"
+                      textContentType="none"
+                      testID="long-entry-input"
+                      value={longEntryMarkdown}
                     />
                   </View>
-                  {markdownDiagnosticSummary ? (
-                    <Text className="mb-4 text-sm leading-5 text-danger">
-                      {markdownDiagnosticSummary}
-                    </Text>
-                  ) : null}
-                  <TextInput
-                    accessibilityLabel="日记正文"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    className="flex-1 text-[18px] leading-8 text-foreground"
-                    importantForAutofill="no"
-                    keyboardType="default"
-                    multiline
-                    onBlur={() => {
-                      isLongEntryFocusedRef.current = false
-                    }}
-                    onChangeText={handleLongEntryChange}
-                    onFocus={() => {
-                      isLongEntryFocusedRef.current = true
-                    }}
-                    placeholder="写一点今天真正留下来的东西。"
-                    placeholderTextColor={semanticColors['text-quaternary']}
-                    scrollEnabled
-                    spellCheck={false}
-                    style={{
-                      margin: 0,
-                      padding: 0,
-                      paddingBottom: spacingPixels['5'],
-                      paddingTop: 0,
-                    }}
-                    textAlignVertical="top"
-                    textContentType="none"
-                    testID="long-entry-input"
-                    value={longEntryMarkdown}
-                  />
                 </View>
-              </View>
+              </KeyboardAwareScrollView>
 
               <BottomSheet
                 keyboardAvoiding
@@ -603,7 +648,7 @@ export default function App() {
             <JournalListPage
               longEntryMarkdown={longEntryMarkdown}
               murmurCount={murmurs.length}
-              onBack={() => returnToToday(navigation)}
+              onBack={() => goBackOrReturnToToday(navigation)}
               today={today}
             />
           )}
@@ -613,7 +658,7 @@ export default function App() {
             <ReviewPage
               currentFrontMatter={record?.frontMatter ?? { date: today }}
               longEntryMarkdown={longEntryMarkdown}
-              onBack={() => returnToToday(navigation)}
+              onBack={() => goBackOrReturnToToday(navigation)}
               onOpenSourceDay={(date) => navigation.navigate('ReviewDay', { date })}
               onStartThemeEntry={(themeId) => {
                 returnToToday(navigation)
@@ -628,14 +673,7 @@ export default function App() {
           {({ navigation, route }) => (
             <ReviewDayPage
               date={route.params.date}
-              onBack={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack()
-                  return
-                }
-
-                navigation.replace('Review')
-              }}
+              onBack={() => goBackOrReturnToToday(navigation)}
             />
           )}
         </Stack.Screen>
@@ -644,7 +682,7 @@ export default function App() {
             <SettingsPage
               hasStoredSyncToken={hasStoredSyncToken}
               isSavingSyncConfiguration={isSavingSyncConfiguration}
-              onBack={() => returnToToday(navigation)}
+              onBack={() => goBackOrReturnToToday(navigation)}
               onSaveSyncConfiguration={saveSyncConfiguration}
               setSyncBranch={setSyncBranch}
               setSyncRemoteUrl={setSyncRemoteUrl}
@@ -663,14 +701,7 @@ export default function App() {
               hasStoredSyncToken={hasStoredSyncToken}
               isLoadingGitStatus={isLoadingGitStatus}
               isSyncBusy={isSyncBusy}
-              onBack={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack()
-                  return
-                }
-
-                navigation.replace('Settings')
-              }}
+              onBack={() => goBackOrReturnToToday(navigation)}
               onOpenSyncConfiguration={() => navigation.navigate('Settings')}
               onRefreshGitStatus={refreshMobileGitStatus}
               onSyncNow={handleSyncNow}

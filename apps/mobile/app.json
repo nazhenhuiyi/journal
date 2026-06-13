@@ -15,7 +15,8 @@
     },
     "android": {
       "package": "app.zilin.journal",
-      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-icon.png",
         "backgroundColor": "#F8F2E9"
@@ -47,6 +48,8 @@
       ],
       "./plugins/withAndroidWorkManagerResolution",
       "./plugins/withAndroidArm64Only",
+      "./plugins/withAndroidBackInvokedCallback",
+      "./plugins/withAndroidDebugApplicationIdSuffix",
       [
         "expo-widgets",
         {
@@ -81,6 +84,19 @@
               "maxResizeWidth": "480dp",
               "maxResizeHeight": "140dp",
               "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "JournalMomentCompact",
+              "label": "且留 · 小",
+              "description": "快速留下此刻",
+              "minWidth": "140dp",
+              "minHeight": "70dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 1,
+              "maxResizeWidth": "480dp",
+              "maxResizeHeight": "140dp",
+              "resizeMode": "horizontal|vertical",
               "updatePeriodMillis": 1800000
             }
           ]

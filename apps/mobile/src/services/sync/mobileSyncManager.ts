@@ -22,6 +22,8 @@ import {
   loadPendingMobileSyncPaths,
   savePendingMobileSyncPaths,
 } from './pendingSyncPaths'
+import { createMobileSyncTrace } from './mobileSyncTrace'
+import { getMobileE2eSyncConfiguration } from '../e2eEnvironment'
 import type { SaveDailyJournalResult } from '../mobileJournalStore'
 import type { JournalSavedReason } from '../journalEffects'
 
@@ -97,6 +99,7 @@ class MobileSyncManager {
   private listeners = new Set<() => void>()
   private runtimeBinding: MobileSyncRuntimeBinding | null = null
   private state = initialState
+  private trace = createMobileSyncTrace()
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
@@ -393,6 +396,8 @@ class MobileSyncManager {
 
   private async loadInitialConfiguration() {
     try {
+      await this.seedE2eSyncConfiguration()
+
       const [settingsState, credentialsState] = await Promise.all([
         loadGitHubSyncSettings(),
         loadGitHubSyncCredentials(),
@@ -428,6 +433,24 @@ class MobileSyncManager {
         },
       })
     }
+  }
+
+  private async seedE2eSyncConfiguration() {
+    const configuration = getMobileE2eSyncConfiguration()
+
+    if (!configuration) {
+      return
+    }
+
+    await Promise.all([
+      saveGitHubSyncSettings({
+        branch: configuration.branch,
+        remoteUrl: configuration.remoteUrl,
+      }),
+      saveGitHubSyncCredentials({
+        token: configuration.token,
+      }),
+    ])
   }
 
   private async startPullingIfConfigured() {
@@ -552,12 +575,17 @@ class MobileSyncManager {
 
     const collectDirtyPathsAfterSync = operationChangedPaths.length === 0
 
-    console.info(`[journal-sync] mobile.operation ok 0ms ${JSON.stringify({
-      changedPathCount: operationChangedPaths.length,
-      collectDirtyPathsAfterSync,
-      operation,
-      trigger,
-    })}`)
+    this.trace?.({
+      details: {
+        changedPathCount: operationChangedPaths.length,
+        collectDirtyPathsAfterSync,
+        operation,
+        trigger,
+      },
+      durationMs: 0,
+      name: 'mobile.operation',
+      ok: true,
+    })
 
     const result = await syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
       changedPaths: operationChangedPaths.length > 0 ? operationChangedPaths : undefined,

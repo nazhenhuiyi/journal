@@ -1,6 +1,6 @@
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget'
 import {
-  androidJournalWidgetName,
+  androidJournalWidgetNames,
   renderJournalMomentAndroidWidget,
 } from './JournalMomentAndroidWidget'
 import {
@@ -10,7 +10,7 @@ import { journalEffects } from '../services/journalEffects'
 import { loadJournalWidgetSnapshot } from '../services/journalWidgetSnapshotStore'
 
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
-  if (props.widgetInfo.widgetName !== androidJournalWidgetName) {
+  if (!androidJournalWidgetNames.includes(props.widgetInfo.widgetName)) {
     return
   }
 

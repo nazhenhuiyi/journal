@@ -4,6 +4,7 @@
 - 移动端界面样式优先使用 NativeWind 和已有 `src/ui/` 组件，不要把桌面端布局或 CSS 习惯搬进来。
 - 移动端图标优先使用 `@expo/vector-icons` 或现有主流图标库，不新增手写 icon 文件。
 - 真机或模拟器验收优先使用 Expo / React Native 流程。需要二维码时运行 `npm --workspace @journal/mobile run start`；iOS 模拟器必须用 `npm --workspace @journal/mobile run ios`，不要手动拼 `expo start`。
+- Android 真机调试、development build、旁路 debug 包、`adb reverse`、日志截图和键盘遮挡回归流程见 `docs/product/移动端真机调试手册.md`。
 - 本机 iOS 模拟器必须使用 localhost host；所有 Expo 启动脚本都会固定使用移动端 workspace 的 Expo SDK 56 CLI，iOS 入口会固定 `127.0.0.1` 和 IPv4 优先，并复用已有 localhost Metro。不要从 monorepo 根目录直接运行根 `node_modules/.bin/expo`。
 - 移动端要特别注意安全区、键盘遮挡、中文输入稳定性和底部弹窗手势。
 - Git 同步核心来自 `@journal/sync`。移动端只保留平台适配：Expo 文件系统、SecureStore 凭据、AppState 生命周期和 UI 状态。

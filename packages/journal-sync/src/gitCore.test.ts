@@ -30,7 +30,9 @@ const mockGit = {
   clone: vi.fn(),
   commit: vi.fn(),
   currentBranch: vi.fn(),
+  deleteRef: vi.fn(),
   fetch: vi.fn(),
+  findMergeBase: vi.fn(),
   getConfig: vi.fn(),
   init: vi.fn(),
   listFiles: vi.fn(),
@@ -78,9 +80,11 @@ describe('journal git sync core', () => {
     mockGit.clone.mockResolvedValue(undefined)
     mockGit.commit.mockResolvedValue('commit-oid')
     mockGit.currentBranch.mockResolvedValue('main')
+    mockGit.deleteRef.mockResolvedValue(undefined)
     mockGit.fetch.mockResolvedValue({
       fetchHead: 'remote-head',
     })
+    mockGit.findMergeBase.mockResolvedValue(['base-head'])
     mockGit.getConfig.mockResolvedValue('https://github.com/example/journal-sync.git')
     mockGit.init.mockResolvedValue(undefined)
     mockGit.listFiles.mockResolvedValue([])
@@ -873,6 +877,201 @@ describe('journal git sync core', () => {
       fastForward: true,
       oid: 'remote-head',
     })
+  })
+
+  it('refreshes the remote tracking ref and retries recoverable internal merge errors', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+
+    runtime.trace = trace
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.merge
+      .mockRejectedValueOnce(new TypeError("Cannot read property 'match' of undefined"))
+      .mockResolvedValueOnce({
+        fastForward: true,
+        oid: 'tracking-head',
+      })
+
+    const result = await pullJournalUpdates(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    const eventNames = trace.mock.calls.map(([event]) => event.name)
+    const mergeErrorEvent = trace.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.name === 'remote.merge' && !event.ok)
+    const mergeInputEvent = trace.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.name === 'remote.mergeInputs')
+
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'remote.mergeInputs',
+      'remote.merge',
+      'remote.mergeRepair',
+      'remote.mergeRetry',
+    ]))
+    expect(mergeInputEvent).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        branch: 'main',
+        localOid: 'local-head',
+        remoteTrackingOid: 'tracking-head',
+        remoteTrackingRef: 'refs/remotes/origin/main',
+      }),
+      ok: true,
+    }))
+    expect(mergeErrorEvent).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        branch: 'main',
+        errorName: 'TypeError',
+        errorStackTop: expect.stringContaining("Cannot read property 'match' of undefined"),
+        remoteTrackingOid: 'tracking-head',
+      }),
+      errorMessage: "Cannot read property 'match' of undefined",
+      ok: false,
+    }))
+    expect(mockGit.deleteRef).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'refs/remotes/origin/main',
+    }))
+    expect(mockGit.fetch).toHaveBeenCalledTimes(1)
+    expect(mockGit.merge).toHaveBeenCalledTimes(2)
+    expect(result.mergeResult).toEqual({
+      fastForward: true,
+      oid: 'tracking-head',
+    })
+  })
+
+  it('records recovery diagnostics and rejects when retrying a recoverable merge error still fails', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+
+    runtime.trace = trace
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.merge
+      .mockRejectedValueOnce(new TypeError("Cannot read property 'match' of undefined"))
+      .mockRejectedValueOnce(new TypeError("Cannot read property 'match' of undefined"))
+
+    await expect(pullJournalUpdates(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )).rejects.toThrow('Git merge failed after refreshing remote tracking refs')
+
+    const eventNames = trace.mock.calls.map(([event]) => event.name)
+
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'remote.merge',
+      'remote.mergeRepair',
+      'remote.mergeRetry',
+      'remote.mergeRecoveryDiagnostics',
+    ]))
+    expect(trace.mock.calls).toContainEqual([
+      expect.objectContaining({
+        details: expect.objectContaining({
+          baseOid: 'base-head',
+          bases: 1,
+          localOid: 'local-head',
+          remoteOid: 'tracking-head',
+          remoteTrackingRef: 'refs/remotes/origin/main',
+          unrelated: false,
+        }),
+        name: 'remote.mergeRecoveryDiagnostics',
+        ok: true,
+      }),
+    ])
+    expect(mockGit.findMergeBase).toHaveBeenCalledWith(expect.objectContaining({
+      dir: '/journal',
+      oids: ['local-head', 'tracking-head'],
+    }))
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+  })
+
+  it('stops before committing or pushing unrelated local and remote histories', async () => {
+    const runtime = createRuntime()
+    const trace = vi.fn()
+
+    runtime.trace = trace
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'tracking-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.findMergeBase.mockResolvedValueOnce([])
+    mockGit.merge
+      .mockRejectedValueOnce(new TypeError("Cannot read property 'match' of undefined"))
+      .mockRejectedValueOnce(new TypeError("Cannot read property 'match' of undefined"))
+
+    await expect(pullJournalUpdates(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )).rejects.toThrow('do not share a common ancestor')
+
+    expect(trace.mock.calls).toContainEqual([
+      expect.objectContaining({
+        details: expect.objectContaining({
+          baseOid: 'missing',
+          bases: 0,
+          unrelated: true,
+        }),
+        name: 'remote.mergeRecoveryDiagnostics',
+        ok: true,
+      }),
+    ])
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
   })
 
   it('skips pull dirty scans when the remote branch is unchanged and dirty collection is disabled', async () => {

@@ -16,7 +16,7 @@ export function PageShell({ children, onBack, title }: PageShellProps) {
       <View className="flex-1 px-5 pb-5 pt-4">
         <View style={styles.nav}>
           <Pressable
-            accessibilityLabel="返回今日"
+            accessibilityLabel="返回"
             accessibilityRole="button"
             onPress={onBack}
             style={styles.backButton}

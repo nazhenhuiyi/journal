@@ -63,3 +63,11 @@ export {
   type JournalSyncStatusPresentationOptions,
   type JournalSyncStatusTone,
 } from './statusPresentation'
+export {
+  createConsoleJournalGitTrace,
+  createConsoleJournalGitTraceSink,
+  createJournalGitTrace,
+  formatJournalGitTraceEvent,
+  type JournalGitTraceConsole,
+  type JournalGitTraceSink,
+} from './trace'

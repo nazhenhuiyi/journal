@@ -58,7 +58,8 @@ describe('journal smart merge driver', () => {
   })
 
   it('treats missing merge driver contents as empty text', async () => {
-    const driver = createJournalMergeDriver()
+    const stats = createJournalMergeStats()
+    const driver = createJournalMergeDriver('theirs', stats)
     const result = await driver({
       branches: ['base', 'main', 'origin/main'],
       contents: [
@@ -71,6 +72,7 @@ describe('journal smart merge driver', () => {
 
     expect(result.mergedText).toContain('local journal text')
     expect(result.mergedText).toContain('remote journal text')
+    expect(stats.missingContentPaths).toBe(1)
   })
 
   it('keeps both murmur blocks when both sides append different murmurs at the same location', async () => {
@@ -115,6 +117,7 @@ describe('journal smart merge driver', () => {
       conflictPaths: 0,
       fallbackPaths: 0,
       journalStructurePaths: 1,
+      missingContentPaths: 0,
       markdownPaths: 1,
     })
   })
@@ -221,6 +224,7 @@ describe('journal smart merge driver', () => {
       conflictPaths: 0,
       fallbackPaths: 1,
       journalStructurePaths: 0,
+      missingContentPaths: 0,
       markdownPaths: 0,
     })
   })

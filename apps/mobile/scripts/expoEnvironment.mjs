@@ -52,12 +52,33 @@ export function createExpoEnv(overrides = {}) {
     overrides.NODE_OPTIONS ?? process.env.NODE_OPTIONS ?? '',
     '--dns-result-order=ipv4first',
   )
+  const javaHome = overrides.JAVA_HOME ?? process.env.JAVA_HOME ?? resolveJavaHome()
+  const androidSdkHome = (
+    overrides.ANDROID_HOME ??
+    overrides.ANDROID_SDK_ROOT ??
+    process.env.ANDROID_HOME ??
+    process.env.ANDROID_SDK_ROOT ??
+    resolveAndroidSdkHome()
+  )
 
-  return {
+  const env = {
     ...process.env,
     ...overrides,
     NODE_OPTIONS: nodeOptions,
   }
+
+  if (javaHome) {
+    env.JAVA_HOME = javaHome
+    env.PATH = `${javaHome}/bin:${env.PATH ?? ''}`
+  }
+
+  if (androidSdkHome) {
+    env.ANDROID_HOME = androidSdkHome
+    env.ANDROID_SDK_ROOT = androidSdkHome
+    env.PATH = `${androidSdkHome}/platform-tools:${androidSdkHome}/emulator:${env.PATH ?? ''}`
+  }
+
+  return env
 }
 
 export function appendNodeOption(currentValue, nextOption) {
@@ -68,6 +89,25 @@ export function appendNodeOption(currentValue, nextOption) {
   }
 
   return [...options, nextOption].join(' ')
+}
+
+function resolveJavaHome() {
+  const candidates = [
+    '/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
+    '/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
+    '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
+  ]
+
+  return candidates.find((candidate) => existsSync(`${candidate}/bin/java`)) ?? ''
+}
+
+function resolveAndroidSdkHome() {
+  const candidates = [
+    `${process.env.HOME ?? ''}/Library/Android/sdk`,
+    '/opt/android-sdk',
+  ]
+
+  return candidates.find((candidate) => candidate && existsSync(`${candidate}/platform-tools/adb`)) ?? ''
 }
 
 export function readPort(args, fallbackPort = defaultExpoPort) {

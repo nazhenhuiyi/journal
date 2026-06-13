@@ -2,7 +2,7 @@ appId: ${APP_ID}
 ---
 - stopApp
 - openLink:
-    link: ${EXPO_URL}
+    link: ${EXPO_OPEN_URL}
 - runFlow:
     when:
       visible: 'Open'
@@ -15,9 +15,9 @@ appId: ${APP_ID}
       - tapOn: '打开'
 - runFlow:
     when:
-      visible: '返回今日'
+      visible: 'Continue'
     commands:
-      - tapOn: 返回今日
+      - tapOn: 'Continue'
 - extendedWaitUntil:
     visible: 日记列表
     timeout: 60000

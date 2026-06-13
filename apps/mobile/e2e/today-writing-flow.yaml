@@ -8,6 +8,7 @@ env:
 - tapOn:
     id: murmur-draft-input
 - inputText: ${MURMUR_TEXT}
+- pressKey: Enter
 - tapOn:
     id: add-murmur-button
     enabled: true

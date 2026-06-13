@@ -118,6 +118,14 @@ themes: [sky-now]
     expect(mockUpdateNativeJournalWidgets).toHaveBeenCalledWith(snapshot)
   })
 
+  it('keeps the widget snapshot isolated during mobile E2E runs', () => {
+    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', ' widget/run:1 ')
+
+    expect(getJournalWidgetSnapshotFilePath()).toBe(
+      'file:///app/journal-widget-snapshot-v1.json.widget-run-1',
+    )
+  })
+
   it('uses existing persisted review moments when present', async () => {
     mockFileSystem.files.set(reviewPath, JSON.stringify({
       date: '2026-06-10',
