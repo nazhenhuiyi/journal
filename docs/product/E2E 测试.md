@@ -13,16 +13,16 @@
 根目录完整 Vitest 校验：
 
 ```sh
-npm test
+pnpm test
 ```
 
-`npm test` 会先跑 unit，再跑 integration。桌面端 workspace 的 `test` 只代表桌面端 unit；桌面端 integration 需要显式运行：
+`pnpm test` 会先跑 unit，再跑 integration。桌面端 workspace 的 `test` 只代表桌面端 unit；桌面端 integration 需要显式运行：
 
 ```sh
-npm run test:unit
-npm run test:integration
-npm run test:desktop
-npm run test:desktop:integration
+pnpm run test:unit
+pnpm run test:integration
+pnpm run test:desktop
+pnpm run test:desktop:integration
 ```
 
 桌面端 integration 文件使用 `*.integration.test.tsx` / `*.integration.test.ts` 命名，覆盖路由、hook、mock preload store、同步协调等多模块协作。不要把依赖真实浏览器、真实网络、完整应用启动、跨页面流程、持久化、同步状态或多个系统协作的 case 放回 unit suite。
@@ -32,13 +32,13 @@ npm run test:desktop:integration
 运行全部 E2E：
 
 ```sh
-npm run e2e
+pnpm run e2e
 ```
 
 移动端原生 E2E 单独运行：
 
 ```sh
-npm run e2e:mobile
+pnpm run e2e:mobile
 ```
 
 ## Desktop local app E2E
@@ -46,7 +46,7 @@ npm run e2e:mobile
 运行：
 
 ```sh
-npm run e2e:desktop
+pnpm run e2e:desktop
 ```
 
 这个命令会先构建桌面端，再用 Playwright 的 Electron driver 启动真实 Electron 应用。测试会设置：
@@ -73,7 +73,7 @@ npm run e2e:desktop
 运行：
 
 ```sh
-npm run e2e:desktop:sync
+pnpm run e2e:desktop:sync
 ```
 
 这条测试需要 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`。它使用真实 Electron 应用和专用 GitHub 测试仓库，但仍然使用隔离 journal 目录和隔离 Electron userData。
@@ -98,7 +98,7 @@ npm run e2e:desktop:sync
 ```sh
 JOURNAL_E2E_GITHUB_REMOTE_URL=https://github.com/<owner>/<repo>.git \
 JOURNAL_E2E_GITHUB_TOKEN=<token> \
-npm run e2e:sync:github
+pnpm run e2e:sync:github
 ```
 
 如果没有设置 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`，测试会自动跳过。
@@ -143,7 +143,7 @@ npm run e2e:sync:github
 # 先构建 simulator .app，例如用 Xcode/xcodebuild 产出 Release-iphonesimulator/app.app
 # 然后启动一个 iPhone Simulator，runner 会自动选择已启动的 iPhone。
 JOURNAL_MOBILE_E2E_IOS_APP_PATH=apps/mobile/build/ios/Build/Products/Release-iphonesimulator/app.app \
-npm run e2e:mobile:ios
+pnpm run e2e:mobile:ios
 ```
 
 稳定 Android 路径：
@@ -153,7 +153,7 @@ npm run e2e:mobile:ios
 adb devices -l
 JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> \
 JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/app-release.apk \
-npm run e2e:mobile:android
+pnpm run e2e:mobile:android
 ```
 
 runner 在 artifact 模式下会先安装给定 `.app` / `.apk`，再让 `_launch-app.yaml` 执行 Maestro `launchApp`。flow 里不要写 Expo URL、localhost、`openLink` 或 `clearState`。需要清状态时由 runner 的安装阶段处理，避免 `launchApp clearState` 和 Dev Client deep link 互相竞态。
@@ -161,8 +161,8 @@ runner 在 artifact 模式下会先安装给定 `.app` / `.apk`，再让 `_launc
 本地快速调试路径只保留少量 smoke：
 
 ```sh
-npm run e2e:mobile:ios:dev
-JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> npm run e2e:mobile:android:dev
+pnpm run e2e:mobile:ios:dev
+JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> pnpm run e2e:mobile:android:dev
 ```
 
 这个路径会启动 Expo native dev server、预热 Metro bundle、打开已安装的 Dev Client，然后只跑 `dev-client-smoke-flow.yaml`。它适合确认本机 Dev Client 能进主界面，不作为完整 E2E 门禁。
@@ -189,7 +189,7 @@ flow 编写约定：
 JOURNAL_MOBILE_E2E_ENABLE_SYNC=1 \
 JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL=https://github.com/you/journal-sync.git \
 JOURNAL_MOBILE_E2E_SYNC_TOKEN=ghp_xxx \
-npm run e2e:mobile:ios
+pnpm run e2e:mobile:ios
 ```
 
 可选项：
@@ -203,7 +203,7 @@ npm run e2e:mobile:ios
 JOURNAL_MOBILE_E2E_MODE=dev-client \
 JOURNAL_MOBILE_E2E_SKIP_EXPO_START=1 \
 EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID=manual-mobile-e2e \
-npm run e2e:mobile:ios
+pnpm run e2e:mobile:ios
 ```
 
 跳过自动启动时，已经运行的 Expo server 必须带同一个 `EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID`。否则应用会落回默认移动端数据目录，runner 会直接失败。
@@ -221,15 +221,15 @@ npm run e2e:mobile:ios
 ## 脚本速查
 
 ```sh
-npm run e2e                 # desktop local app + desktop app sync + sync core
-npm run e2e:desktop         # 只跑不访问外网的 Electron 本地核心路径
-npm run e2e:desktop:sync    # 跑桌面应用层真实 GitHub 同步
-npm run e2e:mobile:ios      # 跑 iOS Simulator Maestro 原生 E2E
-npm run e2e:mobile:android  # 跑 Android 真机/模拟器 Maestro 原生 E2E
-npm run e2e:mobile:ios:dev  # 跑 iOS Dev Client 快速 smoke
-npm run e2e:mobile:android:dev # 跑 Android Dev Client 快速 smoke
-npm run e2e:sync:github     # 跑共享 sync core 真实 GitHub 同步
-npm test                    # unit + integration
-npm run test:unit           # 所有 workspace unit
-npm run test:integration    # integration，目前包括桌面端 integration
+pnpm run e2e                 # desktop local app + desktop app sync + sync core
+pnpm run e2e:desktop         # 只跑不访问外网的 Electron 本地核心路径
+pnpm run e2e:desktop:sync    # 跑桌面应用层真实 GitHub 同步
+pnpm run e2e:mobile:ios      # 跑 iOS Simulator Maestro 原生 E2E
+pnpm run e2e:mobile:android  # 跑 Android 真机/模拟器 Maestro 原生 E2E
+pnpm run e2e:mobile:ios:dev  # 跑 iOS Dev Client 快速 smoke
+pnpm run e2e:mobile:android:dev # 跑 Android Dev Client 快速 smoke
+pnpm run e2e:sync:github     # 跑共享 sync core 真实 GitHub 同步
+pnpm test                    # unit + integration
+pnpm run test:unit           # 所有 workspace unit
+pnpm run test:integration    # integration，目前包括桌面端 integration
 ```

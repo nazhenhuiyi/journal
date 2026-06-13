@@ -18,7 +18,7 @@
 
 之前桌面端验收容易绕来绕去，主要是因为这些事情混在了一起：
 
-- `npm run dev` 会启动开发服务器，也会通过插件自动拉起 Electron，容易同时出现多个窗口。
+- `pnpm run dev` 会启动开发服务器，也会通过插件自动拉起 Electron，容易同时出现多个窗口。
 - 旧的 Electron 窗口可能还在跑旧代码，容易误判。
 - 电脑操作工具（Computer Use）很适合看真实窗口，但不一定稳定点击和输入。
 - 日记正文使用 CodeMirror 编辑器，不是普通输入框，直接改网页内容可能不会触发保存。
@@ -34,7 +34,7 @@
 ### 3.1 有效做法
 
 - 先重新构建桌面端主进程，避免 Electron 跑旧代码。
-- 不直接跑 `npm run dev`，而是单独启动网页开发服务器，再手动启动 Electron。
+- 不直接跑 `pnpm run dev`，而是单独启动网页开发服务器，再手动启动 Electron。
 - 给 Electron 打开远程调试端口，用远程调试协议操作真实页面。
 - 电脑操作工具只用来看窗口和读页面结构，不承担主要输入。
 - 通过远程调试协议聚焦“日记正文”编辑器，再插入文字，让输入经过真实编辑器链路。
@@ -110,13 +110,13 @@
 优先使用已经落地的 Playwright Electron E2E：
 
 ```sh
-npm run e2e:desktop
-npm run e2e:desktop:sync
+pnpm run e2e:desktop
+pnpm run e2e:desktop:sync
 ```
 
-`npm run e2e:desktop` 使用隔离 journal 目录、隔离 Electron userData，并设置 `JOURNAL_DISABLE_WEATHER=1`，适合日常界面和本地保存回归。
+`pnpm run e2e:desktop` 使用隔离 journal 目录、隔离 Electron userData，并设置 `JOURNAL_DISABLE_WEATHER=1`，适合日常界面和本地保存回归。
 
-`npm run e2e:desktop:sync` 使用真实 GitHub 测试仓库，需要 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`，适合验证应用层真实同步。不要用真实日记仓库跑这条测试。
+`pnpm run e2e:desktop:sync` 使用真实 GitHub 测试仓库，需要 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`，适合验证应用层真实同步。不要用真实日记仓库跑这条测试。
 
 下面的手动流程只作为临场排查、视觉确认或远程调试 fallback。
 
@@ -125,12 +125,12 @@ npm run e2e:desktop:sync
 先构建一次，确保 Electron 主进程使用最新代码：
 
 ```sh
-npm --workspace @journal/desktop exec vite build
+pnpm --filter @journal/desktop exec vite build
 ```
 
 ### 5.2 单独启动网页开发服务器
 
-不要直接用 `npm run dev` 做验收。它可能自动启动 Electron，导致多个窗口混在一起。
+不要直接用 `pnpm run dev` 做验收。它可能自动启动 Electron，导致多个窗口混在一起。
 
 当前可以用这个命令只启动网页开发服务器：
 
@@ -361,9 +361,9 @@ git -C ~/.journal ls-remote origin refs/heads/main
 ```json
 {
   "scripts": {
-    "e2e:desktop": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts",
-    "e2e:desktop:sync": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop-sync.spec.ts",
-    "e2e:desktop:all": "npm --workspace @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts e2e/desktop-sync.spec.ts"
+    "e2e:desktop": "pnpm --filter @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts",
+    "e2e:desktop:sync": "pnpm --filter @journal/desktop exec vite build && playwright test e2e/desktop-sync.spec.ts",
+    "e2e:desktop:all": "pnpm --filter @journal/desktop exec vite build && playwright test e2e/desktop.spec.ts e2e/desktop-sync.spec.ts"
   }
 }
 ```

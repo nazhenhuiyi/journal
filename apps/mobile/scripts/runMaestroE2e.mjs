@@ -240,14 +240,14 @@ function getArtifactPreflightErrors() {
     return [
       'iOS artifact E2E requires a built simulator .app.',
       'Set JOURNAL_MOBILE_E2E_IOS_APP_PATH or JOURNAL_MOBILE_E2E_ARTIFACT_PATH to the .app path.',
-      'Example: JOURNAL_MOBILE_E2E_IOS_APP_PATH=apps/mobile/build/ios/Build/Products/Release-iphonesimulator/app.app npm run e2e:mobile:ios',
+      'Example: JOURNAL_MOBILE_E2E_IOS_APP_PATH=apps/mobile/build/ios/Build/Products/Release-iphonesimulator/app.app pnpm run e2e:mobile:ios',
     ]
   }
 
   return [
     'Android artifact E2E requires a built .apk.',
     'Set JOURNAL_MOBILE_E2E_ANDROID_APK_PATH or JOURNAL_MOBILE_E2E_ARTIFACT_PATH to the .apk path.',
-    'Example: JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/app-release.apk npm run e2e:mobile:android',
+    'Example: JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/app-release.apk pnpm run e2e:mobile:android',
   ]
 }
 
@@ -338,7 +338,7 @@ function getIosDevicePreflightErrors() {
 
   return [
     `iOS app ${appId} is not installed on ${device.name || deviceId}.`,
-    `Run: npm --workspace @journal/mobile run ios:dev -- --no-bundler --device ${deviceId}`,
+    `Run: pnpm --filter @journal/mobile run ios:dev -- --no-bundler --device ${deviceId}`,
     detail ? `simctl get_app_container failed: ${detail}` : '',
   ].filter(Boolean)
 }
@@ -976,10 +976,10 @@ function validateMaestroFlowFiles(paths) {
 function printUsage() {
   console.info(`
 Usage:
-  npm --workspace @journal/mobile run e2e:ios -- [flow.yaml ...]
-  npm --workspace @journal/mobile run e2e:android -- [flow.yaml ...]
-  npm --workspace @journal/mobile run e2e:ios:dev -- [flow.yaml ...]
-  npm --workspace @journal/mobile run e2e:android:dev -- [flow.yaml ...]
+  pnpm --filter @journal/mobile run e2e:ios -- [flow.yaml ...]
+  pnpm --filter @journal/mobile run e2e:android -- [flow.yaml ...]
+  pnpm --filter @journal/mobile run e2e:ios:dev -- [flow.yaml ...]
+  pnpm --filter @journal/mobile run e2e:android:dev -- [flow.yaml ...]
 
 Environment:
   JOURNAL_MOBILE_E2E_MODE=artifact|dev-client

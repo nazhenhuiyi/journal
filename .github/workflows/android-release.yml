@@ -26,7 +26,11 @@ jobs:
         uses: actions/setup-node@v6.4.0
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Setup Java
         uses: actions/setup-java@v5.2.0
@@ -38,7 +42,7 @@ jobs:
         uses: android-actions/setup-android@v4.0.1
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare build directory
         run: mkdir -p builds
@@ -57,7 +61,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx --yes eas-cli@20.1.0 build \
+          pnpm dlx eas-cli@20.1.0 build \
             --local \
             --platform android \
             --profile preview \

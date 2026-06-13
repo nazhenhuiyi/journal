@@ -41,7 +41,7 @@
     }
   },
   "dependencies": {
-    "@journal/core": "file:../journal-core",
+    "@journal/core": "workspace:*",
     "diff3": "0.0.3",
     "isomorphic-git": "^1.38.4"
   },

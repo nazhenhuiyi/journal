@@ -6,4 +6,4 @@
 - 批注数据结构需要保留，即使应用界面暂时不展示批注功能。
 - 修改数据结构或序列化格式时，要同时考虑桌面端、移动端和同步仓库里的历史数据。
 - 不要为了某一端 UI 的临时需求污染共享模型。应用端展示细节应留在应用端。
-- 测试使用 Vitest。运行 `npm --workspace @journal/core run test` 和 `npm --workspace @journal/core run typecheck`。
+- 测试使用 Vitest。运行 `pnpm --filter @journal/core run test` 和 `pnpm --filter @journal/core run typecheck`。

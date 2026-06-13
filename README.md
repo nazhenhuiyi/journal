@@ -9,48 +9,48 @@
 ## 开发
 
 ```sh
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
-`npm run dev` 默认启动桌面端。移动端可以使用：
+`pnpm run dev` 默认启动桌面端。移动端可以使用：
 
 ```sh
-npm run dev:mobile
+pnpm run dev:mobile
 ```
 
 ## 常用命令
 
 ```sh
-npm run typecheck
-npm test
-npm run lint
-npm run build
+pnpm run typecheck
+pnpm test
+pnpm run lint
+pnpm run build
 ```
 
-`npm run build` 当前转发到桌面端构建，会在完成 TypeScript/Vite 构建后调用 `electron-builder` 生成桌面安装包。
+`pnpm run build` 当前转发到桌面端构建，会在完成 TypeScript/Vite 构建后调用 `electron-builder` 生成桌面安装包。
 
-`npm test` 会先跑 unit，再跑桌面端 integration。unit 覆盖桌面端、移动端、`journal-core`、`journal-sync` 和 `journal-theme`。
+`pnpm test` 会先跑 unit，再跑桌面端 integration。unit 覆盖桌面端、移动端、`journal-core`、`journal-sync` 和 `journal-theme`。
 
 ## Android 打包
 
 移动端使用 EAS Build 打包。第一次打包前先登录并把本地 Expo 项目关联到你的 Expo 账号：
 
 ```sh
-npm --workspace @journal/mobile run eas:login
-npm --workspace @journal/mobile run eas:init
+pnpm --filter @journal/mobile run eas:login
+pnpm --filter @journal/mobile run eas:init
 ```
 
 打可直接安装的 Android APK：
 
 ```sh
-npm run build:mobile:android
+pnpm run build:mobile:android
 ```
 
 如果以后要上架 Google Play，打 AAB：
 
 ```sh
-npm run build:mobile:android:aab
+pnpm run build:mobile:android:aab
 ```
 
 Android 包名现在是 `app.zilin.journal`，配置在 `apps/mobile/app.json`。这个值决定安卓是否把新版识别为同一个应用，第一次安装后不要随意修改。
