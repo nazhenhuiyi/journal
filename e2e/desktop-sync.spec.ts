@@ -16,6 +16,7 @@ import {
   closeIsolatedDesktopApp,
   createIsolatedDesktopApp,
   getLocalDateKey,
+  getSettingsSyncStatusRow,
   readJournalEntry,
   waitForJournalEditor,
   waitForPreviewPage,
@@ -75,7 +76,7 @@ test('desktop app saves sync settings and syncs a journal entry through GitHub',
     await page.locator('.journal-sync-button').click()
     await expect(page).toHaveURL(/#\/settings/)
     await expect(page.locator('[aria-label="同步设置"]')).toBeVisible()
-    await expect(page.locator('.settings-sync-status')).toContainText(/已保存|等待同步|空闲/)
+    await expect(getSettingsSyncStatusRow(page)).toContainText(/已配置|已保存|同步中|已同步/)
 
     const syncNowButton = page.getByRole('button', { name: '立即同步' })
 

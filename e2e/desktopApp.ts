@@ -59,6 +59,10 @@ export async function waitForJournalEditor(page: Page) {
   await page.waitForSelector('[aria-label="日记正文"][role="textbox"]')
 }
 
+export function getSettingsSyncStatusRow(page: Page) {
+  return page.locator('[aria-label="同步设置"] .settings-list-row').filter({ hasText: '远端同步' })
+}
+
 export function getJournalEntryPath(journalDir: string, date: string) {
   const [year, month] = date.split('-')
 
