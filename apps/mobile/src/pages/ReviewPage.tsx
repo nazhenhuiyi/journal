@@ -101,7 +101,7 @@ export function ReviewPage({
   }, [currentFrontMatter, longEntryMarkdown, murmurs, today]))
 
   return (
-    <PageShell onBack={onBack} title="回顾">
+    <PageShell onBack={onBack} testID="review-page" title="回顾">
       <ScrollView contentContainerStyle={{ paddingBottom: spacingPixels['6'] }} showsVerticalScrollIndicator={false}>
         <View className="gap-5">
           <View className="gap-3">

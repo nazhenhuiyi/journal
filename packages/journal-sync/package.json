@@ -34,6 +34,10 @@
     "./statusPresentation": {
       "types": "./src/statusPresentation.ts",
       "default": "./src/statusPresentation.ts"
+    },
+    "./trace": {
+      "types": "./src/trace.ts",
+      "default": "./src/trace.ts"
     }
   },
   "dependencies": {

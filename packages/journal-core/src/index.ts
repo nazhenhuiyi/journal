@@ -25,6 +25,10 @@ export {
   getSolarTermForDate,
 } from './reviewMoments'
 export {
+  compareMurmursByNewest,
+  orderMurmursByNewest,
+} from './murmurs'
+export {
   BUILT_IN_THEMES,
   getBuiltInThemeById,
   getThemeLabel,

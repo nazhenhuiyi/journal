@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   initMobileGitSyncRepository,
@@ -309,13 +310,25 @@ describe('mobile git sync', () => {
 
   it('preemptively adds authorization to mobile Git HTTP requests', async () => {
     mockGit.fetch.mockImplementationOnce(async ({ http }) => {
-      await http.request({
+      mockExpoFetch.mockResolvedValueOnce(new Response('git-response', {
+        headers: {
+          'content-type': 'application/x-git-upload-pack-advertisement',
+        },
+        status: 200,
+      }))
+      const response = await http.request({
         headers: {
           accept: 'application/x-git-upload-pack-advertisement',
         },
         method: 'GET',
         url: 'https://github.com/example/journal-sync.git/info/refs?service=git-upload-pack',
       })
+      const firstChunk = await response.body.next()
+      const secondChunk = await response.body.next()
+
+      expect(firstChunk.done).toBe(false)
+      expect(Buffer.from(firstChunk.value).toString('utf8')).toBe('git-response')
+      expect(secondChunk.done).toBe(true)
 
       return {
         fetchHead: 'remote-head',

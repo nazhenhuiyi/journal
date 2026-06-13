@@ -402,6 +402,10 @@ export function getEntryRepositoryPath(date: string) {
   return `entries/${year}/${month}/${date}.md`
 }
 
+export function getDailyJournalFileUri(date: string) {
+  return `${getJournalWorktreeDirectory()}${getEntryRepositoryPath(date)}`
+}
+
 export function getReviewRepositoryPath(date: string) {
   const [year, month] = date.split('-')
 

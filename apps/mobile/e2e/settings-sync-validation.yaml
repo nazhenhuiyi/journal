@@ -1,18 +1,40 @@
 appId: ${APP_ID}
-env:
-  UNSAFE_REMOTE_URL: https://secret-token@github.com/example/journal-sync.git
 ---
-- runFlow: _open-expo.yaml
+- runFlow: _launch-app.yaml
 - tapOn:
     id: sync-status-button
-- assertVisible: 远端同步
+- extendedWaitUntil:
+    visible:
+      id: sync-settings-page
+    timeout: 10000
 - tapOn:
     id: open-sync-configuration-button
+- extendedWaitUntil:
+    visible:
+      id: sync-remote-url-input
+    timeout: 10000
 - tapOn:
     id: sync-remote-url-input
-- eraseText: 200
-- inputText: ${UNSAFE_REMOTE_URL}
+- eraseText: 80
+- setClipboard: "https://secret-token@github.com/example/journal-sync.git"
+- pasteText
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: sync-token-input
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: sync-token-input
+- eraseText: 80
+- setClipboard: "ghp_mobile_e2e_fake_token"
+- pasteText
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: save-sync-config-button
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: save-sync-config-button
     enabled: true

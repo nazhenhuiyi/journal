@@ -1,0 +1,65 @@
+appId: ${APP_ID}
+---
+- runFlow: _launch-app.yaml
+- tapOn:
+    id: review-button
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- tapOn:
+    id: back-to-today-button
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- tapOn:
+    id: back-to-today-button
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- tapOn:
+    id: back-to-today-button
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- tapOn:
+    id: back-to-today-button
+- assertVisible:
+    id: journal-list-button

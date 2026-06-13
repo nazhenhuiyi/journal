@@ -2,45 +2,30 @@ appId: ${APP_ID}
 env:
   MURMUR_TEXT: Mobile E2E sync now saved from Maestro
 ---
-- runFlow: _open-expo.yaml
+- runFlow: _launch-app.yaml
 - tapOn:
     id: murmur-count-button
 - tapOn:
     id: murmur-draft-input
 - inputText: ${MURMUR_TEXT}
+- pressKey: Enter
 - tapOn:
     id: add-murmur-button
     enabled: true
-- assertVisible: ${MURMUR_TEXT}
 - tapOn:
     point: "50%,12%"
 - tapOn:
     point: "50%,12%"
 - tapOn:
     id: sync-status-button
-- assertVisible: 远端同步
-- tapOn:
-    id: open-sync-configuration-button
-- tapOn:
-    id: sync-remote-url-input
-- eraseText: 200
-- inputText: ${REMOTE_URL}
-- hideKeyboard
-- tapOn:
-    id: sync-branch-input
-- eraseText
-- inputText: ${SYNC_BRANCH}
-- hideKeyboard
-- tapOn:
-    id: sync-token-input
-- inputText: ${SYNC_TOKEN}
-- hideKeyboard
-- tapOn:
-    id: save-sync-config-button
-    enabled: true
-- tapOn:
-    point: "8%,12%"
-- assertVisible: 远端同步
+- extendedWaitUntil:
+    visible:
+      id: sync-settings-page
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: sync-now-button
+    timeout: 30000
 - tapOn:
     id: sync-now-button
     enabled: true

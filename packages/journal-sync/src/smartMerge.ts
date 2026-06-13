@@ -20,6 +20,7 @@ export type JournalMergeStats = {
   conflictPaths: number
   fallbackPaths: number
   journalStructurePaths: number
+  missingContentPaths: number
   markdownPaths: number
 }
 
@@ -45,6 +46,7 @@ export function createJournalMergeStats(): JournalMergeStats {
     conflictPaths: 0,
     fallbackPaths: 0,
     journalStructurePaths: 0,
+    missingContentPaths: 0,
     markdownPaths: 0,
   }
 }
@@ -54,6 +56,10 @@ export function createJournalMergeDriver(
   stats: JournalMergeStats = createJournalMergeStats(),
 ): MergeDriverCallback {
   return ({ branches, contents, path }) => {
+    if (hasMissingMergeContent(contents)) {
+      stats.missingContentPaths += 1
+    }
+
     const { base, ours, theirs } = getMergeDriverContents(contents)
 
     if (isMarkdownPath(path)) {
@@ -177,6 +183,10 @@ export function mergeTextDiff3(input: TextMergeInput): TextMergeResult {
 
 function splitMergeLines(content: string) {
   return content.match(lineBreaksPattern) ?? []
+}
+
+function hasMissingMergeContent(contents: readonly unknown[]) {
+  return contents.length < 3 || contents.some((content) => typeof content !== 'string')
 }
 
 function isMarkdownPath(path: string) {

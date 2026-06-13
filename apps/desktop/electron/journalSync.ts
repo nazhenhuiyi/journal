@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import http from 'isomorphic-git/http/node'
 import {
   assertSafeRemoteUrl,
+  createConsoleJournalGitTrace,
   getJournalGitSyncStatus,
   initJournalGitSyncRepository,
   pullJournalUpdates as pullSharedJournalUpdates,
@@ -12,7 +13,6 @@ import {
   type JournalGitOperationOptions,
   type JournalGitRecentCommit,
   type JournalGitRuntime,
-  type JournalGitTrace,
 } from '@journal/sync'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
@@ -198,13 +198,8 @@ function createDesktopGitConfig(settings: {
   }
 }
 
-function createDesktopGitTraceLogger(): JournalGitTrace {
-  return (event) => {
-    const details = event.details ? ` ${JSON.stringify(event.details)}` : ''
-    const error = event.errorMessage ? ` ${event.errorMessage}` : ''
-
-    console.info(`[journal-sync] ${event.name} ${event.ok ? 'ok' : 'error'} ${event.durationMs}ms${details}${error}`)
-  }
+function createDesktopGitTraceLogger() {
+  return createConsoleJournalGitTrace()
 }
 
 function normalizeSyncTokenPayload(payload: unknown) {

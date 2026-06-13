@@ -1,23 +1,36 @@
-import { type ReactNode, useEffect, useSyncExternalStore } from 'react'
+import { type ReactNode, useEffect, useState, useSyncExternalStore } from 'react'
 import { motion } from 'motion/react'
 import {
   AlertCircle,
   CheckCircle2,
+  CloudSun,
   GitBranch,
   KeyRound,
+  MapPin,
   RefreshCw,
   Save,
   Settings2,
   ShieldCheck,
 } from 'lucide-react'
 import { Link } from 'react-router'
+import { parseJournalMarkdown, type DayFrontMatter } from '@journal/core'
 import { desktopSyncManager, type DesktopSyncManagerState } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
 
 const storedTokenMask = '••••••••'
+type JournalSettingsFile = Awaited<ReturnType<NonNullable<Window['journalSettings']>['load']>>
+type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
+type BrowserLocationStatus = 'denied' | 'granted' | 'prompt' | 'unknown' | 'unavailable'
 
 function SettingsPage() {
+  const [browserLocationStatus, setBrowserLocationStatus] = useState<BrowserLocationStatus>('unknown')
+  const [diagnosticFrontMatter, setDiagnosticFrontMatter] = useState<DayFrontMatter | null>(null)
+  const [diagnosticJournalFile, setDiagnosticJournalFile] = useState<JournalFile | null>(null)
+  const [diagnosticMessage, setDiagnosticMessage] = useState('')
+  const [isRefreshingWeather, setIsRefreshingWeather] = useState(false)
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false)
+  const [journalSettings, setJournalSettings] = useState<JournalSettingsFile | null>(null)
   const {
     branch: syncBranch,
     credentialMessage,
@@ -54,6 +67,74 @@ function SettingsPage() {
   useEffect(() => {
     void desktopSyncManager.refreshStatus()
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    void loadDesktopDiagnostics()
+      .then((diagnostics) => {
+        if (!isMounted) {
+          return
+        }
+
+        setBrowserLocationStatus(diagnostics.locationStatus)
+        setDiagnosticFrontMatter(diagnostics.frontMatter)
+        setDiagnosticJournalFile(diagnostics.journalFile)
+        setJournalSettings(diagnostics.settings)
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setDiagnosticMessage(getErrorMessage(error))
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function handleRequestLocation() {
+    setIsRequestingLocation(true)
+    setDiagnosticMessage('')
+
+    try {
+      const result = await requestBrowserLocationDiagnostic()
+
+      setBrowserLocationStatus(result.status)
+      setDiagnosticMessage(result.message)
+    } catch (error) {
+      setBrowserLocationStatus('unknown')
+      setDiagnosticMessage(getErrorMessage(error))
+    } finally {
+      setIsRequestingLocation(false)
+    }
+  }
+
+  async function handleRefreshWeather() {
+    const journalStore = getJournalStore()
+
+    if (!journalStore?.refreshTodayWeather) {
+      setDiagnosticMessage('当前环境还不能获取天气。')
+      return
+    }
+
+    setIsRefreshingWeather(true)
+    setDiagnosticMessage('')
+
+    try {
+      const location = await resolveBrowserLocationForWeather()
+      const refreshedFile = await journalStore.refreshTodayWeather(location)
+      const refreshedFrontMatter = parseJournalMarkdown(refreshedFile.content).frontMatter
+
+      setDiagnosticJournalFile(refreshedFile)
+      setDiagnosticFrontMatter(refreshedFrontMatter)
+      setDiagnosticMessage(refreshedFrontMatter.weather?.text ? '天气已更新' : '天气未获取')
+    } catch (error) {
+      setDiagnosticMessage(getErrorMessage(error))
+    } finally {
+      setIsRefreshingWeather(false)
+    }
+  }
 
   return (
     <>
@@ -116,6 +197,43 @@ function SettingsPage() {
                 <SettingsMessageRow>还没有本地 commit。</SettingsMessageRow>
               )}
             </div>
+          </section>
+
+          <section className="settings-section">
+            <h2 className="settings-section-title">诊断</h2>
+            <div className="settings-list-group">
+              <SettingsListRow label="定位权限" value={formatBrowserLocationStatus(browserLocationStatus)} />
+              <SettingsListRow label="天气地点" value={journalSettings?.weatherLocation || '自动定位'} />
+              <SettingsListRow label="今日地点" value={formatLocationLabel(diagnosticFrontMatter?.location)} />
+              <SettingsListRow label="天气" value={formatWeatherLabel(diagnosticFrontMatter?.weather)} />
+              <SettingsListRow label="天气时间" value={formatDiagnosticTime(diagnosticFrontMatter?.weather?.updatedAt)} />
+              <SettingsListRow label="日记目录" value={journalSettings?.workingDirectory ?? '不可用'} />
+              <SettingsListRow label="今日文件" value={diagnosticJournalFile?.filePath ?? '不可用'} />
+              <SettingsListRow label="设置文件" value={journalSettings?.settingsPath ?? '不可用'} />
+            </div>
+            <div className="settings-actions">
+              <button
+                className="settings-secondary-button"
+                disabled={isRequestingLocation}
+                onClick={() => void handleRequestLocation()}
+                type="button"
+              >
+                <MapPin aria-hidden="true" size={16} strokeWidth={2.15} />
+                {isRequestingLocation ? '获取中' : '获取定位'}
+              </button>
+              <button
+                className="settings-secondary-button"
+                disabled={isRefreshingWeather}
+                onClick={() => void handleRefreshWeather()}
+                type="button"
+              >
+                <CloudSun aria-hidden="true" size={16} strokeWidth={2.15} />
+                {isRefreshingWeather ? '获取中' : '获取天气'}
+              </button>
+            </div>
+            {diagnosticMessage ? (
+              <SettingsMessageRow>{diagnosticMessage}</SettingsMessageRow>
+            ) : null}
           </section>
 
           <form
@@ -226,12 +344,107 @@ function SettingsListRow({
   return (
     <div className="settings-list-row">
       <span className="settings-list-label">{label}</span>
-      <span className={`settings-list-value${tone ? ` is-${tone}` : ''}`}>
+      <span className={`settings-list-value${tone ? ` is-${tone}` : ''}`} title={value}>
         {icon ? <span aria-hidden="true">{icon}</span> : null}
         {value}
       </span>
     </div>
   )
+}
+
+async function loadDesktopDiagnostics() {
+  const [settings, journalFile, locationStatus] = await Promise.all([
+    getJournalSettingsStore()?.load() ?? Promise.resolve(null),
+    getJournalStore()?.loadToday() ?? Promise.resolve(null),
+    getBrowserLocationPermissionStatus(),
+  ])
+
+  return {
+    frontMatter: journalFile ? parseJournalMarkdown(journalFile.content).frontMatter : null,
+    journalFile,
+    locationStatus,
+    settings,
+  }
+}
+
+function getJournalSettingsStore() {
+  return typeof window === 'undefined' ? undefined : window.journalSettings
+}
+
+function getJournalStore() {
+  return typeof window === 'undefined' ? undefined : window.journalStore
+}
+
+async function getBrowserLocationPermissionStatus(): Promise<BrowserLocationStatus> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return 'unavailable'
+  }
+
+  if (!navigator.permissions?.query) {
+    return 'unknown'
+  }
+
+  try {
+    const result = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+
+    return result.state
+  } catch {
+    return 'unknown'
+  }
+}
+
+function requestBrowserLocationDiagnostic(): Promise<{ message: string; status: BrowserLocationStatus }> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve({
+      message: '当前环境没有定位能力。',
+      status: 'unavailable',
+    })
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        resolve({
+          message: '定位可用：已获取当前位置',
+          status: 'granted',
+        })
+      },
+      (error) => {
+        resolve({
+          message: error.message || '定位不可用。',
+          status: error.code === error.PERMISSION_DENIED ? 'denied' : 'unknown',
+        })
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 1000 * 60 * 10,
+        timeout: 5000,
+      },
+    )
+  })
+}
+
+async function resolveBrowserLocationForWeather() {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return undefined
+  }
+
+  return new Promise<{ latitude: number; longitude: number } | undefined>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+      },
+      () => resolve(undefined),
+      {
+        enableHighAccuracy: false,
+        maximumAge: 1000 * 60 * 10,
+        timeout: 5000,
+      },
+    )
+  })
 }
 
 function SettingsMessageRow({
@@ -292,6 +505,47 @@ function getCredentialStatusLabel(status: DesktopSyncManagerState['credentialSta
   }
 
   return '请先保存 GitHub token。'
+}
+
+function formatBrowserLocationStatus(status: BrowserLocationStatus) {
+  const statusLabels: Record<BrowserLocationStatus, string> = {
+    denied: '已拒绝',
+    granted: '已允许',
+    prompt: '未询问',
+    unavailable: '不可用',
+    unknown: '未知',
+  }
+
+  return statusLabels[status]
+}
+
+function formatLocationLabel(location: DayFrontMatter['location'] | undefined) {
+  if (location?.query) {
+    return location.query
+  }
+
+  const locationLabel = [location?.name, location?.region, location?.country].filter(Boolean).join(' · ')
+
+  return locationLabel || '未记录'
+}
+
+function formatWeatherLabel(weather: DayFrontMatter['weather'] | undefined) {
+  if (!weather?.text) {
+    return '未获取'
+  }
+
+  return [
+    weather.text,
+    typeof weather.temperature === 'number' ? `${Math.round(weather.temperature)}°C` : '',
+  ].filter(Boolean).join(' ')
+}
+
+function formatDiagnosticTime(value: string | undefined) {
+  return formatCommitTime(value ?? null)
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '诊断失败'
 }
 
 function formatLastSyncedAt(value: string | null) {

@@ -1,0 +1,6 @@
+appId: ${APP_ID}
+---
+- extendedWaitUntil:
+    visible:
+      id: journal-list-button
+    timeout: 60000

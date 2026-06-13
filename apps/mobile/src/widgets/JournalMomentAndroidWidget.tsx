@@ -8,6 +8,11 @@ import type { JournalWidgetSnapshot } from '@journal/core'
 import { buildJournalWidgetDeepLink } from './journalWidgetLinks'
 
 export const androidJournalWidgetName = 'JournalMoment'
+export const androidJournalCompactWidgetName = 'JournalMomentCompact'
+export const androidJournalWidgetNames = [
+  androidJournalWidgetName,
+  androidJournalCompactWidgetName,
+]
 const journalWidgetFontFamily = 'Xiaolai'
 
 const fallbackSnapshot: JournalWidgetSnapshot = {
@@ -42,7 +47,7 @@ function JournalMomentAndroidWidget({
   widgetInfo?: WidgetInfo
 }) {
   const accentColor = snapshot.mode === 'review-moment' ? '#8F7AAE' : '#4C8B7D'
-  const isCompact = (widgetInfo?.width ?? 320) < 300
+  const isCompact = isCompactAndroidWidget(widgetInfo)
 
   return (
     <FlexWidget
@@ -54,19 +59,19 @@ function JournalMomentAndroidWidget({
         backgroundColor: '#F8F2E9',
         borderColor: '#EFE6DA',
         borderWidth: 1,
-        borderRadius: 24,
+        borderRadius: isCompact ? 18 : 24,
         flexDirection: 'column',
         flexGap: 0,
         height: 'match_parent',
         justifyContent: 'flex-start',
-        paddingHorizontal: isCompact ? 17 : 22,
-        paddingVertical: isCompact ? 16 : 17,
+        paddingHorizontal: isCompact ? 14 : 22,
+        paddingVertical: isCompact ? 10 : 17,
         width: 'match_parent',
       }}
     >
       <FlexWidget
         style={{
-          height: isCompact ? 5 : 8,
+          height: isCompact ? 2 : 8,
           width: 'match_parent',
         }}
       />
@@ -75,7 +80,7 @@ function JournalMomentAndroidWidget({
         style={{
           alignItems: 'flex-start',
           flexDirection: 'row',
-          flexGap: isCompact ? 10 : 13,
+          flexGap: isCompact ? 8 : 13,
           width: 'match_parent',
         }}
       >
@@ -83,9 +88,9 @@ function JournalMomentAndroidWidget({
           style={{
             backgroundColor: accentColor,
             borderRadius: 3,
-            height: isCompact ? 38 : 44,
-            marginTop: isCompact ? 5 : 6,
-            width: 5,
+            height: isCompact ? 30 : 44,
+            marginTop: isCompact ? 3 : 6,
+            width: isCompact ? 4 : 5,
           }}
         />
 
@@ -98,13 +103,13 @@ function JournalMomentAndroidWidget({
         >
           <TextWidget
             allowFontScaling={false}
-            maxLines={2}
+            maxLines={isCompact ? 1 : 2}
             text={snapshot.title}
             truncate="END"
             style={{
               color: '#201B16',
               fontFamily: journalWidgetFontFamily,
-              fontSize: isCompact ? 29 : 31,
+              fontSize: isCompact ? 22 : 31,
               fontWeight: '400',
             }}
           />
@@ -117,7 +122,7 @@ function JournalMomentAndroidWidget({
               style={{
                 color: '#7B7167',
                 fontFamily: journalWidgetFontFamily,
-                fontSize: isCompact ? 16 : 17,
+                fontSize: isCompact ? 13 : 17,
                 fontWeight: '400',
               }}
             />
@@ -127,10 +132,15 @@ function JournalMomentAndroidWidget({
 
       <FlexWidget
         style={{
-          height: isCompact ? 15 : 20,
+          height: isCompact ? 6 : 20,
           width: 'match_parent',
         }}
       />
     </FlexWidget>
   )
+}
+
+function isCompactAndroidWidget(widgetInfo?: WidgetInfo) {
+  return widgetInfo?.widgetName === androidJournalCompactWidgetName ||
+    (widgetInfo?.width ?? 320) < 300
 }

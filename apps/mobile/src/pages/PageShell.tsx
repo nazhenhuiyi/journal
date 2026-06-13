@@ -7,16 +7,17 @@ import { Screen } from '../ui/Screen'
 type PageShellProps = {
   children: ReactNode
   onBack: () => void
+  testID?: string
   title: string
 }
 
-export function PageShell({ children, onBack, title }: PageShellProps) {
+export function PageShell({ children, onBack, testID, title }: PageShellProps) {
   return (
     <Screen>
-      <View className="flex-1 px-5 pb-5 pt-4">
-        <View style={styles.nav}>
+      <View className="flex-1 pb-5 pt-4">
+        <View style={[styles.nav, styles.horizontal]}>
           <Pressable
-            accessibilityLabel="返回今日"
+            accessibilityLabel="返回"
             accessibilityRole="button"
             onPress={onBack}
             style={styles.backButton}
@@ -32,7 +33,9 @@ export function PageShell({ children, onBack, title }: PageShellProps) {
           </Text>
           <View style={styles.navSpacer} />
         </View>
-        {children}
+        <View style={styles.content} testID={testID}>
+          {children}
+        </View>
       </View>
     </Screen>
   )
@@ -43,6 +46,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: spacingPixels['8'],
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: spacingPixels['5'],
+  },
+  horizontal: {
+    paddingHorizontal: spacingPixels['5'],
   },
   nav: {
     alignItems: 'center',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Image as NativeImage,
   ScrollView,
@@ -7,6 +7,7 @@ import {
 } from 'react-native'
 import {
   getBuiltInThemeById,
+  orderMurmursByNewest,
   type MurmurBlock,
 } from '@journal/core'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
@@ -26,6 +27,10 @@ export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
   const [record, setRecord] = useState<MobileJournalRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [didLoadFail, setDidLoadFail] = useState(false)
+  const orderedMurmurs = useMemo(
+    () => record ? orderMurmursByNewest(record.murmurs) : [],
+    [record],
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -88,7 +93,7 @@ export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
                 </View>
               ) : null}
 
-              {record.murmurs.map((murmur) => (
+              {orderedMurmurs.map((murmur) => (
                 <ReadonlyMurmurCard key={murmur.id} murmur={murmur} />
               ))}
 

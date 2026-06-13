@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, MessageSquareText, Pencil, Trash } from 'lucide-react'
-import type { ImageBlock, ImageLocation, MurmurBlock } from '@journal/core'
+import {
+  orderMurmursByNewest,
+  type ImageBlock,
+  type ImageLocation,
+  type MurmurBlock,
+} from '@journal/core'
 import { resolveJournalMediaSrc } from '../../domain/journalMedia'
 
 type ImportedJournalImage = {
@@ -30,7 +35,7 @@ function JournalMurmurPanel({
   const [importError, setImportError] = useState('')
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const orderedMurmurs = useMemo(
-    () => [...murmurs].sort((first, second) => compareMurmursByNewest(first, second)),
+    () => orderMurmursByNewest(murmurs),
     [murmurs],
   )
   const editingMurmur = useMemo(
@@ -367,16 +372,6 @@ function formatMurmurTime(time: string) {
   }
 
   return `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
-}
-
-function compareMurmursByNewest(first: MurmurBlock, second: MurmurBlock) {
-  return getMurmurSortTime(second) - getMurmurSortTime(first)
-}
-
-function getMurmurSortTime(murmur: MurmurBlock) {
-  const time = new Date(murmur.time).getTime()
-
-  return Number.isNaN(time) ? 0 : time
 }
 
 export default JournalMurmurPanel

@@ -349,6 +349,15 @@ export function useMobileJournal() {
     )))
   }, [markJournalDirty])
 
+  const updateMurmurBody = useCallback((murmurId: string, body: string) => {
+    markJournalDirty()
+    setMurmurs((currentMurmurs) => currentMurmurs.map((murmur) => (
+      murmur.id === murmurId
+        ? { ...murmur, body }
+        : murmur
+    )))
+  }, [markJournalDirty])
+
   const reloadTodayFromDisk = useCallback(async () => {
     const loadedRecord = await loadDailyJournal(today)
 
@@ -424,6 +433,7 @@ export function useMobileJournal() {
     removeMurmurImage,
     today,
     updateTodayFrontMatter,
+    updateMurmurBody,
     updateMurmurImageCaption,
   }
 }
