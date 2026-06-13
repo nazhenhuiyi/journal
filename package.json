@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "npm run dev:desktop",
-    "dev:desktop": "npm --workspace @journal/desktop run dev",
+    "dev:desktop": "JOURNAL_DIR=$PWD/tmp/desktop-dev/journal JOURNAL_USER_DATA_DIR=$PWD/tmp/desktop-dev/user-data npm --workspace @journal/desktop run dev",
     "dev:mobile": "npm --workspace @journal/mobile run ios",
     "build": "npm run build:desktop",
     "build:desktop": "npm --workspace @journal/desktop run build",

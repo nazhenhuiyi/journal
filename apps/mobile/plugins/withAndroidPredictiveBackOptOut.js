@@ -1,6 +1,6 @@
 const { withAndroidManifest } = require('expo/config-plugins')
 
-module.exports = function withAndroidBackInvokedCallback(config) {
+module.exports = function withAndroidPredictiveBackOptOut(config) {
   return withAndroidManifest(config, (expoConfig) => {
     const application = expoConfig.modResults.manifest.application?.[0]
 
@@ -9,7 +9,7 @@ module.exports = function withAndroidBackInvokedCallback(config) {
     }
 
     application.$ = application.$ ?? {}
-    application.$['android:enableOnBackInvokedCallback'] = 'true'
+    application.$['android:enableOnBackInvokedCallback'] = 'false'
 
     return expoConfig
   })

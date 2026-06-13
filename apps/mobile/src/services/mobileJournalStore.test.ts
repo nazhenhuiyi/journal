@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createMurmur,
   getReviewRepositoryPath,
+  getDailyJournalFileUri,
   importMobileJournalImagesForDate,
   listDailyJournals,
   loadDailyJournal,
@@ -124,6 +125,10 @@ describe('mobileJournalStore', () => {
     expect(savedRecord.updatedAt).not.toBeNull()
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledOnce()
     expect(mockFileSystem.files.get(entryPath)).toContain('今天写一点。')
+  })
+
+  it('reports the mobile journal file URI for diagnostics', () => {
+    expect(getDailyJournalFileUri('2026-06-08')).toBe(entryPath)
   })
 
   it('creates themed text murmurs', () => {

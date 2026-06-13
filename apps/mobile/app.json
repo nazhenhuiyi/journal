@@ -37,6 +37,24 @@
           "locationWhenInUsePermission": "允许且留使用当前位置，为今天的日记记录天气。"
         }
       ],
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "launcher",
+          "defaultLaunchURL": "http://127.0.0.1:8081",
+          "ios": {
+            "launchMode": "launcher",
+            "defaultLaunchURL": "http://127.0.0.1:8081"
+          },
+          "android": {
+            "launchMode": "launcher",
+            "defaultLaunchURL": "http://127.0.0.1:8081"
+          },
+          "toolsButton": false,
+          "skipOnboarding": true,
+          "showMenuAtLaunch": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-font",
@@ -48,7 +66,7 @@
       ],
       "./plugins/withAndroidWorkManagerResolution",
       "./plugins/withAndroidArm64Only",
-      "./plugins/withAndroidBackInvokedCallback",
+      "./plugins/withAndroidPredictiveBackOptOut",
       "./plugins/withAndroidDebugApplicationIdSuffix",
       [
         "expo-widgets",
