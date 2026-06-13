@@ -47,7 +47,7 @@ export function SyncSettingsPage({
   const recentCommits = gitStatus?.recentCommits.slice(0, recentCommitDisplayLimit) ?? []
 
   return (
-    <PageShell onBack={onBack} title="同步">
+    <PageShell onBack={onBack} testID="sync-settings-page" title="同步">
       <View style={styles.root}>
         <ScrollView
           style={styles.scroll}

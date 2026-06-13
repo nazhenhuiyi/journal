@@ -1,47 +1,65 @@
 appId: ${APP_ID}
 ---
-- runFlow: _open-expo.yaml
+- runFlow: _launch-app.yaml
 - tapOn:
     id: review-button
-- assertVisible: 回顾
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
 - tapOn:
     id: back-to-today-button
-- assertVisible: 日记列表
+- assertVisible:
+    id: journal-list-button
 - tapOn:
     id: review-button
-- assertVisible: 回顾
+- assertVisible:
+    id: review-page
 - pressKey: Back
-- assertVisible: 日记列表
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
 - tapOn:
     id: back-to-today-button
-- assertVisible: 日记列表
+- assertVisible:
+    id: journal-list-button
 - tapOn:
     id: review-button
-- assertVisible: 回顾
+- assertVisible:
+    id: review-page
 - tapOn:
     id: back-to-today-button
-- assertVisible: 日记列表
+- assertVisible:
+    id: journal-list-button
 - tapOn:
     id: review-button
-- assertVisible: 回顾
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
+- pressKey: Back
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: review-button
+- assertVisible:
+    id: review-page
 - tapOn:
     id: back-to-today-button
-- assertVisible: 日记列表
-- tapOn:
-    id: review-button
-- assertVisible: 回顾
-- pressKey: Back
-- assertVisible: 日记列表
-- tapOn:
-    id: review-button
-- assertVisible: 回顾
-- pressKey: Back
-- assertVisible: 日记列表
-- tapOn:
-    id: review-button
-- assertVisible: 回顾
-- pressKey: Back
-- assertVisible: 日记列表
-- tapOn:
-    id: review-button
-- assertVisible: 回顾
+- assertVisible:
+    id: journal-list-button

@@ -2,7 +2,7 @@ appId: ${APP_ID}
 env:
   MURMUR_TEXT: Mobile E2E sync now saved from Maestro
 ---
-- runFlow: _open-expo.yaml
+- runFlow: _launch-app.yaml
 - tapOn:
     id: murmur-count-button
 - tapOn:
@@ -18,9 +18,13 @@ env:
     point: "50%,12%"
 - tapOn:
     id: sync-status-button
-- assertVisible: 远端同步
 - extendedWaitUntil:
-    visible: 立即同步
+    visible:
+      id: sync-settings-page
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: sync-now-button
     timeout: 30000
 - tapOn:
     id: sync-now-button

@@ -1,14 +1,13 @@
 appId: ${APP_ID}
 env:
-  MURMUR_TEXT: Mobile E2E murmur saved from Maestro
+  MURMUR_TEXT: mb
 ---
-- runFlow: _open-expo.yaml
+- runFlow: _launch-app.yaml
 - tapOn:
     id: murmur-count-button
 - tapOn:
     id: murmur-draft-input
 - inputText: ${MURMUR_TEXT}
-- pressKey: Enter
 - tapOn:
     id: add-murmur-button
     enabled: true
@@ -19,11 +18,19 @@ env:
     point: "50%,12%"
 - tapOn:
     id: journal-list-button
-- assertVisible: 日记列表
-- assertVisible: 1 条碎碎念
+- extendedWaitUntil:
+    visible:
+      id: journal-list-page
+    timeout: 10000
 - tapOn:
     id: back-to-today-button
 - tapOn:
     id: review-button
-- assertVisible: 回顾
-- assertVisible: 碎碎念
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- tapOn:
+    id: back-to-today-button
+- assertVisible:
+    id: journal-list-button

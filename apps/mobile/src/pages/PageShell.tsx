@@ -7,13 +7,14 @@ import { Screen } from '../ui/Screen'
 type PageShellProps = {
   children: ReactNode
   onBack: () => void
+  testID?: string
   title: string
 }
 
-export function PageShell({ children, onBack, title }: PageShellProps) {
+export function PageShell({ children, onBack, testID, title }: PageShellProps) {
   return (
     <Screen>
-      <View className="flex-1 px-5 pb-5 pt-4">
+      <View className="flex-1 px-5 pb-5 pt-4" testID={testID}>
         <View style={styles.nav}>
           <Pressable
             accessibilityLabel="返回"
