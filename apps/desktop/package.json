@@ -1,6 +1,8 @@
 {
   "name": "@journal/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "万物有迹，心事且留。",
+  "author": "zilinr",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",

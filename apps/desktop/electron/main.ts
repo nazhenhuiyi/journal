@@ -40,6 +40,8 @@ import type {
 } from '@journal/core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const APP_ID = 'app.zilin.journal.desktop'
+const APP_NAME = '且留'
 const APP_MIN_WIDTH = 1180
 const JOURNAL_DIR_NAME = '.journal'
 const JOURNAL_MEDIA_PROTOCOL = 'journal-media'
@@ -53,6 +55,9 @@ if (JOURNAL_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(JOURNAL_USER_DATA_DIR))
 }
 
+app.setName(APP_NAME)
+app.setAppUserModelId(APP_ID)
+
 // The built directory structure
 //
 // ├─┬─┬ dist
@@ -65,7 +70,7 @@ if (JOURNAL_USER_DATA_DIR) {
 process.env.APP_ROOT = path.join(__dirname, '..')
 
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
-export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+export const VITE_DEV_SERVER_URL = app.isPackaged ? undefined : process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
@@ -976,7 +981,8 @@ function createWindow() {
     height: 840,
     minWidth: APP_MIN_WIDTH,
     minHeight: 720,
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    title: APP_NAME,
+    icon: path.join(process.env.VITE_PUBLIC, 'brand/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
