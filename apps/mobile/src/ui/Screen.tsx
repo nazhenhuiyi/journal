@@ -27,14 +27,22 @@ export function Screen({
     : undefined
 
   return (
-    <SafeAreaProvider className="flex-1 bg-background">
-      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaProvider
+      className="flex-1 bg-background"
+      style={{ backgroundColor: semanticColors.background, flex: 1 }}
+    >
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={['top']}
+        style={{ backgroundColor: semanticColors.background, flex: 1 }}
+      >
         <StatusBar backgroundColor={semanticColors.background} barStyle="dark-content" translucent={false} />
-        <View className="flex-1">
+        <View className="flex-1" style={{ flex: 1 }}>
           <KeyboardAvoidingView
             behavior={behavior}
             className="flex-1"
             enabled={keyboardAvoidingEnabled}
+            style={{ flex: 1 }}
           >
             {children}
           </KeyboardAvoidingView>
