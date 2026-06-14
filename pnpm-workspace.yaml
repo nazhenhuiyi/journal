@@ -8,3 +8,6 @@ onlyBuiltDependencies:
   - electron
   - electron-winstaller
   - esbuild
+
+patchedDependencies:
+  isomorphic-git@1.38.4: patches/isomorphic-git@1.38.4.patch

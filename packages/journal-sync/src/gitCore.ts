@@ -31,6 +31,7 @@ export type JournalGitSyncConfig = {
 export type JournalGitOperationOptions = {
   changedPaths?: readonly string[]
   collectDirtyPathsAfterSync?: boolean
+  skipDirtyCheckBeforeMerge?: boolean
 }
 
 export type JournalGitTraceValue = boolean | null | number | string
@@ -565,7 +566,7 @@ async function syncJournalNowInternal(
       throw error
     }
 
-    skipPush = !(await hasLocalBranchCommit(runtime, branch))
+    skipPush = !localCommitOid && !(await hasLocalBranchCommit(runtime, branch))
   }
 
   if (skipPush) {
@@ -573,6 +574,28 @@ async function syncJournalNowInternal(
       dirtyPathsAfterSync: await getDirtyTrackedPathsAfterOperation(runtime, options, 'sync.dirtyPathsAfterSync'),
       fetchResult,
       localCommitOid: localCommitOid ?? mergeCommitOid,
+      mergeCommitOid,
+      mergeResult,
+      pushResult: null,
+      retriedPush: false,
+    }
+  }
+
+  const shouldSkipPush = !localCommitOid &&
+    !mergeCommitOid &&
+    await isLocalBranchAtRemoteTracking(runtime, remote, branch)
+
+  if (shouldSkipPush) {
+    await traceGitStep(runtime, 'remote.pushSkipped', async () => null, {
+      branch,
+      reason: 'no-local-or-merge-commit',
+      remote,
+    })
+
+    return {
+      dirtyPathsAfterSync: await getDirtyTrackedPathsAfterOperation(runtime, options, 'sync.dirtyPathsAfterSync'),
+      fetchResult,
+      localCommitOid,
       mergeCommitOid,
       mergeResult,
       pushResult: null,
@@ -666,11 +689,21 @@ async function commitTrackedChanges(
   const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
 
   if (knownChangedPaths && knownChangedPaths.length === 0) {
+    await traceGitStep(runtime, 'commit.status', async () => [], {
+      dirty: 0,
+      globalFallback: false,
+      knownPaths: 0,
+      rows: 0,
+      skipped: true,
+      trusted: true,
+    })
+
     return null
   }
 
-  const rows = await getTrackedStatusRows(runtime, 'commit.status', knownChangedPaths)
-  const changedRows = rows.filter(isDirtyStatusRow)
+  const changedRows = knownChangedPaths
+    ? await getKnownChangedStatusRows(runtime, knownChangedPaths)
+    : (await getTrackedStatusRows(runtime, 'commit.status')).filter(isDirtyStatusRow)
 
   if (changedRows.length === 0) {
     return null
@@ -681,12 +714,7 @@ async function commitTrackedChanges(
   await traceGitStep(runtime, 'commit.stage', async () => {
     for (const [filepath, headStatus, workdirStatus] of changedRows) {
       if (workdirStatus === 0 && headStatus !== 0) {
-        await git.remove({
-          cache: runtime.cache,
-          dir: runtime.dir,
-          filepath,
-          fs: runtime.fs,
-        })
+        await removeTrackedPathFromIndex(runtime, filepath, Boolean(knownChangedPaths))
       } else if (workdirStatus !== 0) {
         await git.add({
           cache: runtime.cache,
@@ -752,6 +780,66 @@ async function commitTrackedChanges(
   await traceGitStep(runtime, 'commit.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
 
   return commitOid
+}
+
+async function removeTrackedPathFromIndex(
+  runtime: JournalGitRuntime,
+  filepath: string,
+  ignoreNotFound: boolean,
+) {
+  try {
+    await getGit(runtime).remove({
+      cache: runtime.cache,
+      dir: runtime.dir,
+      filepath,
+      fs: runtime.fs,
+    })
+  } catch (error) {
+    if (ignoreNotFound && isFileNotFoundError(error)) {
+      return
+    }
+
+    throw error
+  }
+}
+
+async function getKnownChangedStatusRows(
+  runtime: JournalGitRuntime,
+  knownChangedPaths: readonly string[],
+) {
+  return traceGitStep(runtime, 'commit.status', async () => {
+    const rows: StatusRow[] = []
+
+    for (const filepath of knownChangedPaths) {
+      const workdirStatus = await doesWorktreePathExist(runtime, filepath) ? 2 : 0
+
+      rows.push([filepath, 1, workdirStatus, 1])
+    }
+
+    return rows
+  }, (rows) => ({
+    dirty: rows.length,
+    globalFallback: false,
+    knownPaths: knownChangedPaths.length,
+    rows: rows.length,
+    trusted: true,
+  }))
+}
+
+async function doesWorktreePathExist(runtime: JournalGitRuntime, filepath: string) {
+  try {
+    await (runtime.fs as unknown as PromiseGitFileSystem).promises.stat(
+      joinRuntimePath(runtime.dir, filepath),
+    )
+
+    return true
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return false
+    }
+
+    throw error
+  }
 }
 
 async function doCommitsHaveSameTree(
@@ -1703,8 +1791,19 @@ async function getDirtyTrackedPathsAfterOperation(
   options: JournalGitOperationOptions,
   traceName: string,
 ) {
+  const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
+
   if (options.collectDirtyPathsAfterSync === false) {
     return traceGitStep(runtime, traceName, async () => [], {
+      knownPaths: knownChangedPaths?.length ?? null,
+      skipped: true,
+    })
+  }
+
+  if (knownChangedPaths) {
+    return traceGitStep(runtime, traceName, async () => [], {
+      knownPaths: knownChangedPaths.length,
+      reason: 'known-changed-paths',
       skipped: true,
     })
   }
@@ -1721,6 +1820,13 @@ async function getDirtyTrackedPathsBeforeMerge(
   if (knownChangedPaths) {
     return traceGitStep(runtime, 'pull.postFetchDirtyStatus', async () => [], {
       knownPaths: knownChangedPaths.length,
+      skipped: true,
+    })
+  }
+
+  if (options.skipDirtyCheckBeforeMerge) {
+    return traceGitStep(runtime, 'pull.postFetchDirtyStatus', async () => [], {
+      reason: 'assume-clean-worktree',
       skipped: true,
     })
   }

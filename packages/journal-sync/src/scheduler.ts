@@ -74,6 +74,7 @@ const defaultTimers: SyncTimerApi = {
 export class JournalSyncCoordinator {
   private activeRun: Promise<SyncSnapshot> | null = null
   private leaveFlushTimeoutHandle: unknown | null = null
+  private pendingChangedPathsKnown = true
   private pendingChangedPaths = new Set<string>()
   private pendingPullAfterRun: SyncTrigger | null = null
   private pendingPushAfterRun: SyncTrigger | null = null
@@ -94,7 +95,15 @@ export class JournalSyncCoordinator {
     return this.snapshot
   }
 
-  markLocalSave(changedPaths: readonly string[] = []) {
+  hasPendingLocalChanges() {
+    return this.pushTimeoutHandle !== null ||
+      this.pendingPushAfterRun !== null ||
+      this.pendingChangedPaths.size > 0 ||
+      !this.pendingChangedPathsKnown ||
+      this.snapshot.pendingReason === 'local-save'
+  }
+
+  markLocalSave(changedPaths?: readonly string[]) {
     this.addPendingChangedPaths(changedPaths)
     this.markLocalChangesPending()
   }
@@ -127,9 +136,13 @@ export class JournalSyncCoordinator {
     }, this.pushDebounceMs)
   }
 
-  startPulling() {
+  startPulling(options: { immediate?: boolean } = {}) {
     this.stopPulling()
-    void this.pullNow('app-open')
+
+    if (options.immediate ?? true) {
+      void this.pullNow('app-open')
+    }
+
     this.pullIntervalHandle = this.timers.setInterval(() => {
       void this.pullNow('pull-interval')
     }, this.pullIntervalMs)
@@ -206,6 +219,10 @@ export class JournalSyncCoordinator {
 
   private async runSingleFlight(operation: SyncOperation, trigger: SyncTrigger): Promise<SyncSnapshot> {
     if (this.activeRun) {
+      if (operation === 'pull' && trigger === 'pull-interval') {
+        return this.activeRun.then(() => this.snapshot)
+      }
+
       if (operation === 'pull') {
         this.pendingPullAfterRun = trigger
       } else {
@@ -347,9 +364,14 @@ export class JournalSyncCoordinator {
   }
 
   private createOperationRequest(operation: SyncOperation, trigger: SyncTrigger): SyncOperationRequest {
-    const changedPaths = operation === 'pull' ? [] : this.getPendingChangedPaths()
+    if (operation === 'pull') {
+      return { operation, trigger }
+    }
 
-    if (changedPaths.length === 0) {
+    const changedPaths = this.getPendingChangedPaths()
+    const changedPathsKnown = this.pendingChangedPathsKnown
+
+    if (!changedPathsKnown) {
       return { operation, trigger }
     }
 
@@ -360,7 +382,12 @@ export class JournalSyncCoordinator {
     }
   }
 
-  private addPendingChangedPaths(changedPaths: readonly string[]) {
+  private addPendingChangedPaths(changedPaths: readonly string[] | undefined) {
+    if (changedPaths === undefined) {
+      this.pendingChangedPathsKnown = false
+      return
+    }
+
     let didChange = false
 
     for (const changedPath of changedPaths) {
@@ -378,11 +405,12 @@ export class JournalSyncCoordinator {
   }
 
   private clearCompletedLocalChanges(operation: SyncOperation) {
-    if (operation === 'pull' || this.pendingChangedPaths.size === 0) {
+    if (operation === 'pull' || (this.pendingChangedPaths.size === 0 && this.pendingChangedPathsKnown)) {
       return
     }
 
     this.pendingChangedPaths.clear()
+    this.pendingChangedPathsKnown = true
     this.clearPushTimer()
     this.emitPendingChangedPaths()
   }

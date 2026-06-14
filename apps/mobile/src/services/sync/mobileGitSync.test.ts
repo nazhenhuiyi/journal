@@ -247,10 +247,6 @@ describe('mobile git sync', () => {
   })
 
   it('passes known changed paths through to the sync core', async () => {
-    mockGit.statusMatrix.mockResolvedValueOnce([
-      ['entries/2026/06/2026-06-08.md', 0, 2, 0],
-    ])
-
     await syncMobileJournalWithGitHub({
       branch: 'main',
       remoteUrl: 'https://github.com/example/journal-sync.git',
@@ -261,9 +257,10 @@ describe('mobile git sync', () => {
       collectDirtyPathsAfterSync: false,
     })
 
-    expect(mockGit.statusMatrix).toHaveBeenCalledTimes(1)
-    expect(mockGit.statusMatrix).toHaveBeenCalledWith(expect.objectContaining({
-      filepaths: ['entries/2026/06/2026-06-08.md'],
+    expect(mockGit.statusMatrix).not.toHaveBeenCalled()
+    expect(mockFs.promises.stat).toHaveBeenCalledWith('/mobile/worktree/entries/2026/06/2026-06-08.md')
+    expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
+      filepath: 'entries/2026/06/2026-06-08.md',
     }))
   })
 
@@ -360,6 +357,9 @@ describe('mobile git sync', () => {
         ['entries/2026/06/2026-06-08.md', 0, 2, 0],
       ])
       .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 0, 2, 2],
       ])
       .mockResolvedValue([])
@@ -367,7 +367,7 @@ describe('mobile git sync', () => {
       .mockRejectedValueOnce(Object.assign(new Error('no local branch'), {
         code: 'NotFoundError',
       }))
-      .mockResolvedValueOnce('local-head')
+      .mockResolvedValue('local-head')
     mockGit.listServerRefs.mockResolvedValueOnce([])
     mockGit.fetch.mockRejectedValueOnce(Object.assign(new Error('empty remote'), {
       code: 'EmptyServerResponseError',
@@ -445,6 +445,14 @@ describe('mobile git sync', () => {
   })
 
   it('fetches, merges, and retries once when push is rejected by remote updates', async () => {
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+      ])
+      .mockResolvedValueOnce([
+        ['entries/2026/06/2026-06-08.md', 0, 2, 2],
+      ])
+      .mockResolvedValue([])
     mockGit.push
       .mockRejectedValueOnce(Object.assign(new Error('remote changed'), {
         code: 'PushRejectedError',

@@ -8,6 +8,11 @@ overrides:
   react: 19.2.3
   react-dom: 19.2.3
 
+patchedDependencies:
+  isomorphic-git@1.38.4:
+    hash: 755f3a97d67225218335cb40c189f2369c2928a97d5c956fed925454666da851
+    path: patches/isomorphic-git@1.38.4.patch
+
 importers:
 
   .:
@@ -65,7 +70,7 @@ importers:
         version: 6.0.2
       isomorphic-git:
         specifier: ^1.38.4
-        version: 1.38.4
+        version: 1.38.4(patch_hash=755f3a97d67225218335cb40c189f2369c2928a97d5c956fed925454666da851)
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.3)
@@ -231,7 +236,7 @@ importers:
         version: 56.0.18(@babel/core@7.29.0)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(expo@56.0.11)(react-dom@19.2.3(react@19.2.3))(react-native-reanimated@4.3.1(react-native-worklets@0.8.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native-worklets@0.8.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
       isomorphic-git:
         specifier: ^1.38.4
-        version: 1.38.4
+        version: 1.38.4(patch_hash=755f3a97d67225218335cb40c189f2369c2928a97d5c956fed925454666da851)
       nativewind:
         specifier: ^4.2.5
         version: 4.2.5(react-native-reanimated@4.3.1(react-native-worklets@0.8.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native-svg@15.15.4(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)(tailwindcss@3.4.19(yaml@2.9.0))
@@ -305,7 +310,7 @@ importers:
         version: 0.0.3
       isomorphic-git:
         specifier: ^1.38.4
-        version: 1.38.4
+        version: 1.38.4(patch_hash=755f3a97d67225218335cb40c189f2369c2928a97d5c956fed925454666da851)
     devDependencies:
       typescript:
         specifier: ^5.9.3
@@ -9870,7 +9875,7 @@ snapshots:
 
   isexe@4.0.0: {}
 
-  isomorphic-git@1.38.4:
+  isomorphic-git@1.38.4(patch_hash=755f3a97d67225218335cb40c189f2369c2928a97d5c956fed925454666da851):
     dependencies:
       async-lock: 1.4.1
       clean-git-ref: 2.0.1

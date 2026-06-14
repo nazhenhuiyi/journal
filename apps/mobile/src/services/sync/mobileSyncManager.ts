@@ -68,6 +68,8 @@ export type MobileSyncActionResult = {
   ok: boolean
 }
 
+type MobileTraceDetails = Record<string, boolean | null | number | string>
+
 const mobilePullIntervalMs = 30_000
 const mobileRecentCommitLimit = 3
 
@@ -146,12 +148,29 @@ class MobileSyncManager {
   }
 
   refreshStatus = async (input?: {
+    allowDuringSync?: boolean
     branch?: string
+    includeRecentCommits?: boolean
     includeDirtyPaths?: boolean
     remoteUrl?: string
   }) => {
+    if (this.state.syncSnapshot.status === 'syncing' && !input?.allowDuringSync) {
+      this.trace?.({
+        details: {
+          reason: 'sync-in-progress',
+          skipped: true,
+        },
+        durationMs: 0,
+        name: 'mobile.refreshStatus',
+        ok: true,
+      })
+
+      return this.state.mobileGitStatus
+    }
+
     const branch = input?.branch ?? this.state.syncBranch
     const includeDirtyPaths = input?.includeDirtyPaths ?? false
+    const includeRecentCommits = input?.includeRecentCommits ?? true
     const remoteUrl = input?.remoteUrl ?? this.state.syncRemoteUrl
 
     this.setState({
@@ -160,13 +179,21 @@ class MobileSyncManager {
     })
 
     try {
-      const status = await getMobileGitSyncStatus({
-        branch: branch.trim() || 'main',
-        remoteUrl: remoteUrl.trim(),
-      }, {
-        includeDirtyPaths,
-        recentCommitLimit: mobileRecentCommitLimit,
-      })
+      const status = await this.traceStep(
+        'mobile.refreshStatus',
+        () => getMobileGitSyncStatus({
+          branch: branch.trim() || 'main',
+          remoteUrl: remoteUrl.trim(),
+        }, {
+          includeDirtyPaths,
+          includeRecentCommits,
+          recentCommitLimit: mobileRecentCommitLimit,
+        }),
+        {
+          includeDirtyPaths,
+          includeRecentCommits,
+        },
+      )
 
       this.setState({ mobileGitStatus: status })
       return status
@@ -269,6 +296,8 @@ class MobileSyncManager {
       }
     }
 
+    let didPausePulling = false
+
     try {
       await saveGitHubSyncSettings({ branch, remoteUrl })
 
@@ -304,6 +333,9 @@ class MobileSyncManager {
 
       this.setState({ syncMessage: '' })
 
+      this.coordinator.stopPulling()
+      didPausePulling = true
+
       const snapshot = await this.coordinator.syncNow()
 
       if (snapshot.status === 'error' || snapshot.status === 'retrying' || snapshot.status === 'needs-auth') {
@@ -315,8 +347,12 @@ class MobileSyncManager {
       }
 
       this.setState({ syncMessage: '同步完成' })
-      await this.refreshStatus({ branch, remoteUrl })
-      await this.startPullingIfConfigured()
+      await this.refreshStatus({
+        allowDuringSync: true,
+        branch,
+        includeRecentCommits: false,
+        remoteUrl,
+      })
 
       return { ok: true }
     } catch (error) {
@@ -334,6 +370,10 @@ class MobileSyncManager {
         alertMessage: getErrorMessage(error),
         alertTitle: '同步失败',
         ok: false,
+      }
+    } finally {
+      if (didPausePulling) {
+        await this.startPullingIfConfigured({ immediate: false })
       }
     }
   }
@@ -453,14 +493,14 @@ class MobileSyncManager {
     ])
   }
 
-  private async startPullingIfConfigured() {
+  private async startPullingIfConfigured(options: { immediate?: boolean } = {}) {
     if (!this.hasCompleteConfiguration()) {
       this.coordinator.stopPulling()
       return
     }
 
     await this.restorePendingPathsForSync()
-    this.coordinator.startPulling()
+    this.coordinator.startPulling({ immediate: options.immediate })
   }
 
   private async restorePendingPathsForSync() {
@@ -498,16 +538,31 @@ class MobileSyncManager {
     }
 
     if (operation === 'pull') {
-      if (binding && (binding.getSaveState() === 'dirty' || binding.getSaveState() === 'saving')) {
+      const saveState = binding?.getSaveState()
+      const hasPendingLocalChanges = this.coordinator.hasPendingLocalChanges()
+
+      if (saveState === 'dirty' || saveState === 'saving' || hasPendingLocalChanges) {
         return {
-          message: '正在编辑，稍后检查远端更新',
+          message: hasPendingLocalChanges
+            ? '本地更改等待同步，稍后检查远端更新'
+            : '正在编辑，稍后检查远端更新',
           skipped: true,
         }
       }
 
-      const result = await pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
-        collectDirtyPathsAfterSync: false,
-      })
+      const trustCleanWorktree = saveState !== undefined && canApplyRemoteUpdates(saveState)
+      const result = await this.traceStep(
+        'mobile.pullCore',
+        () => pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
+          collectDirtyPathsAfterSync: false,
+          skipDirtyCheckBeforeMerge: trustCleanWorktree,
+        }),
+        {
+          operation,
+          skipDirtyCheckBeforeMerge: trustCleanWorktree,
+          trigger,
+        },
+      )
       let didReloadFromDisk = false
 
       if (result.dirtyPathsAfterPull.length > 0) {
@@ -520,7 +575,11 @@ class MobileSyncManager {
       }
 
       if (binding && canApplyRemoteUpdates(binding.getSaveState())) {
-        didReloadFromDisk = await binding.reloadTodayFromDiskIfChanged()
+        didReloadFromDisk = await this.traceStep(
+          'mobile.reloadTodayIfChanged',
+          () => binding.reloadTodayFromDiskIfChanged(),
+          { operation, trigger },
+        )
       }
 
       if (result.updatedWorktree || didReloadFromDisk) {
@@ -547,12 +606,19 @@ class MobileSyncManager {
         }
       }
 
-      const savedRecord = await binding.saveCurrentJournal({
-        emitEvent: false,
-        reason: 'sync',
-        scheduleSync: false,
-        showAlert: operation === 'full',
-      })
+      const savedRecord = await this.traceStep(
+        'mobile.saveCurrentJournal',
+        () => binding.saveCurrentJournal({
+          emitEvent: false,
+          reason: 'sync',
+          scheduleSync: false,
+          showAlert: operation === 'full',
+        }),
+        {
+          operation,
+          trigger,
+        },
+      )
 
       if (!savedRecord) {
         return {
@@ -573,13 +639,23 @@ class MobileSyncManager {
       }
     }
 
-    const collectDirtyPathsAfterSync = operationChangedPaths.length === 0
+    const saveStateBeforeSync = binding?.getSaveState()
+    const trustCleanWorktree = operationChangedPaths.length === 0
+      && saveStateBeforeSync !== undefined
+      && canApplyRemoteUpdates(saveStateBeforeSync)
+    const collectDirtyPathsAfterSync = operationChangedPaths.length === 0 && !trustCleanWorktree
+    const changedPathsForSync = operationChangedPaths.length > 0
+      ? operationChangedPaths
+      : trustCleanWorktree
+        ? []
+        : undefined
 
     this.trace?.({
       details: {
         changedPathCount: operationChangedPaths.length,
         collectDirtyPathsAfterSync,
         operation,
+        trustCleanWorktree,
         trigger,
       },
       durationMs: 0,
@@ -587,13 +663,27 @@ class MobileSyncManager {
       ok: true,
     })
 
-    const result = await syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
-      changedPaths: operationChangedPaths.length > 0 ? operationChangedPaths : undefined,
-      collectDirtyPathsAfterSync,
-    })
+    const result = await this.traceStep(
+      'mobile.syncCore',
+      () => syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
+        changedPaths: changedPathsForSync,
+        collectDirtyPathsAfterSync,
+        skipDirtyCheckBeforeMerge: trustCleanWorktree,
+      }),
+      {
+        changedPathCount: operationChangedPaths.length,
+        collectDirtyPathsAfterSync,
+        operation,
+        skipDirtyCheckBeforeMerge: trustCleanWorktree,
+        trigger,
+      },
+    )
 
     if (binding && canApplyRemoteUpdates(binding.getSaveState())) {
-      await binding.reloadTodayFromDisk()
+      await this.traceStep('mobile.reloadToday', () => binding.reloadTodayFromDisk(), {
+        operation,
+        trigger,
+      })
     }
 
     if (result.mergeCommitOid || result.mergeResult) {
@@ -615,15 +705,53 @@ class MobileSyncManager {
     record: SaveDailyJournalResult,
   ) {
     try {
-      const effectChangedPaths = await binding.refreshAfterJournalSaved({
-        reason,
-        record,
-      })
+      const effectChangedPaths = await this.traceStep(
+        'mobile.collectChangedPaths',
+        () => binding.refreshAfterJournalSaved({
+          reason,
+          record,
+        }),
+        {
+          recordChangedPathCount: record.changedPaths.length,
+          reason,
+        },
+      )
 
       return mergeChangedPaths(record.changedPaths, effectChangedPaths)
     } catch (error) {
       console.error(error)
       return record.changedPaths
+    }
+  }
+
+  private async traceStep<T>(
+    name: string,
+    operation: () => Promise<T>,
+    details: MobileTraceDetails = {},
+  ) {
+    const startedAt = Date.now()
+
+    try {
+      const result = await operation()
+
+      this.trace?.({
+        details,
+        durationMs: Date.now() - startedAt,
+        name,
+        ok: true,
+      })
+
+      return result
+    } catch (error) {
+      this.trace?.({
+        details,
+        durationMs: Date.now() - startedAt,
+        errorMessage: getErrorMessage(error),
+        name,
+        ok: false,
+      })
+
+      throw error
     }
   }
 

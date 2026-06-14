@@ -55,6 +55,21 @@ describe('JournalSyncCoordinator', () => {
     expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual([])
   })
 
+  it('passes an explicit empty changed path set to a clean manual full sync', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      runOperation,
+    })
+
+    await coordinator.syncNow()
+
+    expect(runOperation).toHaveBeenCalledWith({
+      changedPaths: [],
+      operation: 'full',
+      trigger: 'manual',
+    })
+  })
+
   it('keeps pending changed paths after a failed push and clears them after retry succeeds', async () => {
     const pendingSnapshots: string[][] = []
     const runOperation = vi.fn()
@@ -135,6 +150,72 @@ describe('JournalSyncCoordinator', () => {
       operation: 'pull',
       trigger: 'app-open',
     })
+
+    await vi.advanceTimersByTimeAsync(180_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'pull',
+      trigger: 'pull-interval',
+    })
+  })
+
+  it('can start the pull interval without an immediate foreground pull', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      pullIntervalMs: 180_000,
+      runOperation,
+    })
+
+    coordinator.startPulling({ immediate: false })
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(runOperation).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(180_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+    expect(runOperation).toHaveBeenCalledWith({
+      operation: 'pull',
+      trigger: 'pull-interval',
+    })
+  })
+
+  it('drops pull interval ticks that fire during an active sync', async () => {
+    let resolveSync: () => void = () => undefined
+    const requests: SyncOperationRequest[] = []
+    const runOperation = vi.fn(async (request: SyncOperationRequest) => {
+      requests.push(request)
+
+      if (request.operation === 'full') {
+        await new Promise<void>((resolve) => {
+          resolveSync = resolve
+        })
+      }
+
+      return {}
+    })
+    const coordinator = new JournalSyncCoordinator({
+      pullIntervalMs: 180_000,
+      runOperation,
+    })
+
+    coordinator.startPulling({ immediate: false })
+    const sync = coordinator.syncNow()
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+    expect(requests).toEqual([
+      { changedPaths: [], operation: 'full', trigger: 'manual' },
+    ])
+
+    await vi.advanceTimersByTimeAsync(180_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    resolveSync()
+    await vi.advanceTimersByTimeAsync(1)
+    await sync
 
     await vi.advanceTimersByTimeAsync(180_000)
 

@@ -1,0 +1,40 @@
+diff --git a/index.cjs b/index.cjs
+index 3e94396efc7c68bcb04d67837b533d7821a483fd..52afc9348d1365338a5e3d3c4066b384816c1fbb 100644
+--- a/index.cjs
++++ b/index.cjs
+@@ -2489,6 +2489,15 @@ function nudgeIntoShape(entry) {
+   if (!entry.oid && entry.sha) {
+     entry.oid = entry.sha; // Github
+   }
++  if (entry.mode === undefined || entry.mode === null) {
++    if (entry.type === 'tree') {
++      entry.mode = '040000';
++    } else if (entry.type === 'commit') {
++      entry.mode = '160000';
++    } else if (entry.type === 'blob') {
++      entry.mode = '100644';
++    }
++  }
+   entry.mode = limitModeToAllowed(entry.mode); // index
+   if (!entry.type) {
+     entry.type = mode2type$1(entry.mode); // index
+diff --git a/index.js b/index.js
+index eb614adef8cb8bc434e2286fcbcd35fba8c2efa3..7ec3f806d68fb11c4a7efe37226cb25d1039c7d3 100644
+--- a/index.js
++++ b/index.js
+@@ -2489,6 +2489,15 @@ function nudgeIntoShape(entry) {
+   if (!entry.oid && entry.sha) {
+     entry.oid = entry.sha; // Github
+   }
++  if (entry.mode === undefined || entry.mode === null) {
++    if (entry.type === 'tree') {
++      entry.mode = '040000';
++    } else if (entry.type === 'commit') {
++      entry.mode = '160000';
++    } else if (entry.type === 'blob') {
++      entry.mode = '100644';
++    }
++  }
+   entry.mode = limitModeToAllowed(entry.mode); // index
+   if (!entry.type) {
+     entry.type = mode2type$1(entry.mode); // index
