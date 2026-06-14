@@ -128,7 +128,7 @@ flowchart TD
 | --- | --- |
 | 缺少 `JOURNAL_E2E_GITHUB_REMOTE_URL` 或 `JOURNAL_E2E_GITHUB_TOKEN` | 验收无效 |
 | GitHub 同步测试 skipped | 验收无效 |
-| `HEAD (no branch)` | 同步失败 |
+| `HEAD` 没有附着在 `refs/heads/<branch>` | 同步失败 |
 | `.git/main` 存在 | 同步失败 |
 | 同步范围内有未提交改动 | 同步失败 |
 | 本地显示已同步但远端 clone 没有内容 | 同步失败 |

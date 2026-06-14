@@ -8,6 +8,8 @@
 - [数据结构](数据结构.md)：Markdown、media、annotations、reviews 和 manifest 的文件约定。
 - [Git 同步机制](<Git 同步机制.md>)：`@journal/sync`、同步调度、桌面/移动平台适配和 git client 使用方式。
 - [Git 同步性能笔记](<Git 同步性能笔记.md>)：`isomorphic-git`、Expo 文件系统和仓库规模相关的优化状态。
+- [同步 Trace 与日志接入](<同步 Trace 与日志接入.md>)：同步 trace 的公共契约、敏感信息边界和 UI 状态区分。
+- [Git 同步冲突处理](<Git 同步冲突处理.md>)：当前冲突阻断机制，以及后续需要补齐的处理入口。
 
 ## 产品机制
 

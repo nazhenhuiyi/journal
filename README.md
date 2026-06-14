@@ -62,7 +62,7 @@ pnpm run build:mobile:android:aab
 
 Android 包名现在是 `app.zilin.journal`，配置在 `apps/mobile/app.json`。这个值决定安卓是否把新版识别为同一个应用，第一次安装后不要随意修改。
 
-原生小组件和 dev-client 能力不能用 Expo Go 完整验收，需要 development build：
+原生小组件和 dev-client 能力需要 development build 验收：
 
 ```sh
 pnpm --filter @journal/mobile run build:android:dev

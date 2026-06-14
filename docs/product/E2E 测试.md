@@ -148,10 +148,10 @@ pnpm run e2e:mobile:ios
 稳定 Android 路径：
 
 ```sh
-# 先构建可直接启动的 APK，例如 preview/release APK。
+# 先构建本地 EAS preview APK。默认产物会被 runner 自动发现。
+pnpm --filter @journal/mobile run build:android:apk
 adb devices -l
 JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> \
-JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/app-release.apk \
 pnpm run e2e:mobile:android
 ```
 
@@ -171,7 +171,7 @@ JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> pnpm run e2e:mobile:android:dev
 - `JOURNAL_MOBILE_E2E_MODE=artifact|dev-client`：默认 `artifact`。
 - `JOURNAL_MOBILE_E2E_PLATFORM=ios|android`：平台；推荐通过 `e2e:mobile:ios` / `e2e:mobile:android` 脚本设置。
 - `JOURNAL_MOBILE_E2E_IOS_APP_PATH`：稳定 iOS E2E 的 simulator `.app` 路径。
-- `JOURNAL_MOBILE_E2E_ANDROID_APK_PATH`：稳定 Android E2E 的 APK 路径。
+- `JOURNAL_MOBILE_E2E_ANDROID_APK_PATH`：稳定 Android E2E 的 APK 路径；默认会寻找 `apps/mobile/android/app/build/outputs/apk/release/eas-preview-local.apk`。
 - `JOURNAL_MOBILE_E2E_APP_ID`：iOS 默认 `app.zilin.journal`；Android artifact 默认 `app.zilin.journal`，Dev Client 默认 `app.zilin.journal.debug`。
 - `JOURNAL_MOBILE_E2E_DEVICE_ID`：iOS 可省略，runner 会选已启动的 iOS Simulator；Android 必填，先用 `adb devices -l` 确认 serial。
 - `JOURNAL_MOBILE_E2E_REINSTALL_DRIVER=1`：默认复用 Maestro 已安装的设备端 driver；只有 driver 异常或首次安装失败时再打开这个开关强制重装。

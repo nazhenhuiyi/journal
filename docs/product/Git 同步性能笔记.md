@@ -32,51 +32,18 @@ flowchart LR
 | 移动端文件系统过桥 | Expo fs adapter 使用 `File.text()` / `File.bytes()` / `File.write()`，并缓存父目录探测 | `status.*`、`checkout.*`、`commit.stage` 在移动端的耗时 |
 | 网络和 pack 处理 | pull / full sync 先 `listServerRefs()`，远端 oid 未变时跳过 `fetch()` | `remote.listRefs`、`remote.fetchSkipped`、`remote.fetch`、`http.gitRequest` |
 
-## 2. 当前同步路径
+## 2. 性能相关路径
 
-保存后的自动推送和手动同步现在共用同一套核心，只是入口不同。
+完整同步流程见 [Git 同步机制](<Git 同步机制.md>)。这里只保留会影响性能判断的分支：
 
-```mermaid
-flowchart TD
-  local["本地保存返回 changedPaths"]
-  pending["Coordinator 记录 pending paths<br/>20s push debounce"]
-  dirty{"触发时仍在编辑或保存中?"}
-  commit["commitTrackedChanges()"]
-  bootstrap{"本地分支还没有 commit?"}
-  remote["listServerRefs()"]
-  fetch{"远端 oid 变化?"}
-  premerge["必要时检查 pre-merge dirty paths"]
-  merge["mergeRemoteBranch()"]
-  checkout["只 checkout 变化的 tracked paths"]
-  push["pushRemoteWithRetry()"]
-  retry{"push 被远端更新拒绝?"}
-
-  local --> pending
-  pending --> dirty
-  dirty -- 是 --> pending
-  dirty -- 否 --> bootstrap
-  bootstrap -- 需要 --> commit
-  bootstrap -- 跳过 --> commit
-  commit --> remote
-  remote --> fetch
-  fetch -- 未变 --> premerge
-  fetch -- 变化 --> premerge
-  premerge --> merge
-  merge --> checkout
-  checkout --> push
-  push --> retry
-  retry -- 是 --> merge
-  retry -- 否 --> done["完成"]
-```
-
-几个现在容易忽略的实现细节：
-
-- `JournalSyncCoordinator` 保证同一时间只跑一个 Git 操作；运行中收到的新 pull / push 会排队。
-- 桌面端和移动端都会把保存结果里的 `changedPaths` 交给 coordinator；移动端还会把 pending paths 持久化到 `journal-mobile-sync-pending-paths.json`，重启后恢复。
-- `pushJournalChanges()` 不会先 fetch，只有 push 被远端更新拒绝时才 fetch / merge / retry。
-- `pullJournalUpdates()` 会在 merge 前检查本地 dirty tracked paths；如果有未提交本地内容，会返回 dirty paths，让应用把它们转为 pending push，而不是直接覆盖。
-- 首次同步遇到“本地还没 commit、远端已有分支”的情况，会走 first commit bootstrap：保护本地 changed paths，checkout 其他远端文件，并对重叠 Markdown / JSON 做合并。
-- fast-forward 或 merge 后不会总是 checkout 整个 tracked scope；代码会用 `git.walk()` 计算两端变化路径，只 checkout 变化的 tracked paths。
+| 分支 | 性能影响 |
+| --- | --- |
+| 保存后带 `changedPaths` | `commit.status` 限制到明确路径，避免全量 tracked scope 扫描 |
+| 移动端 pending paths 持久化 | 重启、失败重试、debounce 后仍保留待推送路径 |
+| `pushJournalChanges()` 不预先 fetch | 普通保存推送少一次网络往返；只有 push rejected 才 fetch / merge / retry |
+| pull 前 dirty 保护 | 本地有未提交 tracked paths 时返回 dirty paths，让应用转 pending push |
+| first commit bootstrap | 新设备本地已有内容且远端已有分支时，会保护本地 paths 并合并重叠文件 |
+| 按变化路径 checkout | fast-forward / merge 后用 `git.walk()` 计算变化路径，只 checkout 变化的 tracked paths |
 
 ## 3. 快路径与慢路径
 
@@ -166,7 +133,7 @@ pnpm run e2e:mobile:ios
 pnpm run e2e:mobile:android
 ```
 
-真实 GitHub 同步回归必须使用专用测试仓库，不使用真实日记仓库。失败排查时优先看 trace、dirty paths、`.git/HEAD`、最近 commit、远端 clone 后内容，以及移动端是否恢复了 pending paths。
+真实 GitHub 同步回归必须使用专用测试仓库，不使用真实日记仓库。失败排查时优先看 trace、dirty paths、`.git/HEAD`、最近 commit、通过 `@journal/sync` clone 后的远端内容，以及移动端是否恢复了 pending paths。
 
 性能基线数据集建议：
 

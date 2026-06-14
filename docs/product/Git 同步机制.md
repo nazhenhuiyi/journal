@@ -1,32 +1,48 @@
 # Git 同步机制
 
-这份文档说明且留当前 GitHub 私有仓库同步的设计。同步实现以 `packages/journal-sync` 为核心，桌面端和移动端只注入平台能力。
+这份文档记录且留当前 GitHub 私有仓库同步的主设计。同步核心在 `packages/journal-sync`，桌面端和移动端只注入平台能力与 UI 编排。
 
-## 1. 核心结论
+## 1. 总览
 
-- 产品同步主流程统一使用 `isomorphic-git`。
-- 不重新加入系统 `git` 命令行 fallback。
-- 不用 GitHub REST API 重写文件同步协议。
-- 同步远端默认是 GitHub 私有仓库，认证方式是 HTTPS + GitHub token。
-- token 不写入 Markdown、Git 仓库或普通配置文件；桌面端和移动端分别使用平台凭据存储。
+```mermaid
+flowchart LR
+  app["桌面 / 移动 UI"]
+  manager["平台 sync manager"]
+  coordinator["JournalSyncCoordinator<br/>单飞 / 去抖 / 重试"]
+  core["@journal/sync<br/>gitCore / smartMerge"]
+  runtime["JournalGitRuntime<br/>fs / http / cache / trace"]
+  github["GitHub 私有仓库"]
+  credentials["平台凭据存储<br/>桌面凭据 / SecureStore"]
+  paths["changedPaths / pending paths"]
 
-系统 `git` 只用于开发者验收、E2E 辅助 clone、排查远端仓库事实，不是应用内同步 client。
+  app --> manager --> coordinator --> core --> runtime --> github
+  credentials -. token .-> manager
+  paths -. 限制扫描 .-> coordinator
+  paths -. 限制 statusMatrix .-> core
+```
+
+核心边界：
+
+- 应用内同步统一使用 `isomorphic-git`。
+- 涉及 Git 同步行为和远端内容核对的开发、验收、E2E 检查应复用 `@journal/sync` 或直接使用同一套 `isomorphic-git` runtime。
+- E2E 临时分支创建、删除和空仓库 bootstrap 可以使用 GitHub REST 测试夹具；这不参与文件同步协议。
+- 不恢复系统 `git` 命令行 fallback，不用 GitHub REST API 重写文件同步协议。
+- 远端默认是 GitHub 私有仓库，认证方式是 HTTPS + GitHub token。
+- token 不写入 Markdown、Git 仓库或普通配置文件。
 
 ## 2. 模块边界
 
 | 层 | 位置 | 职责 |
 | --- | --- | --- |
-| 同步核心 | `packages/journal-sync/src/gitCore.ts` | 初始化仓库、状态读取、tracked paths、commit、fetch、merge、push、push rejected retry |
-| 调度器 | `packages/journal-sync/src/scheduler.ts` | 单飞、排队、保存后延迟推送、定时拉取、后台 flush、重试状态 |
-| 合并策略 | `packages/journal-sync/src/smartMerge.ts`、`lastWriteWins.ts` | Markdown diff3 合并、JSON/非文本 fallback |
+| 同步核心 | `packages/journal-sync/src/gitCore.ts` | init / clone / status / commit / pull / push / full sync |
+| 调度器 | `packages/journal-sync/src/scheduler.ts` | 单飞、排队、保存后延迟推送、定时拉取、后台 flush、失败重试 |
+| 合并策略 | `packages/journal-sync/src/smartMerge.ts`、`lastWriteWins.ts` | Markdown diff3、JSON / 非文本 fallback |
 | 桌面平台适配 | `apps/desktop/electron/journalSync.ts` | Node `fs`、`isomorphic-git/http/node`、桌面凭据、journal directory |
 | 桌面 UI 编排 | `apps/desktop/src/services/sync/desktopSyncManager.ts` | 编辑器脏状态、保存 flush、设置页、手动同步、状态展示 |
-| 移动平台适配 | `apps/mobile/src/services/sync/mobileGitSync.ts` | Expo 文件系统、`expo/fetch` HTTP client、SecureStore 凭据、工作区目录 |
+| 移动平台适配 | `apps/mobile/src/services/sync/mobileGitSync.ts` | Expo 文件系统、`expo/fetch` HTTP client、SecureStore、worktree 目录 |
 | 移动 UI 编排 | `apps/mobile/src/services/sync/mobileSyncManager.ts` | 输入稳定性、AppState、pending paths、手动同步、状态展示 |
 
-## 3. Git Client 使用逻辑
-
-这里的 git client 指应用内部对 `isomorphic-git` 的包装和注入方式。
+## 3. Runtime 与配置
 
 共享核心只依赖 `JournalGitRuntime`：
 
@@ -42,53 +58,30 @@ type JournalGitRuntime = {
 }
 ```
 
-运行时由平台层创建：
+平台层负责创建 runtime：
 
-- 桌面端：`fs` 使用 Node `fs`，`http` 使用 `isomorphic-git/http/node`，`dir` 是当前 journal directory。
-- 移动端：`fs` 使用 `createExpoGitFileSystem()`，`http` 使用包了一层 `expo/fetch` 的 web client，`dir` 是 Expo document directory 下的 `journal-worktree/`。
-- 测试：可以传入 mock `git`、mock `fs` 和独立临时目录。
+| 平台 | `fs` | `http` | `dir` |
+| --- | --- | --- | --- |
+| 桌面端 | Node `fs` | `isomorphic-git/http/node` | 当前 journal directory |
+| 移动端 | `createExpoGitFileSystem()` | 包装 `expo/fetch` 的 web client | Expo document directory 下的 `journal-worktree/` |
+| 测试 | mock 或临时目录 | mock http | 独立临时目录 |
 
-`runtime.cache` 是每次 runtime / public sync operation 内共享的 `isomorphic-git` cache。它会被透传给支持 cache 的 `clone`、`fetch`、`merge`、`push`、`checkout`、`add`、`remove`、`commit`、`readCommit`、`statusMatrix`、`walk` 等命令，操作结束后丢弃。
+`runtime.cache` 是单次 public operation 内共享的 `isomorphic-git` cache，操作结束后丢弃。桌面端和移动端当前 Git HTTP 超时都是 300 秒；移动端额外记录 `http.gitRequest` trace。
 
-认证通过包装 HTTP client 实现：
+`JournalGitSyncConfig` 的默认值：
 
-```txt
-平台 http client
-  -> createJournalGitAuthenticatedHttpClient(requestTimeoutMs)
-  -> createJournalGitAuthHeaders()
-  -> Authorization: Basic base64(username:token)
-  -> isomorphic-git clone/fetch/push/listServerRefs
-```
+| 字段 | 默认值 |
+| --- | --- |
+| `branch` | `main` |
+| `remote` | `origin` |
+| `commitMessage` | `Sync journal changes` |
+| `authorName` / `authorEmail` | 平台层可覆盖，核心有兜底 author |
 
-如果调用方已经设置 Authorization header，共享核心不会覆盖它。桌面端和移动端当前都给 Git HTTP 请求配置 300 秒超时；移动端还会记录 `http.gitRequest` trace，便于定位大 pack 或网络慢路径。
+远端 URL 会经过 `assertSafeRemoteUrl()` 检查，拒绝带用户名或 token 的 URL。认证由 HTTP client 包装层注入 `Authorization: Basic base64(username:token)`；如果调用方已经设置 Authorization header，共享核心不会覆盖。
 
-## 4. 同步配置
+## 4. 同步范围与操作
 
-共享核心使用 `JournalGitSyncConfig`：
-
-```ts
-type JournalGitSyncConfig = {
-  authorEmail?: string
-  authorName?: string
-  branch?: string
-  commitMessage?: string
-  remote?: string
-  remoteUrl?: string
-}
-```
-
-默认值：
-
-- branch: `main`
-- remote: `origin`
-- commit message: `Sync journal changes`
-- author: 平台层可覆盖，桌面端和移动端目前各自设置默认 author。
-
-远端 URL 会经过 `assertSafeRemoteUrl()` 检查，拒绝包含用户名或 token 的危险 URL。
-
-## 5. Tracked Scope
-
-同步核心只提交和检查这些路径：
+Git 同步只关注 journal tracked scope：
 
 ```txt
 entries/
@@ -98,7 +91,7 @@ reviews/
 manifest.json
 ```
 
-路径进入同步前会做归一化和过滤。保存链路应尽量传 `changedPaths`，例如：
+保存链路应尽量传 `changedPaths`，例如：
 
 ```txt
 entries/2026/06/2026-06-10.md
@@ -106,194 +99,184 @@ media/2026/06/img_20260610_220000.jpg
 reviews/2026/06/2026-06-10.json
 ```
 
-有 `changedPaths` 时，`commitTrackedChanges()` 只检查这些路径；没有可靠 changed paths 时才回到整个 tracked scope。
+有可靠 `changedPaths` 时，`commitTrackedChanges()` 只检查这些路径；没有可靠路径时才回到整个 tracked scope。
 
-## 6. Public Operations
-
-共享核心当前暴露这些主要操作：
+共享核心主要 public operations：
 
 | 操作 | 用途 |
 | --- | --- |
-| `getJournalGitSyncStatus()` | 读取仓库是否存在、当前分支、dirty paths、最近 commit、远端地址 |
-| `initJournalGitSyncRepository()` | 初始化本地 Git 仓库并配置 author / remote |
-| `cloneJournalGitSyncRepository()` | 新设备或空 worktree 从远端 clone 指定分支 |
+| `getJournalGitSyncStatus()` | 读取仓库、分支、dirty paths、最近 commit、远端地址 |
+| `initJournalGitSyncRepository()` | 初始化本地仓库并配置 author / remote |
+| `cloneJournalGitSyncRepository()` | 新设备或空 worktree 从远端 clone |
 | `commitJournalChanges()` | 只提交 tracked scope 内的本地改动 |
-| `pullJournalUpdates()` | fetch 并 merge 远端更新到本地 worktree |
+| `pullJournalUpdates()` | fetch / merge 远端更新到本地 worktree |
 | `pushJournalChanges()` | commit 本地改动并 push |
-| `syncJournalNow()` | 手动全量同步：commit -> fetch/merge -> push |
+| `syncJournalNow()` | 手动全量同步：commit -> pull -> push |
 
-应用层通常不会直接调用所有操作。桌面端通过 preload IPC 暴露 `loadStatus`、`pull`、`push`、`syncNow` 等入口；移动端通过 `mobileGitSync.ts` 再包一层，以便自动读取 SecureStore 凭据和 Expo worktree。
+## 5. 调度状态机
 
-## 7. 调度状态机
+```mermaid
+stateDiagram-v2
+  state "disabled" as disabled
+  state "needs-auth" as needsAuth
 
-`JournalSyncCoordinator` 是跨端共享调度器。它不懂 UI 和文件系统，只负责什么时候跑什么操作。
-
-状态：
-
-```txt
-disabled
-idle
-pending
-syncing
-synced
-retrying
-needs-auth
-error
+  [*] --> disabled: 未配置或停用
+  disabled --> idle: 配置可用
+  idle --> pending: markLocalSave
+  synced --> pending: markLocalSave
+  pending --> syncing: debounce / manual / background flush
+  idle --> syncing: app-open / manual / interval
+  synced --> syncing: app-open / manual / interval
+  retrying --> syncing: retry timer / network-online
+  syncing --> synced: success
+  syncing --> pending: skipped or still editing
+  syncing --> retrying: push or full sync failed
+  syncing --> error: manual pull failed
+  syncing --> needsAuth: credentials required
+  needsAuth --> syncing: save credentials / manual
+  error --> syncing: manual / app-open
 ```
 
-触发源：
+调度器不懂 UI 和文件系统，只决定什么时候跑 `pull`、`push` 或 `full`：
 
-```txt
-app-open
-app-background
-manual
-network-online
-pull-interval
-retry-timer
-save-idle
+| 规则 | 当前值或行为 |
+| --- | --- |
+| 单飞 | 同一时间只跑一个 Git 操作 |
+| 排队 | 运行中收到新的 pull / push，会在当前操作后补跑 |
+| 保存后推送 | `pending(local-save)` 后等待 20 秒 debounce |
+| 定时拉取 | 配置后 app open 触发一次，再每 180 秒 pull |
+| 后台 flush | 离开 App 时最多等 5 秒推送 pending save |
+| 失败重试 | push / full sync 失败后 300 秒 retry |
+| 后台 pull | 默认不强行打扰主界面状态 |
+
+触发源是 `app-open`、`app-background`、`manual`、`network-online`、`pull-interval`、`retry-timer`、`save-idle`。
+
+## 6. 保存后自动推送
+
+```mermaid
+flowchart TD
+  save["保存日记 / review / media"]
+  paths["返回 changedPaths"]
+  pending["端侧 manager 记录 pending paths"]
+  debounce["Coordinator: pending(local-save)<br/>20s debounce"]
+  gate{"触发时仍在输入、保存或 dirty?"}
+  push["pushJournalChanges(changedPaths)"]
+  ensure["ensureRepository()"]
+  bootstrap{"本地无 commit<br/>且远端已有分支?"}
+  protect["保护本地 changedPaths<br/>checkout / merge 远端内容"]
+  commit["commitTrackedChanges()"]
+  hasCommit{"本地分支已有 commit?"}
+  remotePush["push()"]
+  rejected{"远端已更新?"}
+  retry["fetch() -> smart merge<br/>retry push once"]
+  conflict{"true conflict?"}
+  synced["synced"]
+  wait["保留本地改动<br/>等待下一次同步条件"]
+  stop["停止自动 push<br/>留下冲突标记"]
+
+  save --> paths --> pending --> debounce --> gate
+  gate -- 是 --> debounce
+  gate -- 否 --> push --> ensure --> bootstrap
+  bootstrap -- 是 --> protect --> commit
+  bootstrap -- 否 --> commit
+  commit --> hasCommit
+  hasCommit -- 否 --> wait
+  hasCommit -- 是 --> remotePush --> rejected
+  rejected -- 否 --> synced
+  rejected -- 是 --> retry --> conflict
+  conflict -- 否 --> synced
+  conflict -- 是 --> stop
 ```
 
-操作：
+端侧只需要把保存结果里的 `changedPaths` 交给 coordinator，并在输入不稳定时返回 `skipped`，让 coordinator 继续保持 pending。移动端会额外把 pending paths 持久化，重启后恢复。
 
-```txt
-pull
-push
-full
+## 7. 拉取与手动同步
+
+```mermaid
+flowchart TD
+  trigger["app-open / resume / interval / manual"]
+  gate{"本地正在保存<br/>或输入不稳定?"}
+  pull["pullJournalUpdates()"]
+  refs["listServerRefs()"]
+  changed{"远端 oid 变化?"}
+  dirty{"merge 前存在<br/>本地 dirty tracked paths?"}
+  fetchMerge["fetch() -> merge()"]
+  checkout["只 checkout 变化的 tracked paths"]
+  pending["返回 dirtyPaths<br/>端侧转 pending push"]
+  reload["端侧按需 reload UI / widget"]
+  unchanged["跳过 fetch<br/>保持当前状态"]
+
+  trigger --> gate
+  gate -- 是 --> pending
+  gate -- 否 --> pull --> refs --> changed
+  changed -- 否 --> unchanged
+  changed -- 是 --> dirty
+  dirty -- 是 --> pending
+  dirty -- 否 --> fetchMerge --> checkout --> reload
 ```
 
-关键规则：
+手动 `syncJournalNow()` 是完整路径：
 
-- 同一时间只跑一个 Git 操作。
-- Git 操作运行中来了新的 pull/push，会记录为 queued run。
-- 保存后先进入 `pending(local-save)`，等待 push debounce。
-- 后台离开时会在有限时间内 flush pending push。
-- push 失败进入 `retrying`，由 retry timer 克制重试。
-- pull 是后台操作时默认不强行打扰主界面状态。
+```mermaid
+flowchart LR
+  ensure["ensureRepository()"]
+  commit["commitTrackedChanges()"]
+  refs["listServerRefs()"]
+  fetch["fetch if remote changed"]
+  merge["merge()"]
+  push["push()"]
+  retry["rejected: fetch -> merge -> retry once"]
 
-## 8. 桌面端同步流程
-
-桌面端配置保存：
-
-```txt
-SettingsPage
-  -> desktopSyncManager.saveConfiguration()
-  -> preload journalSync.saveSettings()
-  -> Electron main 保存 settings 和 token
-  -> initJournalGitSyncRepository()
-  -> loadStatus()
+  ensure --> commit --> refs --> fetch --> merge --> push
+  push -. 被拒绝 .-> retry --> push
 ```
 
-桌面端保存后推送：
+空远端或空本地有特殊处理：没有本地 commit 时不会强行 push 一个不存在的分支；已有远端分支时会建立本地分支和 tracking。
 
-```txt
-编辑器自动保存
-  -> getJournalFileTrackedPaths()
-  -> desktopSyncManager.markLocalSave()
-  -> JournalSyncCoordinator 等待 debounce
-  -> 如果编辑器仍 dirty / composing，则跳过并重新 pending
-  -> preload journalSync.push({ changedPaths })
-  -> pushJournalChanges()
+## 8. 端侧差异
+
+| 流程 | 桌面端 | 移动端 |
+| --- | --- | --- |
+| 配置保存 | `SettingsPage -> desktopSyncManager.saveConfiguration() -> preload -> Electron main` | `SyncSettingsPage -> mobileSyncManager.saveConfiguration() -> settings + SecureStore` |
+| 保存后同步 | 编辑器自动保存后调用 `desktopSyncManager.markLocalSave()` | `saveDailyJournal()` / `loadOrCreateDailyReview()` 后调用 `mobileSyncManager.markLocalSave()` |
+| 推送前 gate | 编辑器 dirty 或 composing 时跳过 | 输入不稳定、保存中或 AppState 不适合时跳过 |
+| 拉取后刷新 | 当前日期不脏时重新加载 | `reloadTodayFromDiskIfChanged()`，并刷新 widget snapshot |
+| 凭据 | 桌面凭据存储 | Expo SecureStore |
+| Pending paths | 内存态 | 持久化到移动端 pending paths 文件 |
+
+## 9. 冲突策略
+
+```mermaid
+flowchart TD
+  merge["merge driver"]
+  type{"路径类型"}
+  markdown["Markdown diff3<br/>front matter updatedAt 不决定胜负"]
+  json["JSON / 结构化文件<br/>可靠时间字段 last-write-wins"]
+  fallback["其他文本或无法判断<br/>按配置 fallback side"]
+  conflict{"true conflict?"}
+  markers["保留冲突标记<br/>停止自动 push"]
+  clean["自动合并完成"]
+
+  merge --> type
+  type -- "entries/*.md" --> markdown --> conflict
+  type -- "annotations / reviews" --> json --> clean
+  type -- "其他" --> fallback --> clean
+  conflict -- 是 --> markers
+  conflict -- 否 --> clean
 ```
 
-桌面端拉取：
+冲突策略变更时必须同步更新测试和本文档。性能、trace 和慢路径排查细节见 `docs/product/Git 同步性能笔记.md`。
 
-```txt
-initialize / resume / pull interval
-  -> coordinator.pullNow()
-  -> preload journalSync.pull()
-  -> pullJournalUpdates()
-  -> 如果远端更新且编辑器不脏，重新加载当前日期
-```
+## 10. 验收事实
 
-## 9. 移动端同步流程
+同步验收不能只看页面状态，也不要改用系统 `git` 命令绕过应用同步核心。至少通过 `@journal/sync` / `isomorphic-git` 检查这些事实：
 
-移动端配置保存：
-
-```txt
-SyncSettingsPage
-  -> mobileSyncManager.saveConfiguration()
-  -> saveGitHubSyncSettings()
-  -> saveGitHubSyncCredentials()
-  -> refreshStatus()
-  -> startPullingIfConfigured()
-```
-
-移动端保存后推送：
-
-```txt
-saveDailyJournal() / loadOrCreateDailyReview()
-  -> 返回 changedPaths
-  -> journalEffects 标记同步
-  -> mobileSyncManager.markLocalSave()
-  -> pending paths 持久化
-  -> coordinator 等待 debounce
-  -> 如果输入不稳定，跳过并重新 pending
-  -> syncMobileJournalWithGitHub({ changedPaths })
-```
-
-移动端拉取：
-
-```txt
-resume / pull interval
-  -> 如果当前保存状态 dirty 或 saving，跳过 pull
-  -> pullMobileJournalUpdatesFromGitHub()
-  -> 如果 pull 后还有 dirty paths，继续标记 pending
-  -> 如果 worktree 更新，reloadTodayFromDiskIfChanged()
-  -> afterRemoteUpdatesApplied() 刷新 widget snapshot
-```
-
-## 10. Git 操作顺序
-
-`syncJournalNow()` 的正常路径：
-
-```txt
-ensureRepository()
-  -> commitTrackedChanges()
-  -> listServerRefs() 判断远端分支是否变化
-  -> fetch()
-  -> merge()
-  -> push()
-```
-
-push rejected 时：
-
-```txt
-push()
-  -> remote changed
-  -> fetch()
-  -> merge()
-  -> retry push once
-```
-
-空远端或空本地会被特殊处理：没有本地 commit 时不会强行 push 一个不存在的分支；已有远端分支时会建立本地分支和 tracking。
-
-## 11. 冲突策略
-
-Markdown 日记使用 diff3 文本合并：
-
-- 非重叠修改自动合并。
-- true conflict 保留冲突标记。
-- 出现 true conflict 后停止自动 push，避免把未处理冲突推到远端。
-- front matter 的 `updatedAt` 不决定整篇文件胜负。
-
-非 Markdown 或结构化 JSON 使用 fallback merge：
-
-- `annotations/`、`reviews/` 等 JSON 不能做无脑文本拼接。
-- 有可靠时间字段时按 last-write-wins 选边。
-- 无法判断时按配置 fallback side 选边。
-
-冲突策略变更时必须同步更新测试和本文档。
-
-## 12. 验收事实
-
-同步验收不能只看页面显示。至少要检查：
-
-```sh
-git -C <journal-dir> status --short --branch
-git -C <journal-dir> status --short -- entries media annotations reviews manifest.json
-git -C <journal-dir> log --oneline -5
-cat <journal-dir>/.git/HEAD
-```
+- `getJournalGitSyncStatus()` 返回的当前分支、dirty paths、最近 commits 和远端 URL。
+- `isomorphic-git.statusMatrix()` 中 tracked scope 是否还有未提交改动。
+- `isomorphic-git.currentBranch()` / `resolveRef()` 是否指向完整分支引用，避免游离 `HEAD` 或短 ref。
+- 需要核对远端时，用 `isomorphic-git.listServerRefs()` 或 `cloneJournalGitSyncRepository()` 到隔离目录后读取 tracked 内容。
+- E2E 中复用 `e2e/githubE2e.ts` 的 `cloneGitHubE2eBranch()`，不要新增系统 `git clone`。
+- 需要检查旧 bug 留下的 `.git/main`、`.git/<branch>` 等布局文件时，可以直接读隔离测试目录里的 `.git` 文件；这只是低层回归断言，不是同步 client。
 
 失败信号：
 
@@ -302,4 +285,4 @@ cat <journal-dir>/.git/HEAD
 - tracked scope 内长期 dirty。
 - 没有用户内容却产生 commit。
 - 保存期间产生密集提交或密集重试。
-- 页面显示已同步但远端 clone 后没有对应内容。
+- 页面显示已同步，但远端 clone 后没有对应内容。

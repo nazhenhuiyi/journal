@@ -247,7 +247,7 @@ function getArtifactPreflightErrors() {
   return [
     'Android artifact E2E requires a built .apk.',
     'Set JOURNAL_MOBILE_E2E_ANDROID_APK_PATH or JOURNAL_MOBILE_E2E_ARTIFACT_PATH to the .apk path.',
-    'Example: JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/app-release.apk pnpm run e2e:mobile:android',
+    'Example: JOURNAL_MOBILE_E2E_ANDROID_APK_PATH=apps/mobile/android/app/build/outputs/apk/release/eas-preview-local.apk pnpm run e2e:mobile:android',
   ]
 }
 
@@ -843,9 +843,7 @@ function getDefaultArtifactPathCandidates(platform) {
   }
 
   return [
-    'android/app/build/outputs/apk/release/app-release.apk',
-    'android/app/build/outputs/apk/preview/app-preview.apk',
-    'build/android/app-release.apk',
+    'android/app/build/outputs/apk/release/eas-preview-local.apk',
   ]
 }
 
