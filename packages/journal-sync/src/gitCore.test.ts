@@ -278,6 +278,79 @@ describe('journal git sync core', () => {
     }))
   })
 
+  it('times out slow authenticated Git HTTP requests after the configured budget', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const request = vi.fn(() => new Promise<never>(() => {}))
+      const authenticatedHttp = createJournalGitAuthenticatedHttpClient(
+        { request } as unknown as HttpClient,
+        credentials,
+        { requestTimeoutMs: 300_000 },
+      )
+      const result = authenticatedHttp.request({
+        method: 'GET',
+        url: 'https://github.com/example/journal-sync.git/info/refs?service=git-upload-pack',
+      })
+
+      await vi.advanceTimersByTimeAsync(299_999)
+      await expect(Promise.race([
+        result.then(() => 'resolved', () => 'rejected'),
+        Promise.resolve('pending'),
+      ])).resolves.toBe('pending')
+
+      const rejection = expect(result).rejects.toThrow('GitHub 请求超时（300 秒）')
+
+      await vi.advanceTimersByTimeAsync(1)
+      await rejection
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the configured Git HTTP timeout active while reading response bodies', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const slowBody = async function* (): AsyncIterableIterator<Uint8Array> {
+        yield new Uint8Array([1])
+        await new Promise<never>(() => {})
+      }
+
+      const request = vi.fn(async () => ({
+        body: slowBody(),
+        headers: {},
+        method: 'GET',
+        statusCode: 200,
+        statusMessage: 'OK',
+        url: 'https://github.com/example/journal-sync.git',
+      }))
+      const authenticatedHttp = createJournalGitAuthenticatedHttpClient(
+        { request } as unknown as HttpClient,
+        credentials,
+        { requestTimeoutMs: 300_000 },
+      )
+      const response = await authenticatedHttp.request({
+        method: 'GET',
+        url: 'https://github.com/example/journal-sync.git/info/refs?service=git-upload-pack',
+      })
+      const body = response.body![Symbol.asyncIterator]()
+
+      await expect(body.next()).resolves.toEqual({
+        done: false,
+        value: new Uint8Array([1]),
+      })
+
+      const result = body.next()
+      const rejection = expect(result).rejects.toThrow('GitHub 请求超时（300 秒）')
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      await rejection
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('uses preauthenticated HTTP clients for remote operations instead of onAuth callbacks', async () => {
     const runtime = createRuntime()
     const request = vi.fn(async () => ({

@@ -42,7 +42,7 @@ export type MobileGitPullResult = JournalGitPullResult
 const defaultAuthorEmail = 'journal-mobile-sync@example.invalid'
 const defaultAuthorName = 'Journal Mobile Sync'
 const defaultCommitMessage = 'Sync mobile journal changes'
-const gitHttpRequestTimeoutMs = 30_000
+const gitHttpRequestTimeoutMs = 300_000
 
 export async function getMobileGitSyncStatus(
   config: MobileGitSyncConfig = {},

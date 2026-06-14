@@ -9,7 +9,7 @@
 - 验证日记正文输入时，注意正文编辑器是 CodeMirror，不是普通输入框。应定位 `aria-label="日记正文"` 且 `role="textbox"` 的元素，再通过真实输入事件写入。
 - 验证同步时，必须检查 Git 仓库事实：当前分支、`git status --short --branch`、同步范围内未提交改动、最近提交、`origin/main` 和远端 `refs/heads/main`。
 - 以下情况都算同步验收失败：出现游离 `HEAD`、残留 `.git/main`、密集重试提交、没有用户内容却产生提交、连续输入产生过多提交。
-- 同步范围只关注 `entries/`、`media/`、`annotations/`、`manifest.json`。真实仓库里其他未跟踪历史目录不要误判成同步失败。
+- 同步范围只关注 `entries/`、`media/`、`annotations/`、`reviews/`、`manifest.json`。真实仓库里其他未跟踪历史目录不要误判成同步失败。
 - 保持桌面端最小宽度为 `1180px`，位置在 `src/index.css` 和 `electron/main.ts`。
 - 组件样式默认使用 TailwindCSS；全局变量、应用级基础样式或 Tailwind 会降低可读性的情况，再使用普通 CSS。
 - 测试使用 Vitest。完整校验从仓库根目录运行 `pnpm test`，不要传 Jest 专用参数，比如 `--runInBand`。

@@ -1,5 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import {
+  manipulateAsync,
+  SaveFormat,
+  type Action,
+} from 'expo-image-manipulator'
+import {
   createReviewFile,
   createReviewMoments,
   createJournalMarkdownWithFrontMatter,
@@ -70,13 +75,19 @@ const mimeTypeExtensions = new Map([
   ['image/tiff', '.tiff'],
   ['image/webp', '.webp'],
 ])
+const compressedImageExtension = '.webp'
+const compressedImageMaxLongEdge = 2560
+const compressedImageQuality = 0.85
+const passthroughImageExtensions = new Set(['.gif'])
 
 export type MobileJournalImageAsset = {
   exif?: Record<string, unknown> | null
   fileName?: string | null
+  height?: number | null
   mimeType?: string | null
   type?: string | null
   uri?: string | null
+  width?: number | null
 }
 
 export type ImportedMobileJournalImage = {
@@ -364,24 +375,25 @@ export async function importMobileJournalImagesForDate(
 
   for (const imageAsset of imageAssets) {
     const fileStem = `img_${date.replaceAll('-', '')}_${timestamp}`
-    const fileName = await createAvailableImageFileName(mediaDirectory, fileStem, imageAsset.extension, usedFileNames)
-    const imageId = createAvailableImageId(fileName, imageAsset.extension, usedImageIds)
-    const filePath = `${mediaDirectory}${fileName}`
-    const repositoryPath = `${repositoryDirectory}/${fileName}`
-
-    await FileSystem.copyAsync({
-      from: imageAsset.uri,
-      to: filePath,
+    const preferredExtension = getPreferredImportedImageExtension(imageAsset.extension)
+    const importedFile = await importMobileImageFile({
+      fileStem,
+      imageAsset,
+      mediaDirectory,
+      preferredExtension,
+      usedFileNames,
     })
+    const imageId = createAvailableImageId(importedFile.fileName, importedFile.extension, usedImageIds)
+    const repositoryPath = `${repositoryDirectory}/${importedFile.fileName}`
 
-    usedFileNames.add(fileName)
+    usedFileNames.add(importedFile.fileName)
     usedImageIds.add(imageId)
 
     const importedImage: ImportedMobileJournalImage = {
       id: imageId,
       src: repositoryPath,
-      fileName,
-      filePath,
+      fileName: importedFile.fileName,
+      filePath: importedFile.filePath,
       repositoryPath,
     }
     const location = parseExifLocation(imageAsset.exif)
@@ -483,6 +495,102 @@ function isDailyJournalFileName(value: string) {
   return /^\d{4}-\d{2}-\d{2}\.md$/.test(value)
 }
 
+type NormalizedMobileImageAsset = {
+  exif: Record<string, unknown> | null
+  extension: string
+  height: number | null
+  uri: string
+  width: number | null
+}
+
+type ImportMobileImageFileInput = {
+  fileStem: string
+  imageAsset: NormalizedMobileImageAsset
+  mediaDirectory: string
+  preferredExtension: string
+  usedFileNames: Set<string>
+}
+
+async function importMobileImageFile(input: ImportMobileImageFileInput) {
+  const preferredFileName = await createAvailableImageFileName(
+    input.mediaDirectory,
+    input.fileStem,
+    input.preferredExtension,
+    input.usedFileNames,
+  )
+  const preferredFilePath = `${input.mediaDirectory}${preferredFileName}`
+
+  if (input.preferredExtension === compressedImageExtension) {
+    try {
+      await optimizeMobileImageToWebp(input.imageAsset, preferredFilePath)
+
+      return {
+        extension: input.preferredExtension,
+        fileName: preferredFileName,
+        filePath: preferredFilePath,
+      }
+    } catch {
+      // Native image decoding can vary by platform and source format; keep import usable.
+    }
+  }
+
+  const fallbackFileName = input.preferredExtension === input.imageAsset.extension
+    ? preferredFileName
+    : await createAvailableImageFileName(
+      input.mediaDirectory,
+      input.fileStem,
+      input.imageAsset.extension,
+      input.usedFileNames,
+    )
+  const fallbackFilePath = `${input.mediaDirectory}${fallbackFileName}`
+
+  await FileSystem.copyAsync({
+    from: input.imageAsset.uri,
+    to: fallbackFilePath,
+  })
+
+  return {
+    extension: input.imageAsset.extension,
+    fileName: fallbackFileName,
+    filePath: fallbackFilePath,
+  }
+}
+
+async function optimizeMobileImageToWebp(
+  imageAsset: NormalizedMobileImageAsset,
+  targetPath: string,
+) {
+  const result = await manipulateAsync(
+    imageAsset.uri,
+    createMobileImageResizeActions(imageAsset),
+    {
+      compress: compressedImageQuality,
+      format: SaveFormat.WEBP,
+    },
+  )
+
+  await FileSystem.copyAsync({
+    from: result.uri,
+    to: targetPath,
+  })
+}
+
+function createMobileImageResizeActions(imageAsset: NormalizedMobileImageAsset): Action[] {
+  const { height, width } = imageAsset
+
+  if (!height || !width || Math.max(height, width) <= compressedImageMaxLongEdge) {
+    return []
+  }
+
+  return width >= height
+    ? [{ resize: { width: compressedImageMaxLongEdge } }]
+    : [{ resize: { height: compressedImageMaxLongEdge } }]
+}
+
+function getPreferredImportedImageExtension(extension: string) {
+  return passthroughImageExtensions.has(extension) ? extension : compressedImageExtension
+}
+
 function normalizeImageAsset(asset: MobileJournalImageAsset) {
   const uri = typeof asset.uri === 'string' ? asset.uri.trim() : ''
 
@@ -499,8 +607,14 @@ function normalizeImageAsset(asset: MobileJournalImageAsset) {
   return {
     exif: asset.exif ?? null,
     extension,
+    height: normalizeImageDimension(asset.height),
     uri,
+    width: normalizeImageDimension(asset.width),
   }
+}
+
+function normalizeImageDimension(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
 function getImageAssetExtension(asset: MobileJournalImageAsset) {

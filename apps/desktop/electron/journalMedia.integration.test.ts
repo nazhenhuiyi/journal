@@ -49,6 +49,31 @@ describe('journal media import', () => {
     await expect(readFile(importedImages[0].filePath, 'utf8')).resolves.toBe('image-bytes')
   })
 
+  it('compresses valid still images into WebP files', async () => {
+    const directory = await createTemporaryDirectory()
+    const sourceImage = path.join(directory, 'source.png')
+
+    await writeFile(sourceImage, createTinyPng())
+
+    const importedImages = await importJournalImagesForDate(
+      '2026-04-29',
+      directory,
+      [sourceImage],
+      new Date(2026, 3, 29, 21, 38, 0),
+    )
+
+    expect(importedImages[0]).toMatchObject({
+      id: 'img_20260429_213800',
+      src: 'media/2026/04/img_20260429_213800.webp',
+      fileName: 'img_20260429_213800.webp',
+    })
+
+    const compressedImage = await readFile(importedImages[0].filePath)
+
+    expect(compressedImage.subarray(0, 4).toString('ascii')).toBe('RIFF')
+    expect(compressedImage.subarray(8, 12).toString('ascii')).toBe('WEBP')
+  })
+
   it('reads GPS coordinates from JPEG EXIF while importing', async () => {
     const directory = await createTemporaryDirectory()
     const sourceImage = path.join(directory, 'source.jpg')
@@ -130,6 +155,13 @@ describe('journal media import', () => {
     )
   })
 })
+
+function createTinyPng() {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+    'base64',
+  )
+}
 
 function createGpsExifJpeg() {
   const tiff = createGpsTiff()

@@ -60,10 +60,9 @@ pnpm run e2e:desktop
 - 今日书写页能打开，CodeMirror 正文编辑器可定位。
 - 输入长日记正文后会自动保存到隔离 journal 目录。
 - 刷新 Electron 页面后能重新加载已保存正文。
-- 切到回看模式后能渲染已保存正文。
 - 新建碎碎念后会自动保存到隔离 journal 目录。
-- 刷新后能重新加载碎碎念，回看模式能渲染碎碎念。
-- 删除碎碎念后会自动保存，刷新和回看模式都不会重新出现已删除内容。
+- 刷新后能重新加载碎碎念，并能重新打开碎碎念编辑态。
+- 删除碎碎念后会自动保存，刷新后不会重新出现已删除内容。
 - 日历能列出历史日记、打开指定日期，并在切换日期前保存未落盘编辑到对应日期文件。
 - 设置页同步面板和关键按钮存在，未配置 Git 同步状态可见，危险远端地址会显示错误。
 - 损坏 Markdown 会显示 diagnostics banner。
@@ -103,7 +102,7 @@ pnpm run e2e:sync:github
 
 如果没有设置 `JOURNAL_E2E_GITHUB_REMOTE_URL` 和 `JOURNAL_E2E_GITHUB_TOKEN`，测试会自动跳过。
 
-建议准备一个专用私有仓库，例如 `journal-sync-e2e-private`。不要使用真实日记仓库。token 使用 GitHub fine-grained personal access token：
+建议准备一个专用私有仓库，例如 `journal-sync-e2e-private`。不要使用真实日记仓库。`JOURNAL_E2E_GITHUB_REMOTE_URL` 可以是 GitHub HTTPS 或 SSH remote；token 使用 GitHub fine-grained personal access token：
 
 - Repository access: 只选择这个 E2E 私有仓库。
 - Permissions: `Contents: Read and write`。
@@ -135,7 +134,7 @@ pnpm run e2e:sync:github
 
 真机调试、development build、`adb reverse`、日志截图和键盘遮挡回归经验见 [移动端真机调试手册](./移动端真机调试手册.md)。这些属于调试路径，不等于完整 E2E 基线。
 
-运行前安装 Maestro CLI，并确保当前 shell 能直接使用 Java 17+。如果不想把 Maestro 放进 `PATH`，可以显式设置 `MAESTRO_CLI`；如果系统默认 Java 不是 17+，先设置 `JAVA_HOME`。
+运行前安装 Maestro CLI，并确保当前 shell 能直接使用 Java 17+，且至少有一个 iOS Simulator、Android Emulator 或真机可用。如果不想把 Maestro 放进 `PATH`，可以显式设置 `MAESTRO_CLI`；如果系统默认 Java 不是 17+，先设置 `JAVA_HOME`。
 
 稳定 iOS Simulator 路径：
 
@@ -212,11 +211,13 @@ pnpm run e2e:mobile:ios
 
 稳定 artifact E2E 当前覆盖：
 
-- 打开移动端今日页，通过 `testID` 定位核心入口。
-- 新增碎碎念，验证内容出现，然后进入日记列表和回顾页。
-- 多次进入回顾页，交替使用页面返回按钮和系统 Back，验证最终仍回到今日页。
+- 打开移动端今日页，等待 React Native 原生运行时加载到 Today 页，并通过 `testID` 定位核心入口。
+- 打开碎碎念 sheet，新增碎碎念，并验证碎碎念列表出现新内容。
+- 进入日记列表，验证今天的碎碎念数量出现在列表预览中。
+- 进入回顾页，验证回顾页和碎碎念摘要入口可见；多次进入回顾页，交替使用页面返回按钮和系统 Back，验证最终仍回到今日页。
 - 进入同步配置，使用 `setClipboard` + `pasteText` 填写长远端 URL 和 token，验证危险远端地址不会保存成功。
-- 显式开启真实同步 flow 时，使用 E2E 注入的同步配置和 token，点击“立即同步”，验证同步完成状态，并在回到今日后显示已同步。
+- 显式开启真实同步 flow 时，新增未推送碎碎念后进入同步页，使用 E2E 注入的真实 GitHub 同步配置和 token，点击“立即同步”，验证同步触发会先保存本地内容、完成真实 GitHub 同步状态，并在回到今日后显示已同步。
+- 进入设置页，填写包含凭据的危险远端地址，验证同步配置保存失败状态。
 
 ## 脚本速查
 

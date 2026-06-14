@@ -50,7 +50,12 @@ export type JournalGitRuntime = {
   fs: FsClient
   git?: typeof defaultGit
   http: HttpClient
+  httpRequestTimeoutMs?: number | null
   trace?: JournalGitTrace
+}
+
+export type JournalGitHttpClientOptions = {
+  requestTimeoutMs?: number | null
 }
 
 export type JournalGitRecentCommit = {
@@ -121,6 +126,9 @@ type Base64RuntimeGlobals = {
   Buffer?: Base64BufferConstructor
 }
 
+type JournalGitHttpRequest = Parameters<HttpClient['request']>[0]
+type JournalGitHttpResponse = Awaited<ReturnType<HttpClient['request']>>
+
 type RemoteFetchDecision = {
   fetchResult: FetchResult | null
   skipped: boolean
@@ -149,13 +157,38 @@ const journalReviewPathPattern = /^reviews\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.jso
 export function createJournalGitAuthenticatedHttpClient(
   http: HttpClient,
   credentials?: JournalGitCredentials | null,
+  options: JournalGitHttpClientOptions = {},
 ): HttpClient {
   return {
     ...http,
-    request: (request) => http.request({
-      ...request,
-      headers: createJournalGitAuthHeaders(request.headers, credentials),
-    }),
+    request: async (request) => {
+      const requestTimeoutMs = normalizeGitHttpRequestTimeoutMs(options.requestTimeoutMs)
+      const authenticatedRequest = {
+        ...request,
+        headers: createJournalGitAuthHeaders(request.headers, credentials),
+      }
+      const timeoutAt = requestTimeoutMs === null ? null : Date.now() + requestTimeoutMs
+      const response = await withGitHttpRequestTimeout(
+        http.request(authenticatedRequest),
+        timeoutAt,
+        authenticatedRequest,
+        requestTimeoutMs,
+      )
+
+      if (!response.body || timeoutAt === null || requestTimeoutMs === null) {
+        return response
+      }
+
+      return {
+        ...response,
+        body: withGitHttpBodyTimeout(
+          response.body,
+          timeoutAt,
+          authenticatedRequest,
+          requestTimeoutMs,
+        ),
+      }
+    },
   }
 }
 
@@ -176,6 +209,89 @@ export function createJournalGitAuthHeaders(
   )}`
 
   return nextHeaders
+}
+
+function normalizeGitHttpRequestTimeoutMs(requestTimeoutMs: number | null | undefined) {
+  if (requestTimeoutMs === undefined || requestTimeoutMs === null) {
+    return null
+  }
+
+  return Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : null
+}
+
+async function withGitHttpRequestTimeout<T>(
+  promise: Promise<T>,
+  timeoutAt: number | null,
+  request: JournalGitHttpRequest,
+  requestTimeoutMs: number | null,
+): Promise<T> {
+  if (timeoutAt === null || requestTimeoutMs === null) {
+    return promise
+  }
+
+  const remainingMs = timeoutAt - Date.now()
+
+  if (remainingMs <= 0) {
+    throw createGitHttpRequestTimeoutError(request, requestTimeoutMs)
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(createGitHttpRequestTimeoutError(request, requestTimeoutMs))
+    }, remainingMs)
+  })
+
+  return Promise.race([
+    promise,
+    timeout,
+  ]).finally(() => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+    }
+  })
+}
+
+async function* withGitHttpBodyTimeout(
+  body: NonNullable<JournalGitHttpResponse['body']>,
+  timeoutAt: number,
+  request: JournalGitHttpRequest,
+  requestTimeoutMs: number,
+): AsyncIterableIterator<Uint8Array> {
+  const iterator = body[Symbol.asyncIterator]()
+
+  while (true) {
+    const result = await withGitHttpRequestTimeout(
+      iterator.next(),
+      timeoutAt,
+      request,
+      requestTimeoutMs,
+    )
+
+    if (result.done) {
+      return
+    }
+
+    yield result.value
+  }
+}
+
+function createGitHttpRequestTimeoutError(
+  request: JournalGitHttpRequest,
+  requestTimeoutMs: number,
+) {
+  return new Error(
+    `GitHub 请求超时（${Math.round(requestTimeoutMs / 1000)} 秒）：${request.method ?? 'GET'} ${request.url}`,
+  )
+}
+
+function createAuthenticatedRuntimeHttpClient(
+  runtime: JournalGitRuntime,
+  credentials: JournalGitCredentials,
+) {
+  return createJournalGitAuthenticatedHttpClient(runtime.http, credentials, {
+    requestTimeoutMs: runtime.httpRequestTimeoutMs,
+  })
 }
 
 export async function getJournalGitSyncStatus(
@@ -243,7 +359,7 @@ export async function cloneJournalGitSyncRepository(
     cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
-    http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
+    http: createAuthenticatedRuntimeHttpClient(runtime, credentials),
     ref: getBranchName(config.branch ?? defaultBranch),
     singleBranch: true,
     url: config.remoteUrl,
@@ -674,7 +790,7 @@ async function fetchRemote(
     cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
-    http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
+    http: createAuthenticatedRuntimeHttpClient(runtime, credentials),
     ref: getBranchName(config.branch ?? defaultBranch),
     remote: config.remote ?? defaultRemote,
     singleBranch: true,
@@ -768,7 +884,7 @@ async function getRemoteBranchOid(
     runtime,
     'remote.listRefs',
     () => getGit(runtime).listServerRefs({
-      http: createJournalGitAuthenticatedHttpClient(runtime.http, credentials),
+      http: createAuthenticatedRuntimeHttpClient(runtime, credentials),
       prefix: remoteBranchRef,
       url: config.remoteUrl!,
     }),
@@ -1351,7 +1467,7 @@ async function tryPushRemote(
       dir: runtime.dir,
       force: false,
       fs: runtime.fs,
-      http: createJournalGitAuthenticatedHttpClient(runtime.http, input.credentials),
+      http: createAuthenticatedRuntimeHttpClient(runtime, input.credentials),
       ref: getLocalBranchRef(branch),
       remote: input.remote,
       remoteRef: getRemoteBranchRef(branch),

@@ -1,5 +1,6 @@
-import { copyFile, mkdir, stat } from 'node:fs/promises'
+import { copyFile, mkdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
+import sharp from 'sharp'
 import type { ImageLocation } from '@journal/core'
 import { readImageExifLocation } from './imageExif'
 
@@ -23,6 +24,11 @@ export type ImportedJournalImage = {
   filePath: string
   location?: ImageLocation
 }
+
+const compressedImageExtension = '.webp'
+const compressedImageMaxLongEdge = 2560
+const compressedImageQuality = 85
+const passthroughImageExtensions = new Set(['.gif'])
 
 export async function importJournalImagesForDate(
   date: unknown,
@@ -50,22 +56,27 @@ export async function importJournalImagesForDate(
 
   for (const sourcePath of imagePaths) {
     const extension = path.extname(sourcePath).toLowerCase()
+    const preferredExtension = getPreferredImportedImageExtension(extension)
     const fileStem = `img_${date.split('-').join('')}_${timestamp}`
-    const fileName = await createAvailableImageFileName(mediaDirectory, fileStem, extension, usedFileNames)
-    const imageId = createAvailableImageId(fileName, extension, usedImageIds)
-    const filePath = path.join(mediaDirectory, fileName)
+    const location = await readImageExifLocation(sourcePath).catch(() => undefined)
+    const importedFile = await importImageFile({
+      extension,
+      fileStem,
+      mediaDirectory,
+      preferredExtension,
+      sourcePath,
+      usedFileNames,
+    })
+    const imageId = createAvailableImageId(importedFile.fileName, importedFile.extension, usedImageIds)
 
-    await copyFile(sourcePath, filePath)
-    const location = await readImageExifLocation(filePath).catch(() => undefined)
-
-    usedFileNames.add(fileName)
+    usedFileNames.add(importedFile.fileName)
     usedImageIds.add(imageId)
 
     const importedImage: ImportedJournalImage = {
       id: imageId,
-      src: `${mediaDirectoryName}/${fileName}`,
-      fileName,
-      filePath,
+      src: `${mediaDirectoryName}/${importedFile.fileName}`,
+      fileName: importedFile.fileName,
+      filePath: importedFile.filePath,
     }
 
     if (location) {
@@ -80,6 +91,77 @@ export async function importJournalImagesForDate(
 
 function isSupportedImagePath(filePath: string) {
   return supportedImageExtensions.has(path.extname(filePath).toLowerCase())
+}
+
+type ImportImageFileInput = {
+  extension: string
+  fileStem: string
+  mediaDirectory: string
+  preferredExtension: string
+  sourcePath: string
+  usedFileNames: Set<string>
+}
+
+async function importImageFile(input: ImportImageFileInput) {
+  const preferredFileName = await createAvailableImageFileName(
+    input.mediaDirectory,
+    input.fileStem,
+    input.preferredExtension,
+    input.usedFileNames,
+  )
+  const preferredFilePath = path.join(input.mediaDirectory, preferredFileName)
+
+  if (input.preferredExtension === compressedImageExtension) {
+    try {
+      await optimizeImageToWebp(input.sourcePath, preferredFilePath)
+
+      return {
+        extension: input.preferredExtension,
+        fileName: preferredFileName,
+        filePath: preferredFilePath,
+      }
+    } catch {
+      await rm(preferredFilePath, { force: true }).catch(() => undefined)
+    }
+  }
+
+  const fallbackFileName = input.preferredExtension === input.extension
+    ? preferredFileName
+    : await createAvailableImageFileName(
+      input.mediaDirectory,
+      input.fileStem,
+      input.extension,
+      input.usedFileNames,
+    )
+  const fallbackFilePath = path.join(input.mediaDirectory, fallbackFileName)
+
+  await copyFile(input.sourcePath, fallbackFilePath)
+
+  return {
+    extension: input.extension,
+    fileName: fallbackFileName,
+    filePath: fallbackFilePath,
+  }
+}
+
+async function optimizeImageToWebp(sourcePath: string, targetPath: string) {
+  await sharp(sourcePath)
+    .rotate()
+    .resize({
+      fit: 'inside',
+      height: compressedImageMaxLongEdge,
+      width: compressedImageMaxLongEdge,
+      withoutEnlargement: true,
+    })
+    .webp({
+      effort: 4,
+      quality: compressedImageQuality,
+    })
+    .toFile(targetPath)
+}
+
+function getPreferredImportedImageExtension(extension: string) {
+  return passthroughImageExtensions.has(extension) ? extension : compressedImageExtension
 }
 
 async function createAvailableImageFileName(

@@ -47,6 +47,7 @@ export type JournalGitSyncStatus = {
 
 const defaultAuthorEmail = 'journal-desktop@example.invalid'
 const defaultAuthorName = 'Journal Desktop'
+const gitHttpRequestTimeoutMs = 300_000
 
 export async function loadJournalGitSyncStatus(journalDirectory: string): Promise<JournalGitSyncStatus> {
   const settings = await loadJournalSettings(journalDirectory)
@@ -182,6 +183,7 @@ async function createDesktopGitRuntime(journalDirectory: string): Promise<Journa
     dir: journalDirectory,
     fs,
     http,
+    httpRequestTimeoutMs: gitHttpRequestTimeoutMs,
     trace: createDesktopGitTraceLogger(),
   }
 }

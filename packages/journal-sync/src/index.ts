@@ -10,6 +10,7 @@ export {
   pushJournalChanges,
   syncJournalNow,
   type JournalGitCredentials,
+  type JournalGitHttpClientOptions,
   type JournalGitOperationOptions,
   type JournalGitPullResult,
   type JournalGitPushResult,

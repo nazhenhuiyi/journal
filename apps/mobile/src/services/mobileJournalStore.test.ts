@@ -23,8 +23,17 @@ const mockFileSystem = vi.hoisted(() => ({
   readDirectoryAsync: vi.fn(),
   writeAsStringAsync: vi.fn(),
 }))
+const mockImageManipulator = vi.hoisted(() => ({
+  manipulateAsync: vi.fn(),
+  SaveFormat: {
+    JPEG: 'jpeg',
+    PNG: 'png',
+    WEBP: 'webp',
+  },
+}))
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
+vi.mock('expo-image-manipulator', () => mockImageManipulator)
 
 const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
 const reviewPath = 'file:///app/journal-worktree/reviews/2026/06/2026-06-10.json'
@@ -94,6 +103,23 @@ describe('mobileJournalStore', () => {
     mockFileSystem.writeAsStringAsync.mockImplementation(async (path: string, content: string) => {
       mockFileSystem.files.set(path, content)
     })
+    mockImageManipulator.manipulateAsync.mockImplementation(async (uri: string) => {
+      const content = mockFileSystem.files.get(uri)
+
+      if (content === undefined) {
+        throw new Error(`Missing test file: ${uri}`)
+      }
+
+      const resultUri = `${uri}.optimized.webp`
+
+      mockFileSystem.files.set(resultUri, `webp:${content}`)
+
+      return {
+        height: 900,
+        uri: resultUri,
+        width: 1200,
+      }
+    })
   })
 
   afterEach(() => {
@@ -143,7 +169,7 @@ describe('mobileJournalStore', () => {
     })
   })
 
-  it('copies imported images into the mobile worktree media directory', async () => {
+  it('compresses imported images into the mobile worktree media directory as WebP', async () => {
     mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
 
     const importedImages = await importMobileJournalImagesForDate(
@@ -155,9 +181,11 @@ describe('mobileJournalStore', () => {
             GPSLongitude: 116.277,
           },
           fileName: 'source.JPG',
+          height: 3024,
           mimeType: 'image/jpeg',
           type: 'image',
           uri: 'file:///picker/source.jpg',
+          width: 4032,
         },
       ],
       new Date(2026, 5, 8, 21, 38, 0),
@@ -166,10 +194,10 @@ describe('mobileJournalStore', () => {
     expect(importedImages).toEqual([
       {
         id: 'img_20260608_213800',
-        src: 'media/2026/06/img_20260608_213800.jpg',
-        fileName: 'img_20260608_213800.jpg',
-        filePath: 'file:///app/journal-worktree/media/2026/06/img_20260608_213800.jpg',
-        repositoryPath: 'media/2026/06/img_20260608_213800.jpg',
+        src: 'media/2026/06/img_20260608_213800.webp',
+        fileName: 'img_20260608_213800.webp',
+        filePath: 'file:///app/journal-worktree/media/2026/06/img_20260608_213800.webp',
+        repositoryPath: 'media/2026/06/img_20260608_213800.webp',
         location: {
           latitude: 39.992,
           longitude: 116.277,
@@ -181,6 +209,39 @@ describe('mobileJournalStore', () => {
       'file:///app/journal-worktree/media/2026/06/',
       { intermediates: true },
     )
+    expect(mockImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+      'file:///picker/source.jpg',
+      [{ resize: { width: 2560 } }],
+      {
+        compress: 0.85,
+        format: 'webp',
+      },
+    )
+    expect(mockFileSystem.files.get('file:///app/journal-worktree/media/2026/06/img_20260608_213800.webp'))
+      .toBe('webp:image-bytes')
+  })
+
+  it('falls back to copying the original image when mobile WebP compression fails', async () => {
+    mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
+    mockImageManipulator.manipulateAsync.mockRejectedValueOnce(new Error('unsupported source image'))
+
+    const importedImages = await importMobileJournalImagesForDate(
+      '2026-06-08',
+      [
+        {
+          fileName: 'source.JPG',
+          mimeType: 'image/jpeg',
+          type: 'image',
+          uri: 'file:///picker/source.jpg',
+        },
+      ],
+      new Date(2026, 5, 8, 21, 38, 0),
+    )
+
+    expect(importedImages[0]).toMatchObject({
+      fileName: 'img_20260608_213800.jpg',
+      repositoryPath: 'media/2026/06/img_20260608_213800.jpg',
+    })
     expect(mockFileSystem.files.get('file:///app/journal-worktree/media/2026/06/img_20260608_213800.jpg'))
       .toBe('image-bytes')
   })
@@ -189,7 +250,7 @@ describe('mobileJournalStore', () => {
     mockFileSystem.files.set('file:///picker/first.png', 'first')
     mockFileSystem.files.set('file:///picker/video.mov', 'video')
     mockFileSystem.files.set(
-      'file:///app/journal-worktree/media/2026/06/img_20260608_213800.png',
+      'file:///app/journal-worktree/media/2026/06/img_20260608_213800.webp',
       'existing',
     )
 
@@ -205,9 +266,9 @@ describe('mobileJournalStore', () => {
 
     expect(importedImages).toHaveLength(1)
     expect(importedImages[0]).toMatchObject({
-      fileName: 'img_20260608_213800_2.png',
+      fileName: 'img_20260608_213800_2.webp',
       id: 'img_20260608_213800_2',
-      repositoryPath: 'media/2026/06/img_20260608_213800_2.png',
+      repositoryPath: 'media/2026/06/img_20260608_213800_2.webp',
     })
     expect(mockFileSystem.copyAsync).toHaveBeenCalledOnce()
   })
@@ -230,8 +291,8 @@ describe('mobileJournalStore', () => {
       'img_20260608_213800_2',
     ])
     expect(importedImages.map((image) => image.repositoryPath)).toEqual([
-      'media/2026/06/img_20260608_213800.heic',
-      'media/2026/06/img_20260608_213800.jpeg',
+      'media/2026/06/img_20260608_213800.webp',
+      'media/2026/06/img_20260608_213800_2.webp',
     ])
   })
 
