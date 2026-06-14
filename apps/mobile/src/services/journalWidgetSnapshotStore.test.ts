@@ -16,8 +16,17 @@ const mockFileSystem = vi.hoisted(() => ({
   readDirectoryAsync: vi.fn(),
   writeAsStringAsync: vi.fn(),
 }))
+const mockImageManipulator = vi.hoisted(() => ({
+  manipulateAsync: vi.fn(),
+  SaveFormat: {
+    JPEG: 'jpeg',
+    PNG: 'png',
+    WEBP: 'webp',
+  },
+}))
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
+vi.mock('expo-image-manipulator', () => mockImageManipulator)
 vi.mock('../widgets/journalWidgetNative', () => ({
   updateNativeJournalWidgets: mockUpdateNativeJournalWidgets,
 }))

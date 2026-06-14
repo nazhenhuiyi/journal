@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest'
 const require = createRequire(import.meta.url)
 const {
   addDebugApplicationIdSuffix,
+  addDebuggableReleaseSwitch,
 } = require('./withAndroidDebugApplicationIdSuffix.js') as {
   addDebugApplicationIdSuffix: (contents: string) => string
+  addDebuggableReleaseSwitch: (contents: string) => string
 }
 
 describe('withAndroidDebugApplicationIdSuffix', () => {
@@ -68,5 +70,43 @@ android {
             applicationIdSuffix ".debug"
             signingConfig signingConfigs.debug
         }`)
+  })
+
+  it('adds the journal debuggable release switch inside buildTypes.release', () => {
+    const result = addDebuggableReleaseSwitch(`
+android {
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+`)
+
+    expect(result).toContain(`release {
+            // @journal/android-debuggable-release
+            def enableJournalDebuggableRelease = findProperty('journalDebuggableRelease') ?: 'false'
+            debuggable enableJournalDebuggableRelease.toBoolean()
+            signingConfig signingConfigs.debug
+        }`)
+  })
+
+  it('keeps an existing journal debuggable release switch in place', () => {
+    const result = addDebuggableReleaseSwitch(`
+android {
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            def enableJournalDebuggableRelease = findProperty('journalDebuggableRelease') ?: 'false'
+            debuggable enableJournalDebuggableRelease.toBoolean()
+        }
+    }
+}
+`)
+
+    expect(result.match(/findProperty\('journalDebuggableRelease'\)/g)).toHaveLength(1)
   })
 })

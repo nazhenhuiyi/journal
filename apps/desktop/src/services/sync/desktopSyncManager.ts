@@ -5,6 +5,12 @@ import {
   type SyncSnapshot,
   type SyncTrigger,
 } from '@journal/sync/scheduler'
+import {
+  createSyncSnapshotPersistenceIdentity,
+  getDefaultSyncSnapshot,
+  shouldPersistSyncSnapshot,
+  type SyncSnapshotPersistenceIdentity,
+} from '@journal/sync'
 
 type JournalSyncStore = NonNullable<Window['journalSync']>
 type JournalSyncStatus = Awaited<ReturnType<JournalSyncStore['loadStatus']>>
@@ -39,12 +45,7 @@ export type DesktopSyncManagerState = {
   tokenDraft: string
 }
 
-const initialSyncSnapshot: SyncSnapshot = {
-  lastError: null,
-  lastSyncedAt: null,
-  pendingReason: null,
-  status: 'idle',
-}
+const initialSyncSnapshot: SyncSnapshot = getDefaultSyncSnapshot()
 
 const initialState: DesktopSyncManagerState = {
   branch: 'main',
@@ -68,6 +69,7 @@ class DesktopSyncManager {
   private listeners = new Set<() => void>()
   private runtimeBinding: DesktopSyncRuntimeBinding | null = null
   private state = initialState
+  private syncSnapshotIdentity: SyncSnapshotPersistenceIdentity | null = null
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
@@ -288,6 +290,7 @@ class DesktopSyncManager {
             status: 'synced',
           },
         })
+        this.persistSnapshot(this.state.snapshot)
       }
 
       return this.state.snapshot
@@ -323,6 +326,7 @@ class DesktopSyncManager {
           message: snapshot.status === 'synced' ? this.state.message : '',
           snapshot,
         })
+        this.persistSnapshot(snapshot)
       },
       runOperation: (request) => this.runOperation(request),
     })
@@ -446,6 +450,15 @@ class DesktopSyncManager {
   }
 
   private applyStatus(status: JournalSyncStatus) {
+    const snapshot = createSyncSnapshotFromStatus(status)
+    this.syncSnapshotIdentity = status.remoteUrl
+      ? createSyncSnapshotPersistenceIdentity({
+          branch: status.branch,
+          remoteUrl: status.remoteUrl,
+        })
+      : null
+
+    this.coordinator.restoreSnapshot(snapshot, { emit: false })
     this.setState({
       branch: status.branch || 'main',
       credentialMessage: status.credentialMessage ?? '',
@@ -454,7 +467,7 @@ class DesktopSyncManager {
       hasCredentials: Boolean(status.hasCredentials),
       recentCommits: status.recentCommits ?? [],
       remoteUrl: status.remoteUrl ?? '',
-      snapshot: createSyncSnapshotFromStatus(status),
+      snapshot,
     })
   }
 
@@ -487,6 +500,23 @@ class DesktopSyncManager {
       },
     })
   }
+
+  private persistSnapshot(snapshot: SyncSnapshot) {
+    const journalSync = getJournalSyncStore()
+    const identity = this.syncSnapshotIdentity
+
+    if (!journalSync || !identity || !shouldPersistSyncSnapshot(snapshot)) {
+      return
+    }
+
+    void Promise.resolve(journalSync.saveState({
+      snapshot,
+      syncBranch: identity.branch,
+      syncRemoteUrl: identity.remoteUrl,
+    })).catch((error) => {
+      console.error(error)
+    })
+  }
 }
 
 export const desktopSyncManager = new DesktopSyncManager()
@@ -497,6 +527,7 @@ function getJournalSyncStore() {
 
 function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
   const credentialStatus = getCredentialStatus(status)
+  const restoredSnapshot = status.syncSnapshot ?? null
 
   if (isCredentialReadError(credentialStatus)) {
     return {
@@ -508,13 +539,14 @@ function createSyncSnapshotFromStatus(status: JournalSyncStatus): SyncSnapshot {
 
   if (status.dirtyPaths.length > 0) {
     return {
-      ...initialSyncSnapshot,
+      ...(restoredSnapshot ?? initialSyncSnapshot),
+      lastError: null,
       pendingReason: 'local-save',
       status: 'pending',
     }
   }
 
-  return initialSyncSnapshot
+  return restoredSnapshot ?? initialSyncSnapshot
 }
 
 function getCredentialStatus(status: JournalSyncStatus): DesktopSyncCredentialStatus {

@@ -1,8 +1,12 @@
 import {
+  createSyncSnapshotPersistenceIdentity,
+  getDefaultSyncSnapshot,
   JournalSyncCoordinator,
+  shouldPersistSyncSnapshot,
   type SyncOperationRequest,
   type SyncOperationResult,
   type SyncSnapshot,
+  type SyncSnapshotPersistenceIdentity,
 } from '@journal/sync'
 import {
   getMobileGitSyncStatus,
@@ -22,6 +26,10 @@ import {
   loadPendingMobileSyncPaths,
   savePendingMobileSyncPaths,
 } from './pendingSyncPaths'
+import {
+  loadMobileSyncSnapshot,
+  saveMobileSyncSnapshot,
+} from './mobileSyncState'
 import { createMobileSyncTrace } from './mobileSyncTrace'
 import { getMobileE2eSyncConfiguration } from '../e2eEnvironment'
 import type { SaveDailyJournalResult } from '../mobileJournalStore'
@@ -73,12 +81,7 @@ type MobileTraceDetails = Record<string, boolean | null | number | string>
 const mobilePullIntervalMs = 30_000
 const mobileRecentCommitLimit = 3
 
-const initialSyncSnapshot: SyncSnapshot = {
-  lastError: null,
-  lastSyncedAt: null,
-  pendingReason: null,
-  status: 'idle',
-}
+const initialSyncSnapshot: SyncSnapshot = getDefaultSyncSnapshot()
 
 const initialState: MobileSyncManagerState = {
   gitStatusError: null,
@@ -101,6 +104,7 @@ class MobileSyncManager {
   private listeners = new Set<() => void>()
   private runtimeBinding: MobileSyncRuntimeBinding | null = null
   private state = initialState
+  private syncSnapshotIdentity: SyncSnapshotPersistenceIdentity | null = null
   private trace = createMobileSyncTrace()
 
   subscribe = (listener: () => void) => {
@@ -233,6 +237,20 @@ class MobileSyncManager {
       const nextConfigurationError = nextCredentialStatus === 'corrupt'
         ? 'GitHub token 无法读取，请重新保存。'
         : null
+      const nextIdentity = createSyncSnapshotPersistenceIdentity({
+        branch,
+        remoteUrl,
+      })
+      const previousIdentity = this.syncSnapshotIdentity
+      const didChangeIdentity = !previousIdentity ||
+        previousIdentity.branch !== nextIdentity.branch ||
+        previousIdentity.remoteUrl !== nextIdentity.remoteUrl
+      const nextSnapshot = {
+        ...(didChangeIdentity ? initialSyncSnapshot : this.state.syncSnapshot),
+        lastError: nextConfigurationError,
+        pendingReason: null,
+        status: nextConfigurationError ? 'error' : 'idle',
+      } satisfies SyncSnapshot
 
       this.setState({
         hasStoredSyncToken: hasTokenAfterSave,
@@ -241,13 +259,11 @@ class MobileSyncManager {
         syncMessage: nextConfigurationError
           ?? (hasTokenAfterSave ? '同步配置已保存' : '仓库已保存，继续保存 GitHub token'),
         syncRemoteUrl: remoteUrl,
-        syncSnapshot: {
-          ...this.state.syncSnapshot,
-          lastError: nextConfigurationError,
-          status: nextConfigurationError ? 'error' : 'idle',
-        },
+        syncSnapshot: nextSnapshot,
         syncTokenDraft: token ? '' : this.state.syncTokenDraft,
       })
+      this.syncSnapshotIdentity = nextIdentity
+      this.coordinator.restoreSnapshot(nextSnapshot, { emit: false })
       await this.refreshStatus({ branch, remoteUrl })
       await this.startPullingIfConfigured()
 
@@ -309,24 +325,42 @@ class MobileSyncManager {
       const nextConfigurationError = nextCredentialStatus === 'corrupt'
         ? 'GitHub token 无法读取，请重新保存。'
         : null
+      const nextIdentity = createSyncSnapshotPersistenceIdentity({
+        branch,
+        remoteUrl,
+      })
+      const previousIdentity = this.syncSnapshotIdentity
+      const didChangeIdentity = !previousIdentity ||
+        previousIdentity.branch !== nextIdentity.branch ||
+        previousIdentity.remoteUrl !== nextIdentity.remoteUrl
+      const nextSnapshot = didChangeIdentity
+        ? initialSyncSnapshot
+        : this.state.syncSnapshot
 
       this.setState({
         hasStoredSyncToken: token ? true : this.state.hasStoredSyncToken,
         syncBranch: branch,
         syncCredentialStatus: nextCredentialStatus,
         syncRemoteUrl: remoteUrl,
+        syncSnapshot: nextSnapshot,
         syncTokenDraft: token ? '' : this.state.syncTokenDraft,
       })
+      this.syncSnapshotIdentity = nextIdentity
+      this.coordinator.restoreSnapshot(nextSnapshot, { emit: false })
 
       if (nextConfigurationError) {
+        const errorSnapshot = {
+          ...this.state.syncSnapshot,
+          lastError: nextConfigurationError,
+          pendingReason: null,
+          status: 'error',
+        } satisfies SyncSnapshot
+
         this.setState({
           syncMessage: nextConfigurationError,
-          syncSnapshot: {
-            ...this.state.syncSnapshot,
-            lastError: nextConfigurationError,
-            status: 'error',
-          },
+          syncSnapshot: errorSnapshot,
         })
+        this.coordinator.restoreSnapshot(errorSnapshot, { emit: false })
 
         return { ok: false }
       }
@@ -428,6 +462,7 @@ class MobileSyncManager {
           syncMessage: snapshot.status === 'synced' ? this.state.syncMessage : '',
           syncSnapshot: snapshot,
         })
+        this.persistSnapshot(snapshot)
       },
       pullIntervalMs: mobilePullIntervalMs,
       runOperation: (request) => this.runOperation(request),
@@ -446,7 +481,25 @@ class MobileSyncManager {
       const nextRemoteUrl = settingsState.status === 'available' ? settingsState.settings.remoteUrl : ''
       const hasToken = credentialsState.status === 'available'
       const configurationError = getSyncConfigurationError(settingsState, credentialsState)
+      const identity = nextRemoteUrl
+        ? createSyncSnapshotPersistenceIdentity({
+            branch: nextBranch,
+            remoteUrl: nextRemoteUrl,
+          })
+        : null
+      const restoredSnapshot = identity && !configurationError
+        ? await loadMobileSyncSnapshot(identity)
+        : null
+      const nextSnapshot = configurationError
+        ? {
+            ...initialSyncSnapshot,
+            lastError: configurationError,
+            status: 'error',
+          } satisfies SyncSnapshot
+        : restoredSnapshot ?? initialSyncSnapshot
 
+      this.syncSnapshotIdentity = identity
+      this.coordinator.restoreSnapshot(nextSnapshot, { emit: false })
       this.setState({
         hasLoadedSyncConfiguration: true,
         hasStoredSyncToken: hasToken,
@@ -454,11 +507,7 @@ class MobileSyncManager {
         syncCredentialStatus: credentialsState.status,
         syncMessage: configurationError ?? '',
         syncRemoteUrl: nextRemoteUrl,
-        syncSnapshot: {
-          ...this.state.syncSnapshot,
-          lastError: configurationError,
-          status: configurationError ? 'error' : 'idle',
-        },
+        syncSnapshot: nextSnapshot,
       })
       await this.startPullingIfConfigured()
     } catch (error) {
@@ -697,6 +746,21 @@ class MobileSyncManager {
 
   private hasCompleteConfiguration() {
     return Boolean(this.state.syncRemoteUrl.trim() && this.state.hasStoredSyncToken)
+  }
+
+  private persistSnapshot(snapshot: SyncSnapshot) {
+    const identity = this.syncSnapshotIdentity
+
+    if (!identity || !shouldPersistSyncSnapshot(snapshot)) {
+      return
+    }
+
+    void saveMobileSyncSnapshot({
+      identity,
+      snapshot,
+    }).catch((error) => {
+      console.error(error)
+    })
   }
 
   private async collectSavedJournalChangedPaths(

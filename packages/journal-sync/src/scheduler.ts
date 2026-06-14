@@ -1,3 +1,8 @@
+import {
+  getDefaultSyncSnapshot,
+  normalizeRestoredSyncSnapshot,
+} from './persistedSnapshot'
+
 export type SyncState =
   | 'disabled'
   | 'idle'
@@ -48,6 +53,7 @@ export type SyncTimerApi = {
 }
 
 export type JournalSyncCoordinatorOptions = {
+  initialSnapshot?: SyncSnapshot
   leaveFlushTimeoutMs?: number
   now?: () => Date
   onPendingChangedPathsChange?: (changedPaths: readonly string[]) => void
@@ -82,17 +88,22 @@ export class JournalSyncCoordinator {
   private pushTimeoutHandle: unknown | null = null
   private queuedRun: Promise<SyncSnapshot> | null = null
   private retryTimeoutHandle: unknown | null = null
-  private snapshot: SyncSnapshot = {
-    lastError: null,
-    lastSyncedAt: null,
-    pendingReason: null,
-    status: 'idle',
-  }
+  private snapshot: SyncSnapshot
 
-  constructor(private readonly options: JournalSyncCoordinatorOptions) {}
+  constructor(private readonly options: JournalSyncCoordinatorOptions) {
+    this.snapshot = normalizeRestoredSyncSnapshot(options.initialSnapshot) ?? getDefaultSyncSnapshot()
+  }
 
   getSnapshot() {
     return this.snapshot
+  }
+
+  restoreSnapshot(snapshot: SyncSnapshot, options: { emit?: boolean } = {}) {
+    this.snapshot = normalizeRestoredSyncSnapshot(snapshot) ?? getDefaultSyncSnapshot()
+
+    if (options.emit ?? true) {
+      this.options.onSnapshot?.(this.snapshot)
+    }
   }
 
   hasPendingLocalChanges() {

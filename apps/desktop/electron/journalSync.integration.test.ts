@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   loadJournalGitSyncStatus,
+  saveJournalGitSyncSnapshot,
   saveJournalGitSyncSettings,
 } from './journalSync'
 
@@ -70,6 +71,58 @@ describe('journal sync desktop adapter', () => {
       hasCredentials: false,
       credentialStatus: 'missing',
       remoteUrl: '',
+    })
+  })
+
+  it('persists sync snapshot state for the current repository settings', async () => {
+    await saveJournalGitSyncSettings(journalDirectory, {
+      syncBranch: 'main',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+      syncToken: 'secret-token',
+    })
+    await saveJournalGitSyncSnapshot(journalDirectory, {
+      snapshot: {
+        lastError: null,
+        lastSyncedAt: '2026-06-14T12:00:00.000Z',
+        pendingReason: null,
+        status: 'synced',
+      },
+      syncBranch: 'main',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+
+    await expect(loadJournalGitSyncStatus(journalDirectory)).resolves.toMatchObject({
+      syncSnapshot: {
+        lastSyncedAt: '2026-06-14T12:00:00.000Z',
+        status: 'synced',
+      },
+    })
+  })
+
+  it('does not restore persisted sync state for a different branch', async () => {
+    await saveJournalGitSyncSettings(journalDirectory, {
+      syncBranch: 'main',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+      syncToken: 'secret-token',
+    })
+    await saveJournalGitSyncSnapshot(journalDirectory, {
+      snapshot: {
+        lastError: null,
+        lastSyncedAt: '2026-06-14T12:00:00.000Z',
+        pendingReason: null,
+        status: 'synced',
+      },
+      syncBranch: 'main',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+    await saveJournalGitSyncSettings(journalDirectory, {
+      syncBranch: 'preview',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+
+    await expect(loadJournalGitSyncStatus(journalDirectory)).resolves.toMatchObject({
+      branch: 'preview',
+      syncSnapshot: null,
     })
   })
 })

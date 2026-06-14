@@ -105,6 +105,7 @@ interface Window {
       hasRepository: boolean
       recentCommits: JournalGitRecentCommitPayload[]
       remoteUrl: string
+      syncSnapshot: import('@journal/sync').SyncSnapshot | null
     }>
     pull(): Promise<{
       changed: boolean
@@ -129,7 +130,13 @@ interface Window {
       hasRepository: boolean
       recentCommits: JournalGitRecentCommitPayload[]
       remoteUrl: string
+      syncSnapshot: import('@journal/sync').SyncSnapshot | null
     }>
+    saveState(payload: {
+      snapshot: import('@journal/sync').SyncSnapshot
+      syncBranch: string
+      syncRemoteUrl: string
+    }): Promise<import('@journal/sync').PersistedSyncSnapshot | null>
     syncNow(options?: JournalGitOperationOptionsPayload): Promise<{
       changed: boolean
       dirtyPaths: string[]

@@ -58,6 +58,17 @@ export {
   type SyncTrigger,
 } from './scheduler'
 export {
+  areSyncSnapshotPersistenceIdentitiesEqual,
+  createPersistedSyncSnapshot,
+  createSyncSnapshotPersistenceIdentity,
+  getDefaultSyncSnapshot,
+  normalizePersistedSyncSnapshot,
+  normalizeRestoredSyncSnapshot,
+  shouldPersistSyncSnapshot,
+  type PersistedSyncSnapshot,
+  type SyncSnapshotPersistenceIdentity,
+} from './persistedSnapshot'
+export {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusKind,
   type JournalSyncStatusPresentation,

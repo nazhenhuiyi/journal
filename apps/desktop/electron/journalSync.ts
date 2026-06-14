@@ -13,6 +13,7 @@ import {
   type JournalGitOperationOptions,
   type JournalGitRecentCommit,
   type JournalGitRuntime,
+  type SyncSnapshot,
 } from '@journal/sync'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
@@ -21,6 +22,10 @@ import {
   saveJournalGitSyncCredentials,
   type JournalGitSyncCredentialStatus,
 } from './journalSyncCredentials'
+import {
+  loadJournalGitSyncState,
+  saveJournalGitSyncState,
+} from './journalSyncState'
 
 export type JournalSyncSettingsPayload = {
   syncBranch?: unknown
@@ -43,6 +48,7 @@ export type JournalGitSyncStatus = {
   hasRepository: boolean
   recentCommits: JournalGitRecentCommit[]
   remoteUrl: string
+  syncSnapshot: SyncSnapshot | null
 }
 
 const defaultAuthorEmail = 'journal-desktop@example.invalid'
@@ -59,6 +65,12 @@ export async function loadJournalGitSyncStatus(journalDirectory: string): Promis
     createDesktopGitConfig(settings),
     hasCredentials ? { token: 'stored' } : null,
   )
+  const syncSnapshot = settings.syncRemoteUrl
+    ? await loadJournalGitSyncState(journalDirectory, {
+        branch: status.branch,
+        remoteUrl: settings.syncRemoteUrl,
+      })
+    : null
 
   return {
     branch: status.branch,
@@ -69,6 +81,7 @@ export async function loadJournalGitSyncStatus(journalDirectory: string): Promis
     hasRepository: status.hasRepository,
     recentCommits: status.recentCommits,
     remoteUrl: settings.syncRemoteUrl,
+    syncSnapshot,
   }
 }
 
@@ -156,6 +169,13 @@ export async function syncJournalNow(
     dirtyPaths: result.dirtyPathsAfterSync,
     message: 'Sync complete',
   }
+}
+
+export async function saveJournalGitSyncSnapshot(
+  journalDirectory: string,
+  payload: unknown,
+) {
+  return saveJournalGitSyncState(journalDirectory, payload)
 }
 
 async function loadDesktopSyncContext(journalDirectory: string) {

@@ -38,6 +38,10 @@ export {
   savePendingMobileSyncPaths,
 } from './pendingSyncPaths'
 export {
+  loadMobileSyncSnapshot,
+  saveMobileSyncSnapshot,
+} from './mobileSyncState'
+export {
   mobileSyncManager,
   type MobileSyncActionResult,
   type MobileSyncManagerState,

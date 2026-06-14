@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     markLocalSave = vi.fn()
     notifyForeground = vi.fn()
     recordPendingChangedPaths = vi.fn()
+    restoreSnapshot = vi.fn()
     startPulling = vi.fn()
     stopPulling = vi.fn()
 
@@ -63,10 +64,12 @@ const mocks = vi.hoisted(() => {
     mockGetMobileGitSyncStatus: vi.fn(),
     mockLoadGitHubSyncCredentials: vi.fn(),
     mockLoadGitHubSyncSettings: vi.fn(),
+    mockLoadMobileSyncSnapshot: vi.fn(),
     mockLoadPendingMobileSyncPaths: vi.fn(),
     mockPullMobileJournalUpdatesFromGitHub: vi.fn(),
     mockSaveGitHubSyncCredentials: vi.fn(),
     mockSaveGitHubSyncSettings: vi.fn(),
+    mockSaveMobileSyncSnapshot: vi.fn(),
     mockSavePendingMobileSyncPaths: vi.fn(),
     mockSyncMobileJournalWithGitHub: vi.fn(),
     getCoordinator: () => lastCoordinator,
@@ -89,7 +92,24 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@journal/sync', () => ({
+  createSyncSnapshotPersistenceIdentity: (input: {
+    branch?: string | null
+    remoteUrl?: string | null
+  }) => ({
+    branch: input.branch?.trim() || 'main',
+    remoteUrl: input.remoteUrl?.trim() ?? '',
+  }),
+  getDefaultSyncSnapshot: () => ({
+    lastError: null,
+    lastSyncedAt: null,
+    pendingReason: null,
+    status: 'idle',
+  }),
   JournalSyncCoordinator: mocks.MockJournalSyncCoordinator,
+  shouldPersistSyncSnapshot: (snapshot: {
+    lastSyncedAt: string | null
+    status: string
+  }) => snapshot.status !== 'idle' || Boolean(snapshot.lastSyncedAt),
 }))
 
 vi.mock('./mobileGitSync', () => ({
@@ -105,6 +125,11 @@ vi.mock('./mobileSyncTrace', () => ({
 vi.mock('./pendingSyncPaths', () => ({
   loadPendingMobileSyncPaths: mocks.mockLoadPendingMobileSyncPaths,
   savePendingMobileSyncPaths: mocks.mockSavePendingMobileSyncPaths,
+}))
+
+vi.mock('./mobileSyncState', () => ({
+  loadMobileSyncSnapshot: mocks.mockLoadMobileSyncSnapshot,
+  saveMobileSyncSnapshot: mocks.mockSaveMobileSyncSnapshot,
 }))
 
 vi.mock('./secureSyncCredentials', () => ({
@@ -147,6 +172,7 @@ describe('mobile sync manager', () => {
       status: 'available',
     })
     mocks.mockLoadPendingMobileSyncPaths.mockResolvedValue([])
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValue(null)
     mocks.mockPullMobileJournalUpdatesFromGitHub.mockResolvedValue({
       dirtyPathsAfterPull: [],
       fetchResult: null,
@@ -156,6 +182,7 @@ describe('mobile sync manager', () => {
     })
     mocks.mockSaveGitHubSyncCredentials.mockResolvedValue(undefined)
     mocks.mockSaveGitHubSyncSettings.mockResolvedValue(undefined)
+    mocks.mockSaveMobileSyncSnapshot.mockResolvedValue(undefined)
     mocks.mockSavePendingMobileSyncPaths.mockResolvedValue(undefined)
     mocks.mockSyncMobileJournalWithGitHub.mockResolvedValue({
       dirtyPathsAfterSync: [],
@@ -290,6 +317,119 @@ describe('mobile sync manager', () => {
         skipDirtyCheckBeforeMerge: false,
       }),
     )
+  })
+
+  it('restores persisted sync state on initialize', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      lastError: null,
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    expect(mocks.mockLoadMobileSyncSnapshot).toHaveBeenCalledWith({
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    })
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      status: 'synced',
+    })
+  })
+
+  it('restores persisted error state and pending paths on initialize', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      lastError: 'network down',
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: 'retry',
+      status: 'retrying',
+    })
+    mocks.mockLoadPendingMobileSyncPaths.mockResolvedValueOnce([
+      'content/days/2026-06-14.md',
+    ])
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      lastError: 'network down',
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: 'retry',
+      status: 'retrying',
+    })
+    expect(mocks.getCoordinator()?.markDirtyWorktree).toHaveBeenCalledWith([
+      'content/days/2026-06-14.md',
+    ])
+  })
+
+  it('persists successful sync snapshots', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    mobileSyncManager.setSyncRemoteUrl('https://github.com/example/journal-sync.git')
+    mobileSyncManager.setSyncTokenDraft('runtime-token')
+
+    const result = await mobileSyncManager.syncNow()
+
+    expect(result.ok).toBe(true)
+    expect(mocks.mockSaveMobileSyncSnapshot).toHaveBeenCalledWith({
+      identity: {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      snapshot: expect.objectContaining({
+        lastSyncedAt: '2026-06-14T12:00:00.000Z',
+        status: 'synced',
+      }),
+    })
+  })
+
+  it('clears a restored error after a successful sync', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      lastError: 'network down',
+      lastSyncedAt: '2026-06-14T11:00:00.000Z',
+      pendingReason: 'retry',
+      status: 'retrying',
+    })
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+    const result = await mobileSyncManager.syncNow()
+
+    expect(result.ok).toBe(true)
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      lastError: null,
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })
+  })
+
+  it('does not carry an old sync time when the remote changes', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      lastError: null,
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+    mobileSyncManager.setSyncRemoteUrl('https://github.com/example/other.git')
+    mobileSyncManager.setSyncTokenDraft('runtime-token')
+
+    await mobileSyncManager.saveConfiguration()
+
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      lastSyncedAt: null,
+      status: 'idle',
+    })
   })
 })
 

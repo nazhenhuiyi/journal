@@ -43,6 +43,7 @@ import { useMobileWeather } from './hooks/useMobileWeather'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
 import { cn } from './ui/cn'
+import { ImagePreviewModal } from './ui/ImagePreviewModal'
 import { JournalListPage } from './pages/JournalListPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReviewDayPage } from './pages/ReviewDayPage'
@@ -83,6 +84,11 @@ type RootStackParamList = {
   SyncSettings: undefined
 }
 type ImageImportSource = 'camera' | 'library'
+type ImagePreviewState = {
+  accessibilityLabel: string
+  caption: string | null
+  uri: string
+}
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const murmurDraftInputMinHeight = 92
@@ -138,6 +144,7 @@ export default function App() {
   const [murmurDraftInputHeight, setMurmurDraftInputHeight] = useState(murmurDraftInputMinHeight)
   const [selectedMurmurThemeIds, setSelectedMurmurThemeIds] = useState<string[]>([])
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
+  const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null)
   const [homeMode, setHomeModeState] = useState<MobileHomeMode>('long-entry')
   const [hasLoadedUiSettings, setHasLoadedUiSettings] = useState(false)
   const [editingMurmurId, setEditingMurmurId] = useState<string | null>(null)
@@ -360,6 +367,17 @@ export default function App() {
     setEditingMurmurId(null)
   }, [])
 
+  const openImagePreview = useCallback((image: ImageBlock) => {
+    const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+    const caption = image.caption?.trim() || null
+
+    setPreviewImage({
+      accessibilityLabel: caption ?? '日记图片预览',
+      caption,
+      uri: imageUri,
+    })
+  }, [])
+
   const handleAddMurmur = useCallback(async () => {
     const didAdd = await addMurmur(murmurDraft, selectedMurmurThemeIds)
 
@@ -570,6 +588,7 @@ export default function App() {
                   onClearTheme={() => setSelectedMurmurThemeIds([])}
                   onContentSizeChange={(height) => setMurmurDraftInputHeight(height)}
                   onImportImages={(source) => void handleImportMurmurImages(source)}
+                  onPreviewImage={openImagePreview}
                   onEditMurmur={setEditingMurmurId}
                   onOpenJournalList={() => navigation.navigate('JournalList')}
                   onOpenLongEntry={() => navigation.navigate('LongEntry')}
@@ -633,6 +652,7 @@ export default function App() {
               onContentSizeChange={(height) => setMurmurDraftInputHeight(height)}
               onEditMurmur={setEditingMurmurId}
               onImportImages={(source) => void handleImportMurmurImages(source)}
+              onPreviewImage={openImagePreview}
               paperHeaderLine={paperHeaderLine}
               selectedMurmurTheme={selectedMurmurTheme}
             />
@@ -656,6 +676,8 @@ export default function App() {
               longEntryMarkdown={longEntryMarkdown}
               murmurCount={murmurs.length}
               onBack={() => goBackOrReturnToToday(navigation)}
+              onOpenDay={(date) => navigation.navigate('ReviewDay', { date })}
+              onOpenToday={() => returnToToday(navigation)}
               today={today}
             />
           )}
@@ -680,6 +702,7 @@ export default function App() {
             <ReviewDayPage
               date={route.params.date}
               onBack={() => goBackOrReturnToToday(navigation)}
+              onPreviewImage={openImagePreview}
             />
           )}
         </Stack.Screen>
@@ -740,11 +763,18 @@ export default function App() {
             onChangeBody={updateMurmurBody}
             onClose={closeMurmurEditor}
             onRemoveImage={removeMurmurImage}
+            onPreviewImage={openImagePreview}
             onTakePhoto={(murmurId) => void handleImportMurmurImages('camera', murmurId)}
             onUpdateImageCaption={updateMurmurImageCaption}
           />
         ) : null}
       </BottomSheet>
+      <ImagePreviewModal
+        accessibilityLabel={previewImage?.accessibilityLabel}
+        caption={previewImage?.caption}
+        onClose={() => setPreviewImage(null)}
+        uri={previewImage?.uri ?? null}
+      />
     </>
   )
 }
@@ -939,6 +969,7 @@ function MurmurPage({
   onContentSizeChange,
   onEditMurmur,
   onImportImages,
+  onPreviewImage,
   paperHeaderLine,
   selectedMurmurTheme,
 }: {
@@ -956,6 +987,7 @@ function MurmurPage({
   onContentSizeChange: (height: number) => void
   onEditMurmur: (murmurId: string) => void
   onImportImages: (source: ImageImportSource) => void
+  onPreviewImage: (image: ImageBlock) => void
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
@@ -988,6 +1020,7 @@ function MurmurPage({
           onContentSizeChange={onContentSizeChange}
           onEditMurmur={onEditMurmur}
           onImportImages={onImportImages}
+          onPreviewImage={onPreviewImage}
           paperHeaderLine={paperHeaderLine}
           selectedMurmurTheme={selectedMurmurTheme}
         />
@@ -1090,6 +1123,7 @@ function TodayMurmurMode({
   onOpenReview,
   onOpenSettings,
   onOpenSyncSettings,
+  onPreviewImage,
   paperHeaderLine,
   selectedMurmurTheme,
 }: {
@@ -1113,6 +1147,7 @@ function TodayMurmurMode({
   onOpenReview: () => void
   onOpenSettings: () => void
   onOpenSyncSettings: () => void
+  onPreviewImage: (image: ImageBlock) => void
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
@@ -1153,6 +1188,7 @@ function TodayMurmurMode({
           onContentSizeChange={onContentSizeChange}
           onEditMurmur={onEditMurmur}
           onImportImages={onImportImages}
+          onPreviewImage={onPreviewImage}
           paperHeaderLine={paperHeaderLine}
           selectedMurmurTheme={selectedMurmurTheme}
         />
@@ -1176,6 +1212,7 @@ function MurmurWritingSurface({
   onContentSizeChange,
   onEditMurmur,
   onImportImages,
+  onPreviewImage,
   paperHeaderLine,
   selectedMurmurTheme,
 }: {
@@ -1193,6 +1230,7 @@ function MurmurWritingSurface({
   onContentSizeChange: (height: number) => void
   onEditMurmur: (murmurId: string) => void
   onImportImages: (source: ImageImportSource) => void
+  onPreviewImage: (image: ImageBlock) => void
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
@@ -1231,6 +1269,7 @@ function MurmurWritingSurface({
         murmurCount={murmurCount}
         murmurs={murmurs}
         onEditMurmur={onEditMurmur}
+        onPreviewImage={onPreviewImage}
       />
     </View>
   )
@@ -1355,10 +1394,12 @@ function MurmurFeed({
   murmurCount,
   murmurs,
   onEditMurmur,
+  onPreviewImage,
 }: {
   murmurCount: number
   murmurs: MurmurBlock[]
   onEditMurmur: (murmurId: string) => void
+  onPreviewImage: (image: ImageBlock) => void
 }) {
   if (murmurs.length === 0) {
     return null
@@ -1375,6 +1416,7 @@ function MurmurFeed({
             key={murmur.id}
             murmur={murmur}
             onEdit={() => onEditMurmur(murmur.id)}
+            onPreviewImage={onPreviewImage}
           />
         ))}
       </View>
@@ -1495,9 +1537,11 @@ function InlineStatusButton({
 function MurmurItem({
   murmur,
   onEdit,
+  onPreviewImage,
 }: {
   murmur: MurmurBlock
   onEdit: () => void
+  onPreviewImage: (image: ImageBlock) => void
 }) {
   return (
     <View
@@ -1540,6 +1584,7 @@ function MurmurItem({
             <MurmurImageItem
               image={image}
               key={image.id}
+              onPreviewImage={onPreviewImage}
             />
           ))}
         </View>
@@ -1548,24 +1593,38 @@ function MurmurItem({
   )
 }
 
-function MurmurImageItem({ image }: {
+function MurmurImageItem({
+  image,
+  onPreviewImage,
+}: {
   image: ImageBlock
+  onPreviewImage: (image: ImageBlock) => void
 }) {
   const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (
     <View className="gap-2">
-      <NativeImage
-        accessibilityLabel={image.caption?.trim() || '碎碎念图片'}
-        resizeMode="cover"
-        source={{ uri: imageUri }}
-        style={{
-          aspectRatio: 4 / 3,
-          backgroundColor: semanticColors['surface-muted'],
-          borderRadius: radiusPixels.xl,
-          width: '100%',
-        }}
-      />
+      <Pressable
+        accessibilityLabel={`查看大图：${imageLabel}`}
+        accessibilityRole="button"
+        onPress={() => onPreviewImage(image)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.82 : 1,
+        })}
+      >
+        <NativeImage
+          accessibilityLabel={imageLabel}
+          resizeMode="cover"
+          source={{ uri: imageUri }}
+          style={{
+            aspectRatio: 4 / 3,
+            backgroundColor: semanticColors['surface-muted'],
+            borderRadius: radiusPixels.xl,
+            width: '100%',
+          }}
+        />
+      </Pressable>
       {image.caption?.trim() ? (
         <Text className="text-sm leading-5 text-text-secondary">{image.caption}</Text>
       ) : null}
@@ -1582,6 +1641,7 @@ function MurmurEditPanel({
   onChangeBody,
   onClose,
   onRemoveImage,
+  onPreviewImage,
   onTakePhoto,
   onUpdateImageCaption,
 }: {
@@ -1593,6 +1653,7 @@ function MurmurEditPanel({
   onChangeBody: (murmurId: string, body: string) => void
   onClose: () => void
   onRemoveImage: (murmurId: string, imageId: string) => void
+  onPreviewImage: (image: ImageBlock) => void
   onTakePhoto: (murmurId: string) => void
   onUpdateImageCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
@@ -1685,6 +1746,7 @@ function MurmurEditPanel({
                     image={image}
                     key={image.id}
                     murmurId={murmur.id}
+                    onPreviewImage={onPreviewImage}
                     onRemove={onRemoveImage}
                     onUpdateCaption={onUpdateImageCaption}
                   />
@@ -1714,32 +1776,44 @@ function MurmurEditPanel({
 function MurmurEditableImageItem({
   image,
   murmurId,
+  onPreviewImage,
   onRemove,
   onUpdateCaption,
 }: {
   image: ImageBlock
   murmurId: string
+  onPreviewImage: (image: ImageBlock) => void
   onRemove: (murmurId: string, imageId: string) => void
   onUpdateCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
   const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (
     <View
       className="gap-3 border border-border bg-surface p-3"
       style={{ borderRadius: radiusPixels['2xl'] }}
     >
-      <NativeImage
-        accessibilityLabel={image.caption?.trim() || '碎碎念图片'}
-        resizeMode="cover"
-        source={{ uri: imageUri }}
-        style={{
-          aspectRatio: 4 / 3,
-          backgroundColor: semanticColors['surface-muted'],
-          borderRadius: radiusPixels.xl,
-          width: '100%',
-        }}
-      />
+      <Pressable
+        accessibilityLabel={`查看大图：${imageLabel}`}
+        accessibilityRole="button"
+        onPress={() => onPreviewImage(image)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.82 : 1,
+        })}
+      >
+        <NativeImage
+          accessibilityLabel={imageLabel}
+          resizeMode="cover"
+          source={{ uri: imageUri }}
+          style={{
+            aspectRatio: 4 / 3,
+            backgroundColor: semanticColors['surface-muted'],
+            borderRadius: radiusPixels.xl,
+            width: '100%',
+          }}
+        />
+      </Pressable>
       <View className="flex-row items-center gap-2" style={{ minWidth: 0 }}>
         <TextInput
           accessibilityLabel="编辑图片说明"

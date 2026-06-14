@@ -148,7 +148,7 @@ pnpm run e2e:mobile:ios
 稳定 Android 路径：
 
 ```sh
-# 先构建本地 EAS preview APK。默认产物会被 runner 自动发现。
+# 先构建本地 EAS preview APK。这个包内嵌 JS/assets，可离线启动，且允许调试。
 pnpm --filter @journal/mobile run build:android:apk
 adb devices -l
 JOURNAL_MOBILE_E2E_DEVICE_ID=<device-serial> \

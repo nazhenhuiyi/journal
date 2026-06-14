@@ -11,6 +11,9 @@
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,
+      "env": {
+        "ORG_GRADLE_PROJECT_journalDebuggableRelease": "true"
+      },
       "android": {
         "buildType": "apk"
       }

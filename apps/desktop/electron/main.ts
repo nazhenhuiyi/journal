@@ -11,6 +11,7 @@ import {
   loadJournalGitSyncStatus,
   pullJournalUpdates,
   pushJournalChanges,
+  saveJournalGitSyncSnapshot,
   saveJournalGitSyncSettings,
   syncJournalNow,
 } from './journalSync'
@@ -97,6 +98,9 @@ ipcMain.handle('journalSettings:save', (_event, payload: unknown) =>
 ipcMain.handle('journalSync:loadStatus', () => loadJournalGitSyncStatus(getJournalDirectory()))
 ipcMain.handle('journalSync:saveSettings', (_event, payload: unknown) =>
   saveJournalGitSyncSettings(getJournalDirectory(), payload),
+)
+ipcMain.handle('journalSync:saveState', (_event, payload: unknown) =>
+  saveJournalGitSyncSnapshot(getJournalDirectory(), payload),
 )
 ipcMain.handle('journalSync:pull', () => pullJournalUpdates(getJournalDirectory()))
 ipcMain.handle('journalSync:push', (_event, options: unknown) =>

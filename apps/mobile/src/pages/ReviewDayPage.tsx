@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Image as NativeImage,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -8,6 +9,7 @@ import {
 import {
   getBuiltInThemeById,
   orderMurmursByNewest,
+  type ImageBlock,
   type MurmurBlock,
 } from '@journal/core'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
@@ -21,9 +23,10 @@ import { PageShell } from './PageShell'
 type ReviewDayPageProps = {
   date: string
   onBack: () => void
+  onPreviewImage: (image: ImageBlock) => void
 }
 
-export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
+export function ReviewDayPage({ date, onBack, onPreviewImage }: ReviewDayPageProps) {
   const [record, setRecord] = useState<MobileJournalRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [didLoadFail, setDidLoadFail] = useState(false)
@@ -65,7 +68,7 @@ export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
   }, [date])
 
   return (
-    <PageShell onBack={onBack} title={formatCompactDate(date)}>
+    <PageShell onBack={onBack} testID="review-day-page" title={formatCompactDate(date)}>
       <ScrollView contentContainerStyle={{ paddingBottom: spacingPixels['6'] }} showsVerticalScrollIndicator={false}>
         <View className="gap-3">
           {isLoading ? (
@@ -94,7 +97,11 @@ export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
               ) : null}
 
               {orderedMurmurs.map((murmur) => (
-                <ReadonlyMurmurCard key={murmur.id} murmur={murmur} />
+                <ReadonlyMurmurCard
+                  key={murmur.id}
+                  murmur={murmur}
+                  onPreviewImage={onPreviewImage}
+                />
               ))}
 
               {!record.longEntryMarkdown.trim() && record.murmurs.length === 0 ? (
@@ -110,7 +117,13 @@ export function ReviewDayPage({ date, onBack }: ReviewDayPageProps) {
   )
 }
 
-function ReadonlyMurmurCard({ murmur }: { murmur: MurmurBlock }) {
+function ReadonlyMurmurCard({
+  murmur,
+  onPreviewImage,
+}: {
+  murmur: MurmurBlock
+  onPreviewImage: (image: ImageBlock) => void
+}) {
   return (
     <View className="rounded-lg border border-border bg-surface px-4 py-4">
       <Text className="mb-3 text-xs font-semibold text-text-tertiary">{formatTime(murmur.time)}</Text>
@@ -132,20 +145,30 @@ function ReadonlyMurmurCard({ murmur }: { murmur: MurmurBlock }) {
         <View className="gap-3" style={{ marginTop: murmur.body.trim() || murmur.themes.length > 0 ? spacingPixels['3.5'] : 0 }}>
           {murmur.images.map((image) => {
             const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+            const imageLabel = image.caption?.trim() || '碎碎念图片'
 
             return (
               <View className="gap-2" key={image.id}>
-                <NativeImage
-                  accessibilityLabel={image.caption?.trim() || '碎碎念图片'}
-                  resizeMode="cover"
-                  source={{ uri: imageUri }}
-                  style={{
-                    aspectRatio: 4 / 3,
-                    backgroundColor: semanticColors['surface-muted'],
-                    borderRadius: radiusPixels.xl,
-                    width: '100%',
-                  }}
-                />
+                <Pressable
+                  accessibilityLabel={`查看大图：${imageLabel}`}
+                  accessibilityRole="button"
+                  onPress={() => onPreviewImage(image)}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.82 : 1,
+                  })}
+                >
+                  <NativeImage
+                    accessibilityLabel={imageLabel}
+                    resizeMode="cover"
+                    source={{ uri: imageUri }}
+                    style={{
+                      aspectRatio: 4 / 3,
+                      backgroundColor: semanticColors['surface-muted'],
+                      borderRadius: radiusPixels.xl,
+                      width: '100%',
+                    }}
+                  />
+                </Pressable>
                 {image.caption?.trim() ? (
                   <Text className="text-sm leading-5 text-text-tertiary">{image.caption.trim()}</Text>
                 ) : null}

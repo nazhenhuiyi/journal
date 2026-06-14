@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('journalSync', {
   saveSettings(payload: unknown) {
     return ipcRenderer.invoke('journalSync:saveSettings', payload)
   },
+  saveState(payload: unknown) {
+    return ipcRenderer.invoke('journalSync:saveState', payload)
+  },
   pull() {
     return ipcRenderer.invoke('journalSync:pull')
   },

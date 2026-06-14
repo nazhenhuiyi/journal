@@ -2,6 +2,7 @@ const { withAppBuildGradle } = require('expo/config-plugins')
 
 const debugApplicationIdSuffix = '.debug'
 const marker = '// @journal/android-debug-application-id-suffix'
+const debuggableReleaseMarker = '// @journal/android-debuggable-release'
 
 module.exports = function withAndroidDebugApplicationIdSuffix(config) {
   return withAppBuildGradle(config, (expoConfig) => {
@@ -11,7 +12,9 @@ module.exports = function withAndroidDebugApplicationIdSuffix(config) {
       return expoConfig
     }
 
-    buildGradle.contents = addDebugApplicationIdSuffix(buildGradle.contents)
+    buildGradle.contents = addDebuggableReleaseSwitch(
+      addDebugApplicationIdSuffix(buildGradle.contents),
+    )
     return expoConfig
   })
 }
@@ -72,6 +75,64 @@ function hasBuildTypesDebugApplicationIdSuffix(contents) {
   return new RegExp(`applicationIdSuffix[ \\t]+["']${escapeRegex(debugApplicationIdSuffix)}["']`).test(debugBlockContents)
 }
 
+function addDebuggableReleaseSwitch(contents) {
+  const cleanContents = removeExistingDebuggableReleaseMarker(contents)
+
+  if (hasDebuggableReleaseSwitch(cleanContents)) {
+    return cleanContents
+  }
+
+  const buildTypesBlock = findGradleBlock(cleanContents, 'buildTypes')
+
+  if (!buildTypesBlock) {
+    return cleanContents
+  }
+
+  const releaseBlock = findGradleBlock(cleanContents, 'release', buildTypesBlock.openBraceIndex + 1)
+
+  if (!releaseBlock || releaseBlock.startIndex > buildTypesBlock.endIndex) {
+    return cleanContents
+  }
+
+  const releaseBlockLine = cleanContents.slice(releaseBlock.startIndex, releaseBlock.lineEndIndex)
+  const baseIndent = releaseBlockLine.match(/^([ \t]*)/)?.[1] ?? ''
+  const indent = `${baseIndent}    `
+  const block = `${indent}${debuggableReleaseMarker}
+${indent}def enableJournalDebuggableRelease = findProperty('journalDebuggableRelease') ?: 'false'
+${indent}debuggable enableJournalDebuggableRelease.toBoolean()
+`
+
+  return `${cleanContents.slice(0, releaseBlock.lineEndIndex)}${block}${cleanContents.slice(releaseBlock.lineEndIndex)}`
+}
+
+function removeExistingDebuggableReleaseMarker(contents) {
+  const escapedMarker = escapeRegex(debuggableReleaseMarker)
+
+  return contents.replace(
+    new RegExp(`^[ \\t]*${escapedMarker}\\n[ \\t]*def enableJournalDebuggableRelease = findProperty\\('journalDebuggableRelease'\\) \\?: 'false'\\n[ \\t]*debuggable enableJournalDebuggableRelease\\.toBoolean\\(\\)[ \\t]*\\n`, 'gm'),
+    '',
+  )
+}
+
+function hasDebuggableReleaseSwitch(contents) {
+  const buildTypesBlock = findGradleBlock(contents, 'buildTypes')
+
+  if (!buildTypesBlock) {
+    return false
+  }
+
+  const releaseBlock = findGradleBlock(contents, 'release', buildTypesBlock.openBraceIndex + 1)
+
+  if (!releaseBlock || releaseBlock.startIndex > buildTypesBlock.endIndex) {
+    return false
+  }
+
+  const releaseBlockContents = contents.slice(releaseBlock.openBraceIndex, releaseBlock.endIndex)
+
+  return releaseBlockContents.includes("findProperty('journalDebuggableRelease')") ||
+    releaseBlockContents.includes('findProperty("journalDebuggableRelease")')
+}
+
 function findGradleBlock(contents, blockName, startIndex = 0) {
   const blockRegex = new RegExp(`(^[ \\t]*${escapeRegex(blockName)}[ \\t]*\\{[ \\t]*\\n)`, 'm')
   const match = blockRegex.exec(contents.slice(startIndex))
@@ -112,4 +173,5 @@ function escapeRegex(value) {
 }
 
 module.exports.addDebugApplicationIdSuffix = addDebugApplicationIdSuffix
+module.exports.addDebuggableReleaseSwitch = addDebuggableReleaseSwitch
 module.exports.findGradleBlock = findGradleBlock

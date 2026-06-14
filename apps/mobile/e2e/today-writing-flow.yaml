@@ -23,6 +23,16 @@ env:
       id: journal-list-page
     timeout: 10000
 - tapOn:
+    id: journal-list-row-today
+- assertVisible:
+    id: journal-list-button
+- tapOn:
+    id: journal-list-button
+- extendedWaitUntil:
+    visible:
+      id: journal-list-page
+    timeout: 10000
+- tapOn:
     id: back-to-today-button
 - tapOn:
     id: review-button

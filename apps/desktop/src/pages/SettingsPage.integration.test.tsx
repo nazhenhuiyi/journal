@@ -148,9 +148,11 @@ function stubDesktopStores(options: {
       hasRepository: false,
       recentCommits: [],
       remoteUrl: '',
+      syncSnapshot: null,
     }),
     pull: vi.fn(),
     push: vi.fn(),
+    saveState: vi.fn(),
     saveSettings: vi.fn(),
     syncNow: vi.fn(),
   } satisfies Window['journalSync'])

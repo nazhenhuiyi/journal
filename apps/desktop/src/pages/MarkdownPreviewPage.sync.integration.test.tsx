@@ -81,6 +81,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         hasRepository: true,
         recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
+        syncSnapshot: null,
         worktreeDirectory: '/Users/zilin/.journal',
       }),
       pull: vi.fn().mockResolvedValue({
@@ -88,6 +89,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         dirtyPaths: ['entries/2026/06/2026-06-08.md'],
       }),
       push,
+      saveState: vi.fn(),
       syncNow: vi.fn(),
     })
 
@@ -145,6 +147,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         hasRepository: true,
         recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
+        syncSnapshot: null,
         worktreeDirectory: '/Users/zilin/.journal',
       }),
       pull: vi.fn().mockResolvedValue({
@@ -152,6 +155,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         dirtyPaths: [],
       }),
       push,
+      saveState: vi.fn(),
       syncNow: vi.fn(),
     })
 
@@ -224,6 +228,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         hasRepository: true,
         recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
+        syncSnapshot: null,
         worktreeDirectory: '/Users/zilin/.journal',
       }),
       pull: vi.fn().mockResolvedValue({
@@ -231,6 +236,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         dirtyPaths: [],
       }),
       push,
+      saveState: vi.fn(),
       syncNow: vi.fn(),
     })
 
@@ -311,10 +317,12 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         hasRepository: true,
         recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
+        syncSnapshot: null,
         worktreeDirectory: '/Users/zilin/.journal',
       }),
       pull,
       push: vi.fn(),
+      saveState: vi.fn(),
       syncNow: vi.fn(),
     })
 
@@ -369,6 +377,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         hasRepository: true,
         recentCommits: [],
         remoteUrl: 'https://github.com/example/journal-sync.git',
+        syncSnapshot: null,
         worktreeDirectory: '/Users/zilin/.journal',
       }),
       pull: vi.fn().mockResolvedValue({
@@ -376,6 +385,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
         dirtyPaths: [],
       }),
       push,
+      saveState: vi.fn(),
       syncNow: vi.fn(),
     })
 

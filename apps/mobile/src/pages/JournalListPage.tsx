@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
-import { spacingPixels } from '@journal/theme'
+import { Pressable, ScrollView, Text, View } from 'react-native'
+import { radiusPixels, spacingPixels } from '@journal/theme'
 import {
   listDailyJournals,
   type MobileJournalRecord,
@@ -18,6 +18,8 @@ type JournalListPageProps = {
   longEntryMarkdown: string
   murmurCount: number
   onBack: () => void
+  onOpenDay: (date: string) => void
+  onOpenToday: () => void
   today: string
 }
 
@@ -25,6 +27,8 @@ export function JournalListPage({
   longEntryMarkdown,
   murmurCount,
   onBack,
+  onOpenDay,
+  onOpenToday,
   today,
 }: JournalListPageProps) {
   const [records, setRecords] = useState<MobileJournalRecord[]>([])
@@ -88,7 +92,25 @@ export function JournalListPage({
           ) : null}
 
           {rows.map((row) => (
-            <View key={row.date} className="rounded-lg border border-border bg-surface px-4 py-4">
+            <Pressable
+              accessibilityLabel={`${row.isToday ? '打开今天' : `打开${formatCompactDate(row.date)}`}的日记全文`}
+              accessibilityRole="button"
+              className="border border-border bg-surface px-4 py-4"
+              key={row.date}
+              onPress={() => {
+                if (row.isToday) {
+                  onOpenToday()
+                  return
+                }
+
+                onOpenDay(row.date)
+              }}
+              style={({ pressed }) => ({
+                borderRadius: radiusPixels.lg,
+                opacity: pressed ? 0.74 : 1,
+              })}
+              testID={row.isToday ? 'journal-list-row-today' : `journal-list-row-${row.date}`}
+            >
               <View className="mb-3 flex-row items-center justify-between gap-3">
                 <Text className="text-base font-semibold text-foreground">{row.isToday ? '今天' : formatCompactDate(row.date)}</Text>
                 <Text className="text-sm font-medium text-text-tertiary">{formatPaperDateLine(row.date)}</Text>
@@ -96,7 +118,7 @@ export function JournalListPage({
               <Text className="text-sm leading-5 text-text-tertiary" numberOfLines={3}>
                 {row.preview || (row.murmurCount > 0 ? `${row.murmurCount} 条碎碎念` : '还没有写下内容')}
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
       </ScrollView>

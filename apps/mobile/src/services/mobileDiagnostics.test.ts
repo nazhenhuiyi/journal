@@ -10,6 +10,14 @@ import {
 const mockFileSystem = vi.hoisted(() => ({
   documentDirectory: 'file:///app/',
 }))
+const mockImageManipulator = vi.hoisted(() => ({
+  manipulateAsync: vi.fn(),
+  SaveFormat: {
+    JPEG: 'jpeg',
+    PNG: 'png',
+    WEBP: 'webp',
+  },
+}))
 const mockLocation = vi.hoisted(() => ({
   getCurrentPositionAsync: vi.fn(),
   getForegroundPermissionsAsync: vi.fn(),
@@ -18,6 +26,7 @@ const mockLocation = vi.hoisted(() => ({
 }))
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
+vi.mock('expo-image-manipulator', () => mockImageManipulator)
 vi.mock('expo-secure-store', () => ({
   getItemAsync: vi.fn(),
   setItemAsync: vi.fn(),
