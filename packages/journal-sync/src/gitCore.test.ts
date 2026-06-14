@@ -53,6 +53,10 @@ const mockGit = {
 const credentials = {
   token: 'github-token',
 }
+const syncConfig = {
+  branch: 'main',
+  remoteUrl: 'https://github.com/example/journal-sync.git',
+}
 
 function createRuntime(): JournalGitRuntime {
   return {
@@ -187,6 +191,15 @@ describe('journal git sync core', () => {
       remote: 'origin',
       url: 'https://github.com/example/journal-sync.git',
     }))
+  })
+
+  it('does not initialize a sync repository before a remote is configured', async () => {
+    await initJournalGitSyncRepository(createRuntime(), {
+      branch: 'main',
+    })
+
+    expect(mockGit.init).not.toHaveBeenCalled()
+    expect(mockGit.addRemote).not.toHaveBeenCalled()
   })
 
   it('rejects HTTPS remote URLs that include credentials', async () => {
@@ -332,9 +345,7 @@ describe('journal git sync core', () => {
       ['settings.json', 1, 2, 1],
     ])
 
-    const commitOid = await commitJournalChanges(createRuntime(), {
-      branch: 'main',
-    })
+    const commitOid = await commitJournalChanges(createRuntime(), syncConfig)
 
     expect(commitOid).toBeNull()
     expect(mockGit.add).not.toHaveBeenCalled()
@@ -547,9 +558,7 @@ describe('journal git sync core', () => {
         ['entries/2026/06/2026-06-09.md.91423.tmp', 0, 2, 0],
       ])
 
-    const commitOid = await commitJournalChanges(createRuntime(), {
-      branch: 'main',
-    })
+    const commitOid = await commitJournalChanges(createRuntime(), syncConfig)
 
     expect(mockGit.add).toHaveBeenCalledTimes(1)
     expect(mockGit.add).toHaveBeenCalledWith(expect.objectContaining({
@@ -559,6 +568,14 @@ describe('journal git sync core', () => {
       filepath: 'entries/2026/06/2026-06-09.md.91423.tmp',
     }))
     expect(commitOid).toBe('commit-oid')
+  })
+
+  it('rejects standalone commits before a remote is configured', async () => {
+    await expect(commitJournalChanges(createRuntime(), {
+      branch: 'main',
+    })).rejects.toThrow('GitHub repository URL is required before committing sync data')
+
+    expect(mockGit.commit).not.toHaveBeenCalled()
   })
 
   it('does not stage or commit journal markdown with unresolved conflict markers', async () => {
@@ -582,9 +599,8 @@ describe('journal git sync core', () => {
       ['entries/2026/06/2026-06-09.md', 1, 2, 1],
     ])
 
-    await expect(commitJournalChanges(createRuntime(), {
-      branch: 'main',
-    })).rejects.toThrow('Resolve conflicts before syncing')
+    await expect(commitJournalChanges(createRuntime(), syncConfig))
+      .rejects.toThrow('Resolve conflicts before syncing')
 
     expect(mockGit.add).not.toHaveBeenCalled()
     expect(mockGit.commit).not.toHaveBeenCalled()
@@ -599,9 +615,7 @@ describe('journal git sync core', () => {
 
     const commitOid = await commitJournalChanges(
       runtime,
-      {
-        branch: 'main',
-      },
+      syncConfig,
       'Sync journal changes',
       {
         changedPaths: ['reviews/2026/06/2026-06-10.json'],
@@ -643,9 +657,7 @@ describe('journal git sync core', () => {
         ['entries/2026/06/2026-06-08.md', 1, 0, 0],
       ])
 
-    const commitOid = await commitJournalChanges(runtime, {
-      branch: 'main',
-    })
+    const commitOid = await commitJournalChanges(runtime, syncConfig)
 
     expect(mockGit.remove).toHaveBeenCalledWith(expect.objectContaining({
       cache: runtime.cache,
@@ -675,9 +687,7 @@ describe('journal git sync core', () => {
       payload: '',
     }))
 
-    const commitOid = await commitJournalChanges(createRuntime(), {
-      branch: 'main',
-    })
+    const commitOid = await commitJournalChanges(createRuntime(), syncConfig)
 
     expect(commitOid).toBeNull()
     expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
@@ -1430,6 +1440,65 @@ describe('journal git sync core', () => {
     expect(result.dirtyPathsAfterPull).toEqual([
       'entries/2026/06/2026-06-08.md',
     ])
+  })
+
+  it('stops the first local push when local content would create an unrelated history', async () => {
+    const runtime = createRuntime()
+    const entryPath = 'entries/2026/06/2026-06-08.md'
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        throw Object.assign(new Error('missing local branch'), {
+          code: 'NotFoundError',
+        })
+      }
+
+      return 'local-head'
+    })
+    await expect(pushJournalChanges(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+      {
+        changedPaths: [entryPath],
+        collectDirtyPathsAfterSync: false,
+      },
+    )).rejects.toThrow('首次同步前本地已有日记内容')
+
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+  })
+
+  it('stops the first full sync when local content would create an unrelated history', async () => {
+    const runtime = createRuntime()
+    const entryPath = 'entries/2026/06/2026-06-08.md'
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        throw Object.assign(new Error('missing local branch'), {
+          code: 'NotFoundError',
+        })
+      }
+
+      return 'local-head'
+    })
+    await expect(syncJournalNow(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/existing-journal-sync.git',
+      },
+      credentials,
+      {
+        changedPaths: [entryPath],
+        collectDirtyPathsAfterSync: false,
+      },
+    )).rejects.toThrow('首次同步前本地已有日记内容')
+
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
   })
 
   it('pushes committed local changes without fetching first', async () => {

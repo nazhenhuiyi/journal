@@ -368,6 +368,7 @@ describe('mobile git sync', () => {
         code: 'NotFoundError',
       }))
       .mockResolvedValueOnce('local-head')
+    mockGit.listServerRefs.mockResolvedValueOnce([])
     mockGit.fetch.mockRejectedValueOnce(Object.assign(new Error('empty remote'), {
       code: 'EmptyServerResponseError',
     }))
@@ -406,9 +407,22 @@ describe('mobile git sync', () => {
   })
 
   it('creates and checks out the local branch from remote when the local repo has no commits yet', async () => {
-    mockGit.resolveRef.mockRejectedValueOnce(Object.assign(new Error('no local branch'), {
-      code: 'NotFoundError',
-    }))
+    let localBranchCreated = false
+
+    mockGit.branch.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'main') {
+        localBranchCreated = true
+      }
+    })
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main' && !localBranchCreated) {
+        throw Object.assign(new Error('no local branch'), {
+          code: 'NotFoundError',
+        })
+      }
+
+      return 'local-head'
+    })
 
     await syncMobileJournalWithGitHub({
       branch: 'main',

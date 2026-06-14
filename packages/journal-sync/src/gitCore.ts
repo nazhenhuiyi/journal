@@ -217,6 +217,10 @@ export async function initJournalGitSyncRepository(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig = {},
 ) {
+  if (!config.remoteUrl) {
+    return
+  }
+
   await ensureRepository(runtime, config)
 }
 
@@ -254,6 +258,10 @@ export async function commitJournalChanges(
   message = getSyncCommitMessage(config),
   options: JournalGitOperationOptions = {},
 ) {
+  if (!config.remoteUrl) {
+    throw new Error('GitHub repository URL is required before committing sync data.')
+  }
+
   await ensureRepository(runtime, config)
 
   return commitTrackedChanges(runtime, config, message, options)
@@ -292,6 +300,7 @@ async function pushJournalChangesInternal(
 
   await ensureRepository(runtime, config)
 
+  await assertCanCreateFirstLocalCommit(runtime, config, credentials, options)
   const localCommitOid = await commitTrackedChanges(
     runtime,
     config,
@@ -417,6 +426,7 @@ async function syncJournalNowInternal(
 
   await ensureRepository(runtime, config)
 
+  await assertCanCreateFirstLocalCommit(runtime, config, credentials, options)
   const localCommitOid = await commitTrackedChanges(
     runtime,
     config,
@@ -701,6 +711,46 @@ async function fetchRemoteIfRemoteChanged(
     fetchResult: await fetchRemote(runtime, config, credentials),
     skipped: false,
   }
+}
+
+async function assertCanCreateFirstLocalCommit(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitOperationOptions,
+) {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+
+  if (await hasLocalBranchCommit(runtime, branch)) {
+    return
+  }
+
+  const localDirtyPaths = await getFirstCommitDirtyPaths(runtime, options)
+
+  if (localDirtyPaths.length === 0) {
+    return
+  }
+
+  const remoteBranchOid = await getRemoteBranchOid(runtime, config, credentials)
+
+  if (!remoteBranchOid) {
+    return
+  }
+
+  throw createFirstSyncNeedsChoiceError(localDirtyPaths)
+}
+
+async function getFirstCommitDirtyPaths(
+  runtime: JournalGitRuntime,
+  options: JournalGitOperationOptions,
+) {
+  const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
+
+  if (knownChangedPaths) {
+    return knownChangedPaths
+  }
+
+  return getDirtyTrackedPaths(runtime, 'firstCommit.dirtyPaths')
 }
 
 async function getRemoteBranchOid(
@@ -1889,6 +1939,15 @@ function createUnrelatedHistoriesError(error: unknown) {
   )
 }
 
+function createFirstSyncNeedsChoiceError(localDirtyPaths: string[]) {
+  const previewPaths = localDirtyPaths.slice(0, 3).join(', ')
+  const suffix = localDirtyPaths.length > 3 ? ` 等 ${localDirtyPaths.length} 个路径` : previewPaths
+
+  return new Error(
+    `首次同步前本地已有日记内容，而远端分支也已有历史。为避免创建没有共同祖先的 Git 历史，同步已停止；请先选择保留本地内容或先导入远端内容。受影响路径：${suffix}`,
+  )
+}
+
 function isSafeShortRefFileName(branch: string) {
   return /^[A-Za-z0-9._-]+$/.test(branch)
 }
@@ -2107,7 +2166,7 @@ function toUtf8String(content: string | Uint8Array) {
     return content
   }
 
-  return Array.from(content, (byte) => String.fromCharCode(byte)).join('')
+  return new TextDecoder().decode(content)
 }
 
 function normalizeKnownChangedPaths(changedPaths: readonly string[] | undefined) {
