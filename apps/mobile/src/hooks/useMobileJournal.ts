@@ -161,10 +161,7 @@ export function useMobileJournal() {
       setRecord(savedRecord)
 
       if (journalVersionRef.current === savingVersion) {
-        if (savedRecord.longEntryMarkdown !== journalContentRef.current.longEntryMarkdown) {
-          setLongEntryMarkdown(savedRecord.longEntryMarkdown)
-        }
-
+        // Keep the editor draft exactly as typed; persisted Markdown trims trailing blank lines.
         if (nextMurmurs !== journalContentRef.current.murmurs) {
           setMurmurs(savedRecord.murmurs)
         }

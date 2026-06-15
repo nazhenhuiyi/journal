@@ -153,6 +153,17 @@ describe('mobileJournalStore', () => {
     expect(mockFileSystem.files.get(entryPath)).toContain('今天写一点。')
   })
 
+  it('returns normalized long-entry markdown after trimming trailing blank lines', async () => {
+    const savedRecord = await saveDailyJournal({
+      date: '2026-06-08',
+      longEntryMarkdown: '第一段。\n\n',
+      murmurs: [],
+    })
+
+    expect(savedRecord.longEntryMarkdown).toBe('第一段。')
+    expect(mockFileSystem.files.get(entryPath)?.endsWith('第一段。')).toBe(true)
+  })
+
   it('reports the mobile journal file URI for diagnostics', () => {
     expect(getDailyJournalFileUri('2026-06-08')).toBe(entryPath)
   })
