@@ -1,0 +1,20 @@
+{
+  "name": "journal-local",
+  "interface": {
+    "displayName": "Journal Local"
+  },
+  "plugins": [
+    {
+      "name": "journal-codex-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/journal-codex-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

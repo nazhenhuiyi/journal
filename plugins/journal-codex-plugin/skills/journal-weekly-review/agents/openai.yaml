@@ -1,0 +1,6 @@
+interface:
+  display_name: "Journal 生活回看"
+  short_description: "阅读已配置的日记数据仓库，生成帮助培养生活品味的周回顾。"
+  default_prompt: "Use $journal-weekly-review to read last week's journal and write a weekly reflection about everyday taste."
+policy:
+  allow_implicit_invocation: true

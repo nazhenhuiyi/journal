@@ -1,0 +1,16 @@
+{
+  "name": "@journal/codex-plugin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Codex plugin for structured journal repository workflows.",
+  "files": [
+    ".codex-plugin",
+    "skills",
+    "scripts"
+  ],
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "validate:data": "node scripts/validate-journal-data.mjs"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "journal-codex-plugin",
+  "version": "0.1.0+codex.20260615070652",
+  "description": "Codex workflows for maintaining a configured journal data git repository from any workspace.",
+  "author": {
+    "name": "Journal team"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Journal",
+    "shortDescription": "Use configured journal data from any workspace.",
+    "longDescription": "Journal provides Codex skills for using a configured journalDataDir from any workspace: add missing titles, excerpts, tags, and image metadata, generate weekly reflections that help cultivate everyday taste through journal entries, and record every batch change under journalDataDir/logs/ai.",
+    "developerName": "Journal team",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use $journal-tag-backfill to scan my configured journal data and add missing titles, excerpts, and tags.",
+      "Use $journal-weekly-review to read last week's journal and write a weekly reflection about everyday taste."
+    ]
+  }
+}

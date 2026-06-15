@@ -1,0 +1,6 @@
+interface:
+  display_name: "Journal 日记打标"
+  short_description: "扫描已配置的日记数据仓库，补标签并写入日志便于复查。"
+  default_prompt: "Use $journal-tag-backfill to scan my configured journal data, add missing tags, and write a log."
+policy:
+  allow_implicit_invocation: true

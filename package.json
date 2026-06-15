@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.12.4",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "plugins/*"
   ],
   "scripts": {
     "dev": "pnpm run dev:desktop",
