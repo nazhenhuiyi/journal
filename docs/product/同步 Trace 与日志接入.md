@@ -3,7 +3,7 @@
 同步日志分两层：
 
 - `@journal/sync` 负责定义和产生结构化 `JournalGitTraceEvent`。
-- 应用端负责决定 trace 去哪里，例如当前移动端和桌面端都写到 console。
+- 应用端负责决定 trace 去哪里。当前桌面端写到 console；移动端同时写到 console 和本机持久化诊断日志。
 
 ## 公共契约
 
@@ -32,9 +32,15 @@ type JournalGitTraceEvent = {
 
 移动端适配在 `apps/mobile/src/services/sync/mobileSyncTrace.ts`：
 
-- 默认 development / preview 运行时写 console。
+- 默认 development / preview 运行时写 console，并写入 `files/journal-diagnostic-logs/` 下的 JSONL 诊断日志。
 - Vitest 中关闭 trace，避免测试输出噪声。
 - Git HTTP trace 只保留 `host`、`method`、`service`、`statusCode`，不记录 headers、body、token 或完整 URL。
+
+Android 真机上拉取移动端持久化日志：
+
+```sh
+pnpm --filter @journal/mobile run logs:android:pull -- --device 70eefe42
+```
 
 桌面端适配在 `apps/desktop/electron/journalSync.ts`，同样复用公共 console sink。
 

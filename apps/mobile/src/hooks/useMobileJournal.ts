@@ -21,6 +21,7 @@ import {
   type SaveDailyJournalResult,
   updateDailyJournalFrontMatter,
 } from '../services/mobileJournalStore'
+import { mobileDiagnosticLog } from '../services/diagnostics/log'
 
 export type SaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
@@ -65,6 +66,11 @@ export function useMobileJournal() {
           return
         }
 
+        mobileDiagnosticLog.info('journal.load', 'Daily journal loaded', {
+          date: today,
+          diagnosticCount: loadedRecord.diagnostics.length,
+          murmurCount: loadedRecord.murmurs.length,
+        })
         setRecord(loadedRecord)
 
         if (journalVersionRef.current === loadingVersion) {
@@ -76,6 +82,10 @@ export function useMobileJournal() {
         }
       })
       .catch((error) => {
+        mobileDiagnosticLog.error('journal.load', 'Daily journal load failed', {
+          date: today,
+          error,
+        })
         console.error(error)
 
         if (isMounted) {
@@ -141,6 +151,13 @@ export function useMobileJournal() {
         murmurs: nextMurmurs,
       })
 
+      mobileDiagnosticLog.info('journal.save', 'Daily journal saved', {
+        changedPathCount: savedRecord.changedPaths.length,
+        date: today,
+        didWrite: savedRecord.didWrite,
+        murmurCount: savedRecord.murmurs.length,
+        reason,
+      })
       setRecord(savedRecord)
 
       if (journalVersionRef.current === savingVersion) {
@@ -167,6 +184,11 @@ export function useMobileJournal() {
 
       return savedRecord
     } catch (error) {
+      mobileDiagnosticLog.error('journal.save', 'Daily journal save failed', {
+        date: today,
+        error,
+        reason,
+      })
       console.error(error)
       setSaveState('error')
 
@@ -212,6 +234,10 @@ export function useMobileJournal() {
     const previousDate = todayRef.current
     todayRef.current = nextToday
     setToday(nextToday)
+    mobileDiagnosticLog.info('journal.date-rollover', 'Journal date rolled over', {
+      date: nextToday,
+      previousDate,
+    })
     void journalEffects.afterDateRollover({
       date: nextToday,
       previousDate,

@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  createMobileDiagnosticLogTraceSink,
   createMobileGitHttpTraceDetails,
   createMobileSyncTrace,
 } from './mobileSyncTrace'
+
+const mockMobileDiagnosticLog = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+}))
+
+vi.mock('../diagnostics/log', () => ({
+  mobileDiagnosticLog: mockMobileDiagnosticLog,
+}))
 
 describe('mobile sync trace adapter', () => {
   it('keeps mobile sync trace disabled in tests', () => {
@@ -30,5 +40,28 @@ describe('mobile sync trace adapter', () => {
       service: 'git-upload-pack',
       statusCode: null,
     })
+  })
+
+  it('writes sync trace events to the persistent mobile diagnostic log sink', () => {
+    const sink = createMobileDiagnosticLogTraceSink()
+
+    sink({
+      details: {
+        service: 'git-upload-pack',
+      },
+      durationMs: 42,
+      name: 'http.gitRequest',
+      ok: true,
+    })
+
+    expect(mockMobileDiagnosticLog.info).toHaveBeenCalledWith(
+      'journal-sync',
+      '[journal-sync] http.gitRequest ok 42ms {"service":"git-upload-pack"}',
+      expect.objectContaining({
+        durationMs: 42,
+        name: 'http.gitRequest',
+        ok: true,
+      }),
+    )
   })
 })

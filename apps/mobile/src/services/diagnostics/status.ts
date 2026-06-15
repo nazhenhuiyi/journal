@@ -3,8 +3,13 @@ import type { DayFrontMatter } from '@journal/core'
 import {
   getDailyJournalFileUri,
   getJournalWorktreeDirectory,
-} from './mobileJournalStore'
-import { getMobileUiSettingsStorageLabel } from './mobileUiSettings'
+} from '../mobileJournalStore'
+import {
+  getMobileDiagnosticLogAdbRelativeDirectory,
+  getMobileDiagnosticLogDirectory,
+} from './log'
+import { getMobileDiagnosticPackageDirectory } from './package'
+import { getMobileUiSettingsStorageLabel } from '../mobileUiSettings'
 
 export type MobileLocationPermissionStatus =
   | 'denied'
@@ -27,6 +32,9 @@ export type MobileWeatherDiagnostic = {
 
 export function getMobileDiagnosticPaths(date: string) {
   return {
+    adbLogDirectory: getMobileDiagnosticLogAdbRelativeDirectory(),
+    diagnosticLogDirectory: getMobileDiagnosticLogDirectory(),
+    diagnosticPackageDirectory: getMobileDiagnosticPackageDirectory(),
     todayEntryPath: getDailyJournalFileUri(date),
     uiSettingsStorage: getMobileUiSettingsStorageLabel(),
     worktreeDirectory: getJournalWorktreeDirectory(),

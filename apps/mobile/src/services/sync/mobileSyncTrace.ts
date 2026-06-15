@@ -1,10 +1,12 @@
 import {
   createConsoleJournalGitTraceSink,
   createJournalGitTrace,
+  formatJournalGitTraceEvent,
   type JournalGitTrace,
   type JournalGitTraceDetails,
   type JournalGitTraceSink,
 } from '@journal/sync'
+import { mobileDiagnosticLog } from '../diagnostics/log'
 
 type GitHttpTraceRequest = {
   method?: string
@@ -12,13 +14,32 @@ type GitHttpTraceRequest = {
 }
 
 export function createMobileSyncTrace(
-  sinks: readonly JournalGitTraceSink[] = [createConsoleJournalGitTraceSink()],
+  sinks: readonly JournalGitTraceSink[] = [
+    createConsoleJournalGitTraceSink(),
+    createMobileDiagnosticLogTraceSink(),
+  ],
 ): JournalGitTrace | undefined {
   if (isTestEnvironment() || sinks.length === 0) {
     return undefined
   }
 
   return createJournalGitTrace(sinks)
+}
+
+export function createMobileDiagnosticLogTraceSink(): JournalGitTraceSink {
+  return (event) => {
+    mobileDiagnosticLog[event.ok ? 'info' : 'error'](
+      'journal-sync',
+      formatJournalGitTraceEvent(event),
+      {
+        details: event.details,
+        durationMs: event.durationMs,
+        errorMessage: event.errorMessage,
+        name: event.name,
+        ok: event.ok,
+      },
+    )
+  }
 }
 
 export function createMobileGitHttpTraceDetails(

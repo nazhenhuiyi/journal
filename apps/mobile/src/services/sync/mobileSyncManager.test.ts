@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
 
     constructor(options: NonNullable<typeof coordinatorOptions>) {
       coordinatorOptions = options
+      // Test harness needs access to the coordinator instance created by the manager.
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       lastCoordinator = this
     }
 
@@ -120,6 +122,15 @@ vi.mock('./mobileGitSync', () => ({
 
 vi.mock('./mobileSyncTrace', () => ({
   createMobileSyncTrace: vi.fn(() => undefined),
+}))
+
+vi.mock('../diagnostics/log', () => ({
+  mobileDiagnosticLog: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }))
 
 vi.mock('./pendingSyncPaths', () => ({

@@ -34,6 +34,7 @@ import { createMobileSyncTrace } from './mobileSyncTrace'
 import { getMobileE2eSyncConfiguration } from '../e2eEnvironment'
 import type { SaveDailyJournalResult } from '../mobileJournalStore'
 import type { JournalSavedReason } from '../journalEffects'
+import { mobileDiagnosticLog } from '../diagnostics/log'
 
 export type MobileSyncSaveState = 'dirty' | 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
@@ -216,6 +217,7 @@ class MobileSyncManager {
     const token = this.state.syncTokenDraft.trim()
 
     if (!remoteUrl) {
+      mobileDiagnosticLog.warn('sync.configuration', 'Sync configuration save skipped without remote URL')
       return {
         alertMessage: '请先填写 GitHub 私有仓库地址。',
         alertTitle: '缺少仓库地址',
@@ -266,9 +268,20 @@ class MobileSyncManager {
       this.coordinator.restoreSnapshot(nextSnapshot, { emit: false })
       await this.refreshStatus({ branch, remoteUrl })
       await this.startPullingIfConfigured()
+      mobileDiagnosticLog.info('sync.configuration', 'Sync configuration saved', {
+        branch,
+        didChangeIdentity,
+        hasToken: hasTokenAfterSave,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
 
       return { ok: true }
     } catch (error) {
+      mobileDiagnosticLog.error('sync.configuration', 'Sync configuration save failed', {
+        branch,
+        error,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
       console.error(error)
       this.setState({
         syncMessage: '同步配置保存失败',
@@ -295,6 +308,7 @@ class MobileSyncManager {
     const token = this.state.syncTokenDraft.trim()
 
     if (!remoteUrl) {
+      mobileDiagnosticLog.warn('sync.manual', 'Manual sync skipped without remote URL')
       return {
         alertMessage: '请先填写 GitHub 私有仓库地址。',
         alertTitle: '缺少仓库地址',
@@ -303,6 +317,11 @@ class MobileSyncManager {
     }
 
     if (!token && !this.state.hasStoredSyncToken) {
+      mobileDiagnosticLog.warn('sync.manual', 'Manual sync skipped without token', {
+        branch,
+        credentialStatus: this.state.syncCredentialStatus,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
       return {
         alertMessage: this.state.syncCredentialStatus === 'corrupt'
           ? '请重新填写并保存 GitHub token。'
@@ -313,6 +332,12 @@ class MobileSyncManager {
     }
 
     let didPausePulling = false
+    mobileDiagnosticLog.info('sync.manual', 'Manual sync requested', {
+      branch,
+      hasRuntimeToken: Boolean(token),
+      hasStoredToken: this.state.hasStoredSyncToken,
+      remoteHost: getRemoteHost(remoteUrl),
+    })
 
     try {
       await saveGitHubSyncSettings({ branch, remoteUrl })
@@ -361,6 +386,11 @@ class MobileSyncManager {
           syncSnapshot: errorSnapshot,
         })
         this.coordinator.restoreSnapshot(errorSnapshot, { emit: false })
+        mobileDiagnosticLog.error('sync.manual', 'Manual sync stopped by configuration error', {
+          branch,
+          errorMessage: nextConfigurationError,
+          remoteHost: getRemoteHost(remoteUrl),
+        })
 
         return { ok: false }
       }
@@ -373,6 +403,12 @@ class MobileSyncManager {
       const snapshot = await this.coordinator.syncNow()
 
       if (snapshot.status === 'error' || snapshot.status === 'retrying' || snapshot.status === 'needs-auth') {
+        mobileDiagnosticLog.error('sync.manual', 'Manual sync finished with error snapshot', {
+          branch,
+          lastError: snapshot.lastError,
+          remoteHost: getRemoteHost(remoteUrl),
+          status: snapshot.status,
+        })
         return {
           alertMessage: snapshot.lastError ?? '同步过程中出现未知错误。',
           alertTitle: '同步失败',
@@ -387,9 +423,19 @@ class MobileSyncManager {
         includeRecentCommits: false,
         remoteUrl,
       })
+      mobileDiagnosticLog.info('sync.manual', 'Manual sync completed', {
+        branch,
+        remoteHost: getRemoteHost(remoteUrl),
+        status: snapshot.status,
+      })
 
       return { ok: true }
     } catch (error) {
+      mobileDiagnosticLog.error('sync.manual', 'Manual sync failed', {
+        branch,
+        error,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
       console.error(error)
       this.setState({
         syncMessage: '同步失败',
@@ -509,8 +555,19 @@ class MobileSyncManager {
         syncRemoteUrl: nextRemoteUrl,
         syncSnapshot: nextSnapshot,
       })
+      mobileDiagnosticLog.info('sync.configuration', 'Sync configuration loaded', {
+        branch: nextBranch,
+        credentialStatus: credentialsState.status,
+        hasRemoteUrl: Boolean(nextRemoteUrl),
+        hasToken,
+        remoteHost: getRemoteHost(nextRemoteUrl),
+        restoredSnapshot: Boolean(restoredSnapshot),
+      })
       await this.startPullingIfConfigured()
     } catch (error) {
+      mobileDiagnosticLog.error('sync.configuration', 'Sync configuration load failed', {
+        error,
+      })
       console.error(error)
       this.setState({
         hasLoadedSyncConfiguration: true,
@@ -562,6 +619,9 @@ class MobileSyncManager {
 
       this.coordinator.markDirtyWorktree(pendingPaths)
     } catch (error) {
+      mobileDiagnosticLog.error('sync.pending-paths', 'Pending sync paths restore failed', {
+        error,
+      })
       console.error(error)
     }
   }
@@ -783,6 +843,11 @@ class MobileSyncManager {
 
       return mergeChangedPaths(record.changedPaths, effectChangedPaths)
     } catch (error) {
+      mobileDiagnosticLog.error('sync.changed-paths', 'Collecting saved journal changed paths failed', {
+        error,
+        recordChangedPathCount: record.changedPaths.length,
+        reason,
+      })
       console.error(error)
       return record.changedPaths
     }
@@ -858,4 +923,18 @@ function getSyncConfigurationError(
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+}
+
+function getRemoteHost(remoteUrl: string) {
+  if (!remoteUrl) {
+    return ''
+  }
+
+  try {
+    return new URL(remoteUrl).hostname
+  } catch {
+    const sshHost = /^[^@]+@([^:/]+)[:/]/.exec(remoteUrl)
+
+    return sshHost?.[1] ?? 'unknown'
+  }
 }

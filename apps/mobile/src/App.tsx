@@ -722,6 +722,7 @@ export default function App() {
               setSyncTokenDraft={setSyncTokenDraft}
               syncBranch={syncBranch}
               syncRemoteUrl={syncRemoteUrl}
+              syncSnapshot={syncSnapshot}
               syncTokenDraft={syncTokenDraft}
               today={today}
             />

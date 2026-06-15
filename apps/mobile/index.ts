@@ -6,7 +6,10 @@ import { Platform } from 'react-native'
 import { registerWidgetTaskHandler } from 'react-native-android-widget'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import App from './src/App'
+import { installMobileDiagnosticLogging } from './src/services/diagnostics/runtime'
 import { widgetTaskHandler } from './src/widgets/widgetTaskHandler'
+
+installMobileDiagnosticLogging()
 
 function RootApp() {
   return createElement(KeyboardProvider, null, createElement(App))

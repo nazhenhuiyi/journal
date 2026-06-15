@@ -5,7 +5,7 @@ import {
   getMobileLocationPermissionDiagnostic,
   getMobileWeatherDiagnostic,
   requestMobileLocationDiagnostic,
-} from './mobileDiagnostics'
+} from './status'
 
 const mockFileSystem = vi.hoisted(() => ({
   documentDirectory: 'file:///app/',
@@ -53,6 +53,9 @@ describe('mobile diagnostics', () => {
 
   it('reports mobile data paths without touching tracked journal data', () => {
     expect(getMobileDiagnosticPaths('2026-06-08')).toEqual({
+      adbLogDirectory: 'files/journal-diagnostic-logs',
+      diagnosticLogDirectory: 'file:///app/journal-diagnostic-logs/',
+      diagnosticPackageDirectory: 'file:///app/journal-diagnostic-packages/',
       todayEntryPath: 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md',
       uiSettingsStorage: 'SecureStore: journal.mobileUiSettings.v1',
       worktreeDirectory: 'file:///app/journal-worktree/',

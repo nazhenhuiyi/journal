@@ -1,7 +1,8 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { DayFrontMatter } from '@journal/core'
+import type { SyncSnapshot } from '@journal/sync'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -14,7 +15,11 @@ import {
   getMobileWeatherDiagnostic,
   requestMobileLocationDiagnostic,
   type MobileLocationDiagnostic,
-} from '../services/mobileDiagnostics'
+} from '../services/diagnostics/status'
+import {
+  createMobileDiagnosticPackage,
+  saveMobileDiagnosticPackageToAndroidDirectory,
+} from '../services/diagnostics/package'
 import type { MobileHomeMode } from '../services/mobileUiSettings'
 
 const storedTokenMask = '••••••••'
@@ -33,6 +38,7 @@ type SettingsPageProps = {
   setSyncTokenDraft: (value: string) => void
   syncBranch: string
   syncRemoteUrl: string
+  syncSnapshot: SyncSnapshot
   syncTokenDraft: string
   today: string
 }
@@ -51,12 +57,15 @@ export function SettingsPage({
   setSyncTokenDraft,
   syncBranch,
   syncRemoteUrl,
+  syncSnapshot,
   syncTokenDraft,
   today,
 }: SettingsPageProps) {
   const [locationDiagnostic, setLocationDiagnostic] = useState<MobileLocationDiagnostic | null>(null)
   const [locationMessage, setLocationMessage] = useState('')
   const [diagnosticFrontMatter, setDiagnosticFrontMatter] = useState(currentFrontMatter)
+  const [diagnosticPackageMessage, setDiagnosticPackageMessage] = useState('')
+  const [isExportingDiagnosticPackage, setIsExportingDiagnosticPackage] = useState(false)
   const [isRefreshingWeather, setIsRefreshingWeather] = useState(false)
   const [isRequestingLocation, setIsRequestingLocation] = useState(false)
   const [weatherMessage, setWeatherMessage] = useState('')
@@ -65,6 +74,9 @@ export function SettingsPage({
       return getMobileDiagnosticPaths(today)
     } catch (error) {
       return {
+        adbLogDirectory: '不可用',
+        diagnosticLogDirectory: '不可用',
+        diagnosticPackageDirectory: '不可用',
         todayEntryPath: getErrorMessage(error),
         uiSettingsStorage: '不可用',
         worktreeDirectory: '不可用',
@@ -121,6 +133,54 @@ export function SettingsPage({
       setWeatherMessage(getErrorMessage(error))
     } finally {
       setIsRefreshingWeather(false)
+    }
+  }
+
+  async function handleExportDiagnosticPackage() {
+    if (Platform.OS !== 'android') {
+      const message = '诊断包导出暂只支持 Android。'
+
+      setDiagnosticPackageMessage(message)
+      Alert.alert('暂不支持', message)
+      return
+    }
+
+    setIsExportingDiagnosticPackage(true)
+    setDiagnosticPackageMessage('')
+
+    try {
+      const diagnosticPackage = await createMobileDiagnosticPackage({
+        paths: diagnosticPaths,
+        sync: {
+          branch: syncBranch,
+          hasStoredSyncToken,
+          remoteUrl: syncRemoteUrl,
+          snapshot: syncSnapshot,
+        },
+        today,
+      })
+
+      const externalSave = await saveMobileDiagnosticPackageToAndroidDirectory(diagnosticPackage)
+
+      if (externalSave.status === 'saved') {
+        const message = `已保存：${externalSave.fileName}`
+
+        setDiagnosticPackageMessage(message)
+        Alert.alert('诊断包已保存', message)
+        return
+      }
+
+      const message = `已生成：${diagnosticPackage.filePath}`
+
+      setDiagnosticPackageMessage(message)
+      Alert.alert('诊断包已生成', message)
+    } catch (error) {
+      const message = getErrorMessage(error)
+
+      setDiagnosticPackageMessage(message)
+      Alert.alert('诊断包没有生成', message)
+    } finally {
+      setIsExportingDiagnosticPackage(false)
     }
   }
 
@@ -193,7 +253,27 @@ export function SettingsPage({
               <View style={styles.pathCard}>
                 <DiagnosticPathRow label="日记目录" value={diagnosticPaths.worktreeDirectory} />
                 <DiagnosticPathRow divider label="今日文件" value={diagnosticPaths.todayEntryPath} />
+                <DiagnosticPathRow divider label="本机日志" value={diagnosticPaths.diagnosticLogDirectory} />
+                <DiagnosticPathRow divider label="诊断包" value={diagnosticPaths.diagnosticPackageDirectory} />
+                <DiagnosticPathRow divider label="adb 日志目录" value={diagnosticPaths.adbLogDirectory} />
                 <DiagnosticPathRow divider label="本机偏好" value={diagnosticPaths.uiSettingsStorage} />
+              </View>
+              <View style={styles.formCard}>
+                <Button
+                  icon="download-outline"
+                  loading={isExportingDiagnosticPackage}
+                  onPress={() => void handleExportDiagnosticPackage()}
+                  size="sm"
+                  testID="export-diagnostic-package-button"
+                  variant="secondary"
+                >
+                  导出诊断包
+                </Button>
+                {diagnosticPackageMessage ? (
+                  <Text className="text-xs leading-5 text-text-tertiary">
+                    {diagnosticPackageMessage}
+                  </Text>
+                ) : null}
               </View>
             </Section>
 
