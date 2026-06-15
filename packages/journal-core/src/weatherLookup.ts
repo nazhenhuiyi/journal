@@ -91,7 +91,10 @@ export function parseWttrWeather(payload: unknown): WeatherLookupPayload {
   const feelsLike = numberFromRecord(currentCondition, 'FeelsLikeC')
   const humidity = numberFromRecord(currentCondition, 'humidity')
   const windSpeed = numberFromRecord(currentCondition, 'windspeedKmph')
-  const text = firstLocalizedValue(currentCondition.lang_zh) ?? firstLocalizedValue(currentCondition.weatherDesc)
+  const text = normalizeWttrWeatherDescription([
+    firstLocalizedValue(currentCondition.lang_zh),
+    firstLocalizedValue(currentCondition.weatherDesc),
+  ])
 
   if (!text || temperature === undefined) {
     throw new Error('Weather response did not include current weather.')
@@ -191,6 +194,90 @@ function normalizeFrontMatterLocation(location: DayFrontMatter['location']) {
 
   return Object.values(normalizedLocation).some(Boolean) ? normalizedLocation : undefined
 }
+
+function normalizeWttrWeatherDescription(values: readonly (string | undefined)[]) {
+  const labels = values.filter((value): value is string => Boolean(value))
+
+  for (const label of labels) {
+    if (/[\u3400-\u9FFF]/.test(label)) {
+      return label
+    }
+  }
+
+  for (const label of labels) {
+    const translatedLabel = translateWttrWeatherDescription(label)
+
+    if (translatedLabel) {
+      return translatedLabel
+    }
+  }
+
+  return labels.length > 0 ? '天气未知' : undefined
+}
+
+function translateWttrWeatherDescription(value: string) {
+  return wttrWeatherDescriptionLabels.get(normalizeWttrWeatherDescriptionKey(value))
+}
+
+function normalizeWttrWeatherDescriptionKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+const wttrWeatherDescriptionLabels = new Map<string, string>([
+  ['sunny', '晴'],
+  ['clear', '晴'],
+  ['partly cloudy', '多云'],
+  ['cloudy', '多云'],
+  ['overcast', '阴'],
+  ['mist', '雾'],
+  ['fog', '雾'],
+  ['freezing fog', '冻雾'],
+  ['patchy rain nearby', '小雨'],
+  ['patchy light drizzle', '毛毛雨'],
+  ['light drizzle', '毛毛雨'],
+  ['freezing drizzle', '冻毛毛雨'],
+  ['heavy freezing drizzle', '冻毛毛雨'],
+  ['patchy light rain', '小雨'],
+  ['light rain', '小雨'],
+  ['moderate rain at times', '中雨'],
+  ['moderate rain', '中雨'],
+  ['heavy rain at times', '大雨'],
+  ['heavy rain', '大雨'],
+  ['light freezing rain', '冻雨'],
+  ['moderate or heavy freezing rain', '冻雨'],
+  ['light rain shower', '阵雨'],
+  ['moderate or heavy rain shower', '强阵雨'],
+  ['torrential rain shower', '暴雨'],
+  ['thundery outbreaks in nearby', '雷暴'],
+  ['patchy light rain in area with thunder', '雷阵雨'],
+  ['moderate or heavy rain in area with thunder', '强雷雨'],
+  ['patchy snow nearby', '小雪'],
+  ['patchy sleet nearby', '雨夹雪'],
+  ['patchy freezing drizzle nearby', '冻毛毛雨'],
+  ['blowing snow', '风雪'],
+  ['blizzard', '暴风雪'],
+  ['patchy light snow', '小雪'],
+  ['light snow', '小雪'],
+  ['patchy moderate snow', '中雪'],
+  ['moderate snow', '中雪'],
+  ['patchy heavy snow', '大雪'],
+  ['heavy snow', '大雪'],
+  ['light snow showers', '阵雪'],
+  ['moderate or heavy snow showers', '强阵雪'],
+  ['patchy light snow in area with thunder', '雷阵雪'],
+  ['moderate or heavy snow in area with thunder', '强雷雪'],
+  ['light sleet', '雨夹雪'],
+  ['moderate or heavy sleet', '雨夹雪'],
+  ['light sleet showers', '阵性雨夹雪'],
+  ['moderate or heavy sleet showers', '强阵性雨夹雪'],
+  ['ice pellets', '冰粒'],
+  ['light showers of ice pellets', '阵性冰粒'],
+  ['moderate or heavy showers of ice pellets', '强阵性冰粒'],
+])
 
 function firstRecord(value: unknown) {
   return Array.isArray(value) && value.length > 0 ? asRecord(value[0]) : {}

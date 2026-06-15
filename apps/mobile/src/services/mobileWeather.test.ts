@@ -86,6 +86,25 @@ describe('mobile weather', () => {
     })
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe('https://wttr.in/?format=j1&lang=zh')
   })
+
+  it('normalizes wttr English weather fallback into Chinese text', async () => {
+    mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ granted: false })
+    vi.mocked(fetch).mockResolvedValue(createJsonResponse({
+      current_condition: [
+        {
+          temp_C: '22',
+          weatherDesc: [{ value: 'Partly cloudy' }],
+        },
+      ],
+    }))
+
+    await expect(fetchTodayMobileWeather()).resolves.toMatchObject({
+      weather: {
+        text: '多云',
+        temperature: 22,
+      },
+    })
+  })
 })
 
 function createJsonResponse(payload: unknown) {

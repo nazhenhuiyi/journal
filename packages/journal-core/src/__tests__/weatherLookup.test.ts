@@ -107,6 +107,39 @@ describe('weather lookup', () => {
     })
   })
 
+  it('translates wttr English descriptions when localized weather is missing', () => {
+    expect(parseWttrWeather({
+      current_condition: [
+        {
+          temp_C: '18',
+          weatherDesc: [{ value: 'Light rain' }],
+        },
+      ],
+    }).weather.text).toBe('小雨')
+  })
+
+  it('translates wttr English values returned in localized weather fields', () => {
+    expect(parseWttrWeather({
+      current_condition: [
+        {
+          lang_zh: [{ value: 'Light rain' }],
+          temp_C: '18',
+        },
+      ],
+    }).weather.text).toBe('小雨')
+  })
+
+  it('does not leak unknown wttr English descriptions into weather text', () => {
+    expect(parseWttrWeather({
+      current_condition: [
+        {
+          temp_C: '18',
+          weatherDesc: [{ value: 'Untranslated sky mood' }],
+        },
+      ],
+    }).weather.text).toBe('天气未知')
+  })
+
   it('scopes Chinese city names to China for wttr geocoding', () => {
     expect(normalizeWeatherQueryForWttr('成都')).toBe('成都,中国')
   })
