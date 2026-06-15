@@ -1,3 +1,6 @@
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
 type SegmentedControlOption<T extends string> = {
   value: T
   label: string
@@ -10,10 +13,6 @@ type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void
 }
 
-function classNames(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(' ')
-}
-
 function SegmentedControl<T extends string>({
   ariaLabel,
   options,
@@ -23,7 +22,7 @@ function SegmentedControl<T extends string>({
   return (
     <div
       aria-label={ariaLabel}
-      className={classNames(
+      className={cn(
         'inline-flex h-9 items-center gap-1 rounded-[var(--journal-radius-control)] border border-[var(--journal-line-control)] bg-surface-muted p-0.5',
       )}
       role="group"
@@ -32,9 +31,9 @@ function SegmentedControl<T extends string>({
         const isActive = option.value === value
 
         return (
-          <button
+          <Button
             aria-pressed={isActive}
-            className={classNames(
+            className={cn(
               'h-8 min-w-[3.55rem] rounded-[var(--radius-sm)] border-0 bg-transparent px-3 text-[0.95rem] font-medium leading-none',
               'cursor-pointer text-muted-fg transition-[background-color,color] duration-200 ease-out',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
@@ -43,10 +42,12 @@ function SegmentedControl<T extends string>({
             )}
             key={option.value}
             onClick={() => onChange(option.value)}
+            size="sm"
             type="button"
+            variant="ghost"
           >
             {option.label}
-          </button>
+          </Button>
         )
       })}
     </div>

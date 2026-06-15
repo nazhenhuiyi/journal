@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowRight, CalendarDays } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import { Button } from '@/components/ui/button'
 import { JournalDayView } from './MarkdownPreviewPage'
 import type { JournalDayViewHandle } from './MarkdownPreviewPage'
 import { panelTransition } from './markdown-preview/constants'
@@ -292,34 +293,40 @@ function CalendarPage() {
         transition={panelTransition}
       >
         <header className="calendar-day-toolbar">
-          <button
+          <Button
             className="calendar-day-back"
             disabled={isSwitchingDate}
             onClick={() => void handleReturnToCalendar()}
+            size="sm"
             type="button"
+            variant="ghost"
           >
             <CalendarDays aria-hidden="true" size={17} strokeWidth={2.15} />
             <span>返回日历</span>
-          </button>
+          </Button>
           <div className="calendar-day-jump">
-            <button
+            <Button
               className="calendar-day-nav"
               disabled={!previousDate || isSwitchingDate}
               onClick={() => previousDate && void handleSelectDate(previousDate)}
+              size="sm"
               type="button"
+              variant="ghost"
             >
               <ArrowRight aria-hidden="true" className="is-previous" size={17} strokeWidth={2.25} />
               <span>上一天</span>
-            </button>
-            <button
+            </Button>
+            <Button
               className="calendar-day-nav"
               disabled={!nextDate || isSwitchingDate}
               onClick={() => nextDate && void handleSelectDate(nextDate)}
+              size="sm"
               type="button"
+              variant="ghost"
             >
               <span>下一天</span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={2.25} />
-            </button>
+            </Button>
           </div>
         </header>
         <section aria-label={`${openDate} 的日记`} className="calendar-day-content min-h-0 flex-1">
@@ -343,21 +350,25 @@ function CalendarPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
             className="calendar-year-button"
             onClick={() => setYear((currentYear) => currentYear - 1)}
+            size="sm"
             type="button"
+            variant="outline"
           >
             上一年
-          </button>
+          </Button>
           <strong className="calendar-year-label">{viewYear}</strong>
-          <button
+          <Button
             className="calendar-year-button"
             onClick={() => setYear((currentYear) => currentYear + 1)}
+            size="sm"
             type="button"
+            variant="outline"
           >
             下一年
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -369,16 +380,18 @@ function CalendarPage() {
             const hasEntries = monthDates.length > 0
 
             return (
-              <button
+              <Button
                 aria-pressed={isActive}
                 className={`calendar-month-button ${isActive ? 'is-active' : ''} ${hasEntries ? '' : 'is-empty'}`}
                 key={monthName}
                 onClick={() => handleOpenMonth(monthIndex)}
+                size="lg"
                 type="button"
+                variant="outline"
               >
                 <span>{monthName}</span>
                 <small>{hasEntries ? `${monthDates.length} 篇` : '空'}</small>
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -418,7 +431,7 @@ function CalendarPage() {
               }
 
               return (
-                <button
+                <Button
                   aria-label={`打开 ${cell.dateKey} 的日记`}
                   className={`calendar-day-cell ${cell.isToday ? 'is-today' : ''} ${cell.hasEntry ? '' : 'is-empty'} ${
                     cell.weekday === 0 || cell.weekday === 6 ? 'is-weekend' : ''
@@ -426,11 +439,13 @@ function CalendarPage() {
                   disabled={!cell.hasEntry}
                   key={cell.dateKey}
                   onClick={() => void handleSelectDate(cell.dateKey)}
+                  size="lg"
                   type="button"
+                  variant="outline"
                 >
                   <span>{cell.day}</span>
                   <small className={cell.isToday ? 'is-today-label' : undefined}>{cell.isToday ? '今日' : ''}</small>
-                </button>
+                </Button>
               )
             })}
           </div>

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { mkdir, mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -75,6 +75,56 @@ test('desktop creates, persists, and displays a murmur', async () => {
     await expect(page.getByRole('textbox', { name: '碎碎念正文' })).toHaveValue(murmurText)
     await page.getByRole('button', { name: '完成' }).click()
     await expect(page.getByLabel('碎碎念列表')).toContainText(murmurText)
+  } finally {
+    await closeIsolatedDesktopApp(context)
+  }
+})
+
+test('desktop opens murmur images in a large preview', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'journal-desktop-e2e-'))
+  const journalDir = path.join(rootDir, 'journal')
+  const today = getLocalDateKey()
+  const [year, month] = today.split('-')
+  const mediaDirectory = path.join(journalDir, 'media', year, month)
+  const imageSrc = `media/${year}/${month}/window-light.png`
+
+  await mkdir(mediaDirectory, { recursive: true })
+  await writeFile(path.join(mediaDirectory, 'window-light.png'), createTinyPng())
+  await writeJournalEntry(journalDir, today, [
+    ':::murmur',
+    'id: m_e2e_image_preview',
+    `time: ${today}T21:38:00.000Z`,
+    '---',
+    '夜里回来看见窗边还有一点光。',
+    '',
+    '::image',
+    'id: img_e2e_window_light',
+    `src: ${imageSrc}`,
+    'caption: 窗台的花',
+    '::',
+    ':::',
+  ].join('\n'))
+
+  const context = await createIsolatedDesktopApp(rootDir, journalDir)
+
+  try {
+    const page = await waitForPreviewPage(context.app)
+    const previewButton = page.getByRole('button', { name: '查看大图：窗台的花' })
+
+    await expect(previewButton).toBeVisible()
+    await previewButton.click()
+
+    const dialog = page.getByRole('dialog', { name: '图片预览' })
+
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('img', { name: '窗台的花' })).toHaveAttribute(
+      'src',
+      `journal-media://local/${imageSrc}`,
+    )
+    await expect(dialog).toContainText('窗台的花')
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
   } finally {
     await closeIsolatedDesktopApp(context)
   }
@@ -241,4 +291,11 @@ function formatJournalHeading(dateKey: string) {
   const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
   return `${month}月${day}日 · ${weekdayLabels[date.getDay()]}`
+}
+
+function createTinyPng() {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+    'base64',
+  )
 }

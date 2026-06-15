@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { parseJournalMarkdown, type DayFrontMatter } from '@journal/core'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { desktopSyncManager, type DesktopSyncManagerState } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
@@ -148,9 +151,9 @@ function SettingsPage() {
           <span>偏好</span>
           <h1>设置</h1>
         </div>
-        <Link className="settings-return-link" to="/preview">
-          回到书写
-        </Link>
+        <Button asChild className="settings-return-link" size="lg" variant="outline">
+          <Link to="/preview">回到书写</Link>
+        </Button>
       </motion.header>
 
       <main className="settings-stage">
@@ -212,24 +215,28 @@ function SettingsPage() {
               <SettingsListRow label="设置文件" value={journalSettings?.settingsPath ?? '不可用'} />
             </div>
             <div className="settings-actions">
-              <button
+              <Button
                 className="settings-secondary-button"
                 disabled={isRequestingLocation}
                 onClick={() => void handleRequestLocation()}
+                size="lg"
                 type="button"
+                variant="outline"
               >
                 <MapPin aria-hidden="true" size={16} strokeWidth={2.15} />
                 {isRequestingLocation ? '获取中' : '获取定位'}
-              </button>
-              <button
+              </Button>
+              <Button
                 className="settings-secondary-button"
                 disabled={isRefreshingWeather}
                 onClick={() => void handleRefreshWeather()}
+                size="lg"
                 type="button"
+                variant="outline"
               >
                 <CloudSun aria-hidden="true" size={16} strokeWidth={2.15} />
                 {isRefreshingWeather ? '获取中' : '获取天气'}
-              </button>
+              </Button>
             </div>
             {diagnosticMessage ? (
               <SettingsMessageRow>{diagnosticMessage}</SettingsMessageRow>
@@ -244,34 +251,37 @@ function SettingsPage() {
             }}
           >
             <h2 className="settings-section-title">配置</h2>
-            <label className="settings-field settings-field-wide">
+            <Label className="settings-field settings-field-wide">
               <span>仓库地址</span>
-              <input
+              <Input
+                className="settings-input"
                 disabled={disabled}
                 onChange={(event) => desktopSyncManager.setSyncRemoteUrl(event.target.value)}
                 placeholder="https://github.com/you/journal-sync.git"
                 value={syncRemoteUrl}
               />
-            </label>
+            </Label>
 
-            <label className="settings-field">
+            <Label className="settings-field">
               <span>分支</span>
               <span className="settings-input-with-icon">
                 <GitBranch aria-hidden="true" size={16} strokeWidth={2.15} />
-                <input
+                <Input
+                  className="settings-input-inner"
                   disabled={disabled}
                   onChange={(event) => desktopSyncManager.setSyncBranch(event.target.value)}
                   placeholder="main"
                   value={syncBranch}
                 />
               </span>
-            </label>
+            </Label>
 
-            <label className="settings-field settings-field-wide">
+            <Label className="settings-field settings-field-wide">
               <span>GitHub Token</span>
               <span className="settings-input-with-icon">
                 <KeyRound aria-hidden="true" size={16} strokeWidth={2.15} />
-                <input
+                <Input
+                  className="settings-input-inner"
                   disabled={disabled}
                   onChange={(event) => desktopSyncManager.setSyncTokenDraft(event.target.value)}
                   placeholder={hasStoredSyncToken ? storedTokenMask : 'ghp_...'}
@@ -279,7 +289,7 @@ function SettingsPage() {
                   value={syncTokenDraft}
                 />
               </span>
-            </label>
+            </Label>
 
             <p className="settings-token-hint">
               {hasStoredSyncToken ? (
@@ -298,15 +308,17 @@ function SettingsPage() {
             ) : null}
 
             <div className="settings-actions">
-              <button className="settings-secondary-button" disabled={disabled} type="submit">
+              <Button className="settings-secondary-button" disabled={disabled} size="lg" type="submit" variant="outline">
                 <Save aria-hidden="true" size={16} strokeWidth={2.15} />
                 {isSavingSyncSettings ? '保存中' : '保存配置'}
-              </button>
-              <button
+              </Button>
+              <Button
                 className="settings-primary-button"
                 disabled={disabled}
                 onClick={() => void desktopSyncManager.syncNow()}
+                size="lg"
                 type="button"
+                variant="default"
               >
                 {isSyncingNow ? (
                   <Settings2 aria-hidden="true" size={16} strokeWidth={2.15} />
@@ -314,7 +326,7 @@ function SettingsPage() {
                   <RefreshCw aria-hidden="true" size={16} strokeWidth={2.15} />
                 )}
                 {isSyncingNow ? '同步中' : '立即同步'}
-              </button>
+              </Button>
             </div>
 
             {syncMessage && !syncSnapshot.lastError && syncStatus.tone === 'success' ? (
@@ -341,10 +353,17 @@ function SettingsListRow({
   tone?: string
   value: string
 }) {
+  const isPathLikeValue = value.length > 36 && /[/\\]/.test(value)
+  const valueClassName = [
+    'settings-list-value',
+    tone ? `is-${tone}` : '',
+    isPathLikeValue ? 'is-path' : '',
+  ].filter(Boolean).join(' ')
+
   return (
     <div className="settings-list-row">
       <span className="settings-list-label">{label}</span>
-      <span className={`settings-list-value${tone ? ` is-${tone}` : ''}`} title={value}>
+      <span className={valueClassName} title={value}>
         {icon ? <span aria-hidden="true">{icon}</span> : null}
         {value}
       </span>

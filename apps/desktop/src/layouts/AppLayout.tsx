@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import type { LucideIcon } from 'lucide-react'
 import { BookOpen, CalendarDays, PenLine, Settings2 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
+import { Button } from '@/components/ui/button'
 import { brand } from '../brand'
 import { panelTransition } from '../pages/markdown-preview/constants'
 
@@ -104,14 +105,15 @@ function AppLayout() {
               }
 
               return (
-                <button
+                <Button
                   aria-disabled={item.disabled}
                   disabled={item.disabled}
                   key={item.label}
                   type="button"
+                  variant="ghost"
                 >
                   {content}
-                </button>
+                </Button>
               )
             })}
           </div>

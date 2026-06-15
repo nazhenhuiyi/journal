@@ -31,6 +31,10 @@
       "types": "./src/scheduler.ts",
       "default": "./src/scheduler.ts"
     },
+    "./persistedSnapshot": {
+      "types": "./src/persistedSnapshot.ts",
+      "default": "./src/persistedSnapshot.ts"
+    },
     "./statusPresentation": {
       "types": "./src/statusPresentation.ts",
       "default": "./src/statusPresentation.ts"

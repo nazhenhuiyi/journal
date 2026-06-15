@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "@journal/theme/tokens.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme {
   --app-min-width: 1180px;
@@ -82,6 +86,38 @@ body {
   --journal-space-10: var(--space-10);
   --journal-space-12: var(--space-12);
   --journal-shadow-soft: 0 1px 2px rgb(12 10 9 / 0.04), 0 14px 30px rgb(12 10 9 / 0.045);
+  --background: var(--color-paper-100);
+  --foreground: var(--color-stone-950);
+  --card: var(--color-paper-50);
+  --card-foreground: var(--color-stone-950);
+  --popover: var(--color-paper-50);
+  --popover-foreground: var(--color-stone-950);
+  --primary: var(--color-teal-700);
+  --primary-foreground: var(--color-teal-50);
+  --secondary: var(--color-stone-100);
+  --secondary-foreground: var(--color-stone-900);
+  --muted: var(--color-stone-100);
+  --muted-foreground: var(--color-stone-500);
+  --accent: var(--color-stone-100);
+  --accent-foreground: var(--color-stone-900);
+  --destructive: var(--color-red-600);
+  --border: var(--color-stone-200);
+  --input: var(--color-stone-200);
+  --ring: #a6a09b;
+  --chart-1: var(--color-teal-700);
+  --chart-2: var(--color-teal-600);
+  --chart-3: var(--color-stone-500);
+  --chart-4: var(--color-stone-300);
+  --chart-5: var(--color-stone-900);
+  --radius: 0.625rem;
+  --sidebar: var(--color-stone-50);
+  --sidebar-foreground: var(--color-stone-950);
+  --sidebar-primary: var(--color-teal-600);
+  --sidebar-primary-foreground: var(--color-teal-50);
+  --sidebar-accent: var(--color-stone-100);
+  --sidebar-accent-foreground: var(--color-stone-900);
+  --sidebar-border: var(--color-stone-200);
+  --sidebar-ring: #a6a09b;
 }
 
 @keyframes float-in {
@@ -422,6 +458,15 @@ body {
   text-align: right;
 }
 
+.settings-list-value.is-path {
+  max-width: 74%;
+  color: var(--journal-text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.74rem;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
 .settings-list-value > span {
   display: inline-flex;
   color: currentColor;
@@ -517,6 +562,7 @@ body {
 .settings-field {
   display: grid;
   min-width: 0;
+  align-items: stretch;
   gap: 0.38rem;
 }
 
@@ -578,6 +624,7 @@ body {
 
 .settings-input-with-icon input:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 .settings-field input:disabled,
@@ -1232,6 +1279,7 @@ body {
 .calendar-day-cell.is-empty {
   color: var(--journal-text-disabled);
   cursor: default;
+  opacity: 1;
 }
 
 .calendar-day-cell.is-empty.is-today {
@@ -1561,12 +1609,16 @@ body {
 .journal-murmur-dialog textarea,
 .journal-murmur-dialog input {
   width: 100%;
-  border: 1px solid var(--journal-line-control);
+  border: 1px solid color-mix(in srgb, var(--journal-line-control) 58%, transparent);
   border-radius: var(--journal-radius-card);
   padding: var(--journal-space-2-5) var(--journal-space-3);
   color: var(--color-card-foreground);
-  background: var(--journal-control-background);
+  background: color-mix(in srgb, var(--journal-control-background) 78%, var(--color-background));
   font: inherit;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .journal-murmur-dialog textarea::placeholder,
@@ -1582,9 +1634,13 @@ body {
 
 .journal-murmur-dialog textarea:focus,
 .journal-murmur-dialog input:focus {
-  border-color: var(--journal-line-active-strong);
-  outline: 2px solid var(--journal-focus-ring);
-  outline-offset: 2px;
+  outline: none;
+}
+
+.journal-murmur-dialog textarea:focus-visible,
+.journal-murmur-dialog input:focus-visible {
+  border-color: color-mix(in srgb, var(--color-ring) 42%, var(--journal-line-control));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-ring) 20%, transparent);
 }
 
 .journal-murmur-actions {
@@ -1600,7 +1656,7 @@ body {
 }
 
 .journal-murmur-actions button:last-child,
-.journal-murmur-image-tile button {
+.journal-murmur-image-delete-button {
   color: var(--color-destructive);
   background: var(--journal-danger-background);
 }
@@ -1648,6 +1704,28 @@ body {
   background: var(--color-muted);
 }
 
+.journal-murmur-panel .journal-murmur-image-preview-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.journal-murmur-panel .journal-murmur-image-preview-button:hover {
+  border-color: transparent;
+  color: inherit;
+  background: transparent;
+}
+
+.journal-murmur-panel .journal-murmur-image-preview-button:focus-visible {
+  outline: 2px solid var(--journal-focus-ring);
+  outline-offset: -3px;
+}
+
 .journal-murmur-image-preview {
   display: block;
   width: 100%;
@@ -1659,10 +1737,11 @@ body {
   object-fit: cover;
 }
 
-.journal-murmur-image-tile button {
+.journal-murmur-image-delete-button {
   position: absolute;
   top: var(--journal-space-1);
   right: var(--journal-space-1);
+  z-index: 1;
   width: 1.85rem;
   height: 1.85rem;
   padding: 0;
@@ -1671,13 +1750,82 @@ body {
   box-shadow: 0 6px 14px rgba(74, 47, 27, 0.14);
 }
 
-.journal-murmur-dialog-backdrop {
+.journal-image-preview-content {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 80;
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  padding: 4.5rem clamp(2rem, 5vw, 4rem) 2rem;
+  border: 0;
+  border-radius: 0;
+  color: #fff;
+  background: rgb(12 10 9 / 0.92);
+  backdrop-filter: blur(8px);
+  box-shadow: none;
+  translate: none;
+}
+
+.journal-image-preview-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  display: inline-grid;
   place-items: center;
-  padding: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: var(--journal-radius-pill);
+  padding: 0;
+  color: #fff;
+  background: rgb(255 255 255 / 0.11);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.journal-image-preview-close:hover {
+  border-color: rgb(255 255 255 / 0.32);
+  background: rgb(255 255 255 / 0.18);
+}
+
+.journal-image-preview-close:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.48);
+  outline-offset: 3px;
+}
+
+.journal-image-preview-stage {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+}
+
+.journal-image-preview-full {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 8.5rem);
+  border-radius: var(--journal-radius-card);
+  object-fit: contain;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.34);
+}
+
+.journal-image-preview-caption {
+  max-width: min(42rem, 100%);
+  margin: 1.1rem auto 0;
+  color: rgb(255 255 255 / 0.86);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="dialog-overlay"] {
   background: color-mix(in srgb, var(--color-foreground) 18%, transparent);
   backdrop-filter: blur(4px);
 }
@@ -1687,9 +1835,11 @@ body {
   width: min(100%, 32rem);
   max-height: min(42rem, calc(100vh - 4rem));
   grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
   overflow: hidden;
   border: 1px solid var(--journal-line-control);
   border-radius: var(--journal-radius-panel);
+  padding: 0;
   background: var(--journal-panel-background);
   box-shadow: 0 20px 60px rgba(39, 37, 35, 0.16);
 }
@@ -1710,7 +1860,8 @@ body {
   gap: 0.16rem;
 }
 
-.journal-murmur-dialog-header strong {
+.journal-murmur-dialog-header [data-slot="dialog-title"] {
+  margin: 0;
   color: var(--color-card-foreground);
   font-size: 1rem;
   font-weight: 760;
@@ -2078,5 +2229,94 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-float-in {
     animation: none;
+  }
+}
+
+@theme inline {
+  --font-heading: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }

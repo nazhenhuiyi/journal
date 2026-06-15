@@ -10,7 +10,7 @@ import {
   getDefaultSyncSnapshot,
   shouldPersistSyncSnapshot,
   type SyncSnapshotPersistenceIdentity,
-} from '@journal/sync'
+} from '@journal/sync/persistedSnapshot'
 
 type JournalSyncStore = NonNullable<Window['journalSync']>
 type JournalSyncStatus = Awaited<ReturnType<JournalSyncStore['loadStatus']>>

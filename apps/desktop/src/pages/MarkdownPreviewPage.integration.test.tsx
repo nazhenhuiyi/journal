@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import MarkdownPreviewPage from './MarkdownPreviewPage'
 
@@ -224,7 +224,7 @@ describe('MarkdownPreviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加图片' }))
 
     await waitFor(() => {
-      expect(screen.getAllByRole('img', { name: '碎碎念图片' })).toHaveLength(2)
+      expect(screen.getAllByRole('img', { hidden: true, name: '碎碎念图片' })).toHaveLength(2)
     })
     expect(screen.getByRole('button', { name: '移除图片' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: '图片说明' })).not.toBeInTheDocument()
@@ -255,6 +255,56 @@ describe('MarkdownPreviewPage', () => {
     expect(savedImageCall?.[1]).not.toContain('caption:')
     expect(savedImageCall?.[1]).toContain('location: 青龙湖')
     expect(savedImageCall?.[1]).toContain('locationSource: exif')
+  })
+
+  it('opens murmur images in a large preview', async () => {
+    const storedJournal = {
+      content: [
+        '---',
+        'date: 2026-06-08',
+        '---',
+        '',
+        ':::murmur',
+        'id: m_20260608_213800',
+        'time: 2026-06-08T21:38:00.000Z',
+        '---',
+        '夜里回来看见窗边还有一点光。',
+        '',
+        '::image',
+        'id: img_20260608_213801',
+        'src: media/2026/06/window-light.jpg',
+        'caption: 窗台的花',
+        '::',
+        ':::',
+      ].join('\n'),
+      date: '2026-06-08',
+      fileName: '2026-06-08.md',
+      filePath: '/Users/zilin/.journal/entries/2026/06/2026-06-08.md',
+      updatedAt: null,
+    }
+
+    vi.stubGlobal('journalStore', {
+      loadToday: vi.fn().mockResolvedValue(storedJournal),
+      saveToday: vi.fn().mockResolvedValue(storedJournal),
+    })
+
+    render(<MarkdownPreviewPage />)
+
+    const previewButton = await screen.findByRole('button', { name: '查看大图：窗台的花' })
+
+    fireEvent.click(previewButton)
+
+    const dialog = screen.getByRole('dialog', { name: '图片预览' })
+
+    expect(within(dialog).getByRole('img', { name: '窗台的花' })).toHaveAttribute(
+      'src',
+      'journal-media://local/media/2026/06/window-light.jpg',
+    )
+    expect(within(dialog).getByText('窗台的花')).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭图片预览' }))
+
+    expect(screen.queryByRole('dialog', { name: '图片预览' })).not.toBeInTheDocument()
   })
 
   it('preserves existing murmur blocks when saving long-entry edits', async () => {

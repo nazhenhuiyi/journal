@@ -7,6 +7,7 @@ import {
   type DayFrontMatter,
   type MurmurBlock,
 } from '@journal/core'
+import { Button } from '@/components/ui/button'
 import { desktopSyncManager } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import JournalMarkdownEditor from './markdown-preview/JournalMarkdownEditor'
@@ -536,9 +537,9 @@ export const JournalDayView = forwardRef<JournalDayViewHandle, JournalDayViewPro
               {daySwitchError ||
                 `现在是 ${formatDateNudgeLabel(realTodayDate)}，你还在写 ${formatDateNudgeLabel(journalFile?.date ?? '')}`}
             </span>
-            <button onClick={() => void handleGoToToday()} type="button">
+            <Button onClick={() => void handleGoToToday()} size="sm" type="button" variant="outline">
               去今天
-            </button>
+            </Button>
           </div>
         ) : null}
         <div className="journal-topbar-actions">
