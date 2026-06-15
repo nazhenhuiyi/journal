@@ -1,6 +1,6 @@
 {
   "name": "journal-codex-plugin",
-  "version": "0.1.0+codex.20260615070652",
+  "version": "0.1.0+codex.20260615090327",
   "description": "Codex workflows for maintaining a configured journal data git repository from any workspace.",
   "author": {
     "name": "Journal team"
