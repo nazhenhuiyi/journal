@@ -1,6 +1,6 @@
 import type { ReadCommitResult } from 'isomorphic-git'
 import * as defaultGit from 'isomorphic-git'
-import type { JournalGitRuntime } from './gitCore'
+import type { JournalGitRuntime } from './core'
 
 export type MissingPackIndexRepairResult = {
   failedPacks: number

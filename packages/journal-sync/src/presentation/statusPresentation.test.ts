@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SyncSnapshot } from './scheduler'
+import type { SyncSnapshot } from '../state/scheduler'
 import { getJournalSyncStatusPresentation } from './statusPresentation'
 
 const syncedSnapshot: SyncSnapshot = {

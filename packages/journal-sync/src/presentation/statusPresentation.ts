@@ -1,5 +1,5 @@
-import type { SyncSnapshot } from './scheduler'
-import type { SyncBlock } from './syncBlock'
+import type { SyncSnapshot } from '../state/scheduler'
+import type { SyncBlock } from '../state/syncBlock'
 
 export type JournalSyncStatusTone =
   | 'idle'

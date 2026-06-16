@@ -12,19 +12,19 @@ import {
   getBranchName,
   getLocalBranchRef,
   getRemoteTrackingBranchRef,
-} from './gitRefs'
+} from '../git/refs'
 import {
   isTextMergeJournalPath,
   isTrackedJournalPath,
   normalizeRepositoryPath,
-} from './trackedPaths'
+} from '../git/trackedPaths'
 import {
   createJournalSyncBlockedError,
-} from './syncBlock'
+} from '../state/syncBlock'
 import type {
   JournalGitRuntime,
   JournalGitSyncConfig,
-} from './gitCore'
+} from '../git/core'
 
 export type JournalDomainMergeOperationResult = {
   baseOid: string | null

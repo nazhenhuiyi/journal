@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   pullJournalUpdates,
   type JournalGitRuntime,
-} from './gitCore'
+} from './core'
 
 const author = {
   email: 'sync-test@example.invalid',

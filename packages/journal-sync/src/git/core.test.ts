@@ -14,7 +14,7 @@ import {
   pushJournalChanges,
   syncJournalNow,
   type JournalGitRuntime,
-} from './gitCore'
+} from './core'
 
 const mockFs = {
   promises: {

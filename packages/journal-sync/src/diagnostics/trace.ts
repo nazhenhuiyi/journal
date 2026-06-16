@@ -1,4 +1,4 @@
-import type { JournalGitTrace, JournalGitTraceEvent } from './gitCore'
+import type { JournalGitTrace, JournalGitTraceEvent } from '../git/core'
 
 export type JournalGitTraceSink = (event: JournalGitTraceEvent) => void
 

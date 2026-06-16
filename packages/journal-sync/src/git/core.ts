@@ -12,26 +12,26 @@ import * as defaultGit from 'isomorphic-git'
 import {
   createJournalGitAuthenticatedHttpClient,
   type JournalGitCredentials,
-} from './gitAuth'
+} from './auth'
 import {
   createJournalMergeStats,
-} from './smartMerge'
-import { runJournalDomainMergeOperation } from './journalDomainMerge'
+} from '../merge/smartMerge'
+import { runJournalDomainMergeOperation } from '../merge/domainMerge'
 import {
   getBranchName,
   getLocalBranchRef,
   getRemoteBranchRef,
   getRemoteTrackingBranchRef,
-} from './gitRefs'
+} from './refs'
 import {
   isCommitReadable,
   rebuildMissingPackIndexesForCommit,
   type MissingPackIndexRepairResult,
-} from './gitObjectRepair'
+} from './objectRepair'
 import {
   createJournalGitObjectRepairThrottle,
   type JournalGitObjectRepairThrottle,
-} from './gitObjectRepairThrottle'
+} from './objectRepairThrottle'
 import {
   isSafeRepositoryPath,
   isTrackedJournalEntryPath,
@@ -42,7 +42,7 @@ import {
 } from './trackedPaths'
 import {
   createJournalSyncBlockedError,
-} from './syncBlock'
+} from '../state/syncBlock'
 
 export {
   createJournalGitAuthenticatedHttpClient,
@@ -50,7 +50,7 @@ export {
   getJournalGitAuthenticationErrorMessage,
   type JournalGitCredentials,
   type JournalGitHttpClientOptions,
-} from './gitAuth'
+} from './auth'
 
 export type JournalGitSyncConfig = {
   authorEmail?: string
@@ -82,7 +82,7 @@ export type JournalGitTrace = (event: JournalGitTraceEvent) => void
 export {
   createJournalGitObjectRepairThrottle,
   type JournalGitObjectRepairThrottle,
-} from './gitObjectRepairThrottle'
+} from './objectRepairThrottle'
 
 export type JournalGitRuntime = {
   cache: object

@@ -27,7 +27,7 @@ export {
   type JournalGitTraceDetails,
   type JournalGitTraceEvent,
   type JournalGitTraceValue,
-} from './gitCore'
+} from './git/core'
 export {
   createJournalMergeStats,
   mergeJournalFileContents,
@@ -36,7 +36,7 @@ export {
   type JournalMergeStats,
   type TextMergeInput,
   type TextMergeResult,
-} from './smartMerge'
+} from './merge/smartMerge'
 export {
   JournalSyncCoordinator,
   type JournalSyncCoordinatorOptions,
@@ -48,7 +48,7 @@ export {
   type SyncState,
   type SyncTimerApi,
   type SyncTrigger,
-} from './scheduler'
+} from './state/scheduler'
 export {
   areSyncSnapshotPersistenceIdentitiesEqual,
   createPersistedSyncSnapshot,
@@ -59,14 +59,14 @@ export {
   shouldPersistSyncSnapshot,
   type PersistedSyncSnapshot,
   type SyncSnapshotPersistenceIdentity,
-} from './persistedSnapshot'
+} from './state/persistedSnapshot'
 export {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusKind,
   type JournalSyncStatusPresentation,
   type JournalSyncStatusPresentationOptions,
   type JournalSyncStatusTone,
-} from './statusPresentation'
+} from './presentation/statusPresentation'
 export {
   createJournalSyncBlockedError,
   getJournalSyncBlock,
@@ -74,7 +74,7 @@ export {
   normalizeSyncBlock,
   type SyncBlock,
   type SyncBlockedReason,
-} from './syncBlock'
+} from './state/syncBlock'
 export {
   createConsoleJournalGitTrace,
   createConsoleJournalGitTraceSink,
@@ -82,4 +82,4 @@ export {
   formatJournalGitTraceEvent,
   type JournalGitTraceConsole,
   type JournalGitTraceSink,
-} from './trace'
+} from './diagnostics/trace'

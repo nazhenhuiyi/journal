@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
-/// <reference path="./diff3.d.ts" />
+/// <reference path="../types/diff3.d.ts" />
 
 import {
   createJournalMarkdownWithFrontMatter,
