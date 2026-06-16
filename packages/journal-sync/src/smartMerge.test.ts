@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createJournalMergeDriver,
   createJournalMergeStats,
+  mergeJournalFileContents,
   mergeTextDiff3,
 } from './smartMerge'
 
-describe('journal smart merge driver', () => {
+describe('journal smart merge', () => {
   it('keeps both sides when desktop and mobile edit different journal paragraphs', () => {
     const base = [
       '---',
@@ -57,27 +57,8 @@ describe('journal smart merge driver', () => {
     expect(result.mergedText).toContain('>>>>>>> desktop')
   })
 
-  it('treats missing merge driver contents as empty text', async () => {
-    const stats = createJournalMergeStats()
-    const driver = createJournalMergeDriver('theirs', stats)
-    const result = await driver({
-      branches: ['base', 'main', 'origin/main'],
-      contents: [
-        undefined as unknown as string,
-        'local journal text\n',
-        'remote journal text\n',
-      ],
-      path: 'entries/2026/06/2026-06-09.md',
-    })
-
-    expect(result.mergedText).toContain('local journal text')
-    expect(result.mergedText).toContain('remote journal text')
-    expect(stats.missingContentPaths).toBe(1)
-  })
-
   it('keeps both murmur blocks when both sides append different murmurs at the same location', async () => {
     const stats = createJournalMergeStats()
-    const driver = createJournalMergeDriver('theirs', stats)
     const base = createJournalContent(
       '第一段。\n\n第二段。',
       [
@@ -99,10 +80,14 @@ describe('journal smart merge driver', () => {
       ],
     )
 
-    const result = await driver({
-      branches: ['base', 'main', 'origin/main'],
-      contents: [base, ours, theirs],
+    const result = mergeJournalFileContents({
+      base,
+      ours,
+      oursName: 'main',
       path: '2026-06-09.md',
+      stats,
+      theirs,
+      theirsName: 'origin/main',
     })
 
     expect(result.cleanMerge).toBe(true)
@@ -115,32 +100,30 @@ describe('journal smart merge driver', () => {
     expect(result.mergedText).not.toContain('<<<<<<<')
     expect(stats).toEqual({
       conflictPaths: 0,
-      fallbackPaths: 0,
       journalStructurePaths: 1,
       missingContentPaths: 0,
       markdownPaths: 1,
+      sideChoicePaths: 0,
     })
   })
 
   it('keeps a murmur deleted when the other side leaves it unchanged', async () => {
-    const driver = createJournalMergeDriver()
     const baseMurmur = createMurmurBlock('m_base', '2026-06-09T03:38:16.587Z', '旧碎碎念')
     const base = createJournalContent('', [
       baseMurmur,
     ])
-    const result = await driver({
-      branches: ['base', 'main', 'origin/main'],
-      contents: [
-        base,
-        createJournalContent('', [
-          createMurmurBlock('m_desktop', '2026-06-09T04:15:31.692Z', '桌面新增'),
-        ]),
-        createJournalContent('', [
-          baseMurmur,
-          createMurmurBlock('m_mobile', '2026-06-09T04:15:29.190Z', '移动新增'),
-        ]),
-      ],
+    const result = mergeJournalFileContents({
+      base,
+      ours: createJournalContent('', [
+        createMurmurBlock('m_desktop', '2026-06-09T04:15:31.692Z', '桌面新增'),
+      ]),
+      oursName: 'main',
       path: '2026-06-09.md',
+      theirs: createJournalContent('', [
+        baseMurmur,
+        createMurmurBlock('m_mobile', '2026-06-09T04:15:29.190Z', '移动新增'),
+      ]),
+      theirsName: 'origin/main',
     })
 
     expect(result.cleanMerge).toBe(true)
@@ -153,23 +136,21 @@ describe('journal smart merge driver', () => {
   })
 
   it('keeps conflict markers when one side deletes a murmur changed by the other side', async () => {
-    const driver = createJournalMergeDriver()
     const base = createJournalContent('', [
       createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '原文'),
     ])
-    const result = await driver({
-      branches: ['base', 'main', 'origin/main'],
-      contents: [
-        base,
-        createJournalContent('', [
-          createMurmurBlock('m_desktop', '2026-06-09T04:15:31.692Z', '桌面新增'),
-        ]),
-        createJournalContent('', [
-          createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '移动改动'),
-          createMurmurBlock('m_mobile', '2026-06-09T04:15:29.190Z', '移动新增'),
-        ]),
-      ],
+    const result = mergeJournalFileContents({
+      base,
+      ours: createJournalContent('', [
+        createMurmurBlock('m_desktop', '2026-06-09T04:15:31.692Z', '桌面新增'),
+      ]),
+      oursName: 'main',
       path: '2026-06-09.md',
+      theirs: createJournalContent('', [
+        createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '移动改动'),
+        createMurmurBlock('m_mobile', '2026-06-09T04:15:29.190Z', '移动新增'),
+      ]),
+      theirsName: 'origin/main',
     })
 
     expect(result.cleanMerge).toBe(false)
@@ -179,22 +160,20 @@ describe('journal smart merge driver', () => {
   })
 
   it('keeps conflict markers when both sides change the same murmur id differently', async () => {
-    const driver = createJournalMergeDriver()
     const base = createJournalContent('', [
       createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '原文'),
     ])
-    const result = await driver({
-      branches: ['base', 'main', 'origin/main'],
-      contents: [
-        base,
-        createJournalContent('', [
-          createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '桌面改动'),
-        ]),
-        createJournalContent('', [
-          createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '移动改动'),
-        ]),
-      ],
+    const result = mergeJournalFileContents({
+      base,
+      ours: createJournalContent('', [
+        createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '桌面改动'),
+      ]),
+      oursName: 'main',
       path: '2026-06-09.md',
+      theirs: createJournalContent('', [
+        createMurmurBlock('m_same', '2026-06-09T03:38:16.587Z', '移动改动'),
+      ]),
+      theirsName: 'origin/main',
     })
 
     expect(result.cleanMerge).toBe(false)
@@ -203,17 +182,15 @@ describe('journal smart merge driver', () => {
     expect(result.mergedText).toContain('移动改动')
   })
 
-  it('uses fallback timestamp selection for annotation JSON files', async () => {
+  it('uses updatedAt selection for annotation JSON files', () => {
     const stats = createJournalMergeStats()
-    const driver = createJournalMergeDriver('ours', stats)
-    const result = await driver({
-      branches: ['base', 'ours', 'theirs'],
-      contents: [
-        '{"updatedAt":"2026-06-09T02:00:00.000Z"}',
-        '{"updatedAt":"2026-06-09T02:10:00.000Z","side":"ours"}',
-        '{"updatedAt":"2026-06-09T02:30:00.000Z","side":"theirs"}',
-      ],
+    const result = mergeJournalFileContents({
+      base: '{"updatedAt":"2026-06-09T02:00:00.000Z"}',
+      defaultSide: 'ours',
+      ours: '{"updatedAt":"2026-06-09T02:10:00.000Z","side":"ours"}',
       path: '2026-06-09.json',
+      stats,
+      theirs: '{"updatedAt":"2026-06-09T02:30:00.000Z","side":"theirs"}',
     })
 
     expect(result).toEqual({
@@ -222,31 +199,29 @@ describe('journal smart merge driver', () => {
     })
     expect(stats).toEqual({
       conflictPaths: 0,
-      fallbackPaths: 1,
       journalStructurePaths: 0,
       missingContentPaths: 0,
       markdownPaths: 0,
+      sideChoicePaths: 1,
     })
   })
 
-  it('uses the configured fallback side for non-text files', async () => {
+  it('uses the configured default side for non-text files', () => {
     const stats = createJournalMergeStats()
-    const driver = createJournalMergeDriver('ours', stats)
-    const result = await driver({
-      branches: ['base', 'ours', 'theirs'],
-      contents: [
-        'base-bytes',
-        'ours-bytes',
-        'theirs-bytes',
-      ],
+    const result = mergeJournalFileContents({
+      base: 'base-bytes',
+      defaultSide: 'ours',
+      ours: 'ours-bytes',
       path: 'photo.jpg',
+      stats,
+      theirs: 'theirs-bytes',
     })
 
     expect(result).toEqual({
       cleanMerge: true,
       mergedText: 'ours-bytes',
     })
-    expect(stats.fallbackPaths).toBe(1)
+    expect(stats.sideChoicePaths).toBe(1)
   })
 })
 

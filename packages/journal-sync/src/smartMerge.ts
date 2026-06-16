@@ -9,19 +9,17 @@ import {
   type MurmurBlock,
 } from '@journal/core'
 import diff3Merge from 'diff3'
-import type { MergeDriverCallback } from 'isomorphic-git'
 import {
-  chooseFallbackMergeContent,
-  type FallbackMergeSide,
-} from './lastWriteWins'
-import { getMergeDriverContents } from './mergeDriverContent'
+  chooseStructuredFileMergeContent,
+  type StructuredMergeSide,
+} from './structuredFileMerge'
 
 export type JournalMergeStats = {
   conflictPaths: number
-  fallbackPaths: number
   journalStructurePaths: number
   missingContentPaths: number
   markdownPaths: number
+  sideChoicePaths: number
 }
 
 export type TextMergeInput = {
@@ -37,6 +35,17 @@ export type TextMergeResult = {
   mergedText: string
 }
 
+export type JournalFileMergeInput = {
+  base: string
+  defaultSide?: StructuredMergeSide
+  ours: string
+  oursName?: string
+  path: string
+  stats?: JournalMergeStats
+  theirs: string
+  theirsName?: string
+}
+
 const lineBreaksPattern = /^.*(\r?\n|$)/gm
 const conflictMarkerSize = 7
 const deletedMurmur = Symbol('deletedMurmur')
@@ -44,67 +53,60 @@ const deletedMurmur = Symbol('deletedMurmur')
 export function createJournalMergeStats(): JournalMergeStats {
   return {
     conflictPaths: 0,
-    fallbackPaths: 0,
     journalStructurePaths: 0,
     missingContentPaths: 0,
     markdownPaths: 0,
+    sideChoicePaths: 0,
   }
 }
 
-export function createJournalMergeDriver(
-  fallbackSide: FallbackMergeSide = 'theirs',
-  stats: JournalMergeStats = createJournalMergeStats(),
-): MergeDriverCallback {
-  return ({ branches, contents, path }) => {
-    if (hasMissingMergeContent(contents)) {
-      stats.missingContentPaths += 1
-    }
+export function mergeJournalFileContents(input: JournalFileMergeInput): TextMergeResult {
+  const stats = input.stats ?? createJournalMergeStats()
 
-    const { base, ours, theirs } = getMergeDriverContents(contents)
+  if (isMarkdownPath(input.path)) {
+    stats.markdownPaths += 1
 
-    if (isMarkdownPath(path)) {
-      stats.markdownPaths += 1
-
-      const result = mergeTextDiff3({
-        base,
-        ours,
-        oursName: branches[1] ?? 'ours',
-        theirs,
-        theirsName: branches[2] ?? 'theirs',
-      })
-
-      if (!result.cleanMerge) {
-        const journalMerge = mergeJournalMarkdownStructure({
-          base,
-          ours,
-          theirs,
-        })
-
-        if (journalMerge) {
-          stats.journalStructurePaths += 1
-
-          return journalMerge
-        }
-
-        stats.conflictPaths += 1
-      }
-
-      return result
-    }
-
-    stats.fallbackPaths += 1
-
-    const result = chooseFallbackMergeContent({
-      fallbackSide,
-      ours,
-      path,
-      theirs,
+    const result = mergeTextDiff3({
+      base: input.base,
+      ours: input.ours,
+      oursName: input.oursName,
+      theirs: input.theirs,
+      theirsName: input.theirsName,
     })
 
-    return {
-      cleanMerge: true,
-      mergedText: result.content,
+    if (!result.cleanMerge) {
+      const journalMerge = mergeJournalMarkdownStructure({
+        base: input.base,
+        ours: input.ours,
+        oursName: input.oursName,
+        theirs: input.theirs,
+        theirsName: input.theirsName,
+      })
+
+      if (journalMerge) {
+        stats.journalStructurePaths += 1
+
+        return journalMerge
+      }
+
+      stats.conflictPaths += 1
     }
+
+    return result
+  }
+
+  stats.sideChoicePaths += 1
+
+  const result = chooseStructuredFileMergeContent({
+    defaultSide: input.defaultSide,
+    ours: input.ours,
+    path: input.path,
+    theirs: input.theirs,
+  })
+
+  return {
+    cleanMerge: true,
+    mergedText: result.content,
   }
 }
 
@@ -183,10 +185,6 @@ export function mergeTextDiff3(input: TextMergeInput): TextMergeResult {
 
 function splitMergeLines(content: string) {
   return content.match(lineBreaksPattern) ?? []
-}
-
-function hasMissingMergeContent(contents: readonly unknown[]) {
-  return contents.length < 3 || contents.some((content) => typeof content !== 'string')
 }
 
 function isMarkdownPath(path: string) {

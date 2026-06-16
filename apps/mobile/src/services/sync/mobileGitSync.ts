@@ -4,6 +4,7 @@ import http from 'isomorphic-git/http/web'
 import {
   cloneJournalGitSyncRepository,
   commitJournalChanges,
+  createJournalGitObjectRepairThrottle,
   getJournalGitSyncStatus,
   initJournalGitSyncRepository,
   pullJournalUpdates,
@@ -43,6 +44,7 @@ const defaultAuthorEmail = 'journal-mobile-sync@example.invalid'
 const defaultAuthorName = 'Journal Mobile Sync'
 const defaultCommitMessage = 'Sync mobile journal changes'
 const gitHttpRequestTimeoutMs = 300_000
+const mobileObjectRepairThrottle = createJournalGitObjectRepairThrottle()
 
 export async function getMobileGitSyncStatus(
   config: MobileGitSyncConfig = {},
@@ -154,6 +156,7 @@ async function createMobileGitRuntime(): Promise<JournalGitRuntime> {
     dir: await ensureJournalWorktreeDirectory(),
     fs: createExpoGitFileSystem(),
     http: createMobileGitHttpClient(trace),
+    objectRepairThrottle: mobileObjectRepairThrottle,
     trace,
   }
 }

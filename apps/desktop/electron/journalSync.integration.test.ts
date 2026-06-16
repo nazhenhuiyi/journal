@@ -82,6 +82,7 @@ describe('journal sync desktop adapter', () => {
     })
     await saveJournalGitSyncSnapshot(journalDirectory, {
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -107,6 +108,7 @@ describe('journal sync desktop adapter', () => {
     })
     await saveJournalGitSyncSnapshot(journalDirectory, {
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,

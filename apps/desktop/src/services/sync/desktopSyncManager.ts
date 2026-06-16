@@ -11,6 +11,9 @@ import {
   shouldPersistSyncSnapshot,
   type SyncSnapshotPersistenceIdentity,
 } from '@journal/sync/persistedSnapshot'
+import {
+  getJournalGitAuthenticationErrorMessage,
+} from '@journal/sync/gitCore'
 
 type JournalSyncStore = NonNullable<Window['journalSync']>
 type JournalSyncStatus = Awaited<ReturnType<JournalSyncStore['loadStatus']>>
@@ -267,9 +270,14 @@ class DesktopSyncManager {
       this.lastManualSyncChanged = null
       const snapshot = await this.coordinator.syncNow()
 
-      if (snapshot.status === 'error' || snapshot.status === 'needs-auth' || snapshot.status === 'retrying') {
+      if (
+        snapshot.status === 'blocked' ||
+        snapshot.status === 'error' ||
+        snapshot.status === 'needs-auth' ||
+        snapshot.status === 'retrying'
+      ) {
         this.setState({
-          message: snapshot.lastError ?? '同步失败',
+          message: snapshot.lastError ?? (snapshot.status === 'blocked' ? '同步受阻' : '同步失败'),
           snapshot,
         })
         return snapshot
@@ -365,7 +373,19 @@ class DesktopSyncManager {
         }
       }
 
-      const result = await journalSync.pull()
+      let result: Awaited<ReturnType<JournalSyncStore['pull']>>
+
+      try {
+        result = await journalSync.pull()
+      } catch (error) {
+        const authResult = getAuthFailureOperationResult(error)
+
+        if (authResult) {
+          return authResult
+        }
+
+        throw error
+      }
 
       if (result.changed && binding && !binding.getIsJournalDirty()) {
         await binding.loadJournalForDate(binding.getCurrentJournalDate(), () => !binding.getIsJournalDirty())
@@ -400,9 +420,21 @@ class DesktopSyncManager {
           collectDirtyPathsAfterSync: false,
         }
       : undefined
-    const result = operation === 'full'
-      ? await journalSync.syncNow(operationOptions)
-      : await journalSync.push(operationOptions)
+    let result: Awaited<ReturnType<JournalSyncStore['syncNow']>>
+
+    try {
+      result = operation === 'full'
+        ? await journalSync.syncNow(operationOptions)
+        : await journalSync.push(operationOptions)
+    } catch (error) {
+      const authResult = getAuthFailureOperationResult(error)
+
+      if (authResult) {
+        return authResult
+      }
+
+      throw error
+    }
 
     if (operation === 'full' && trigger === 'manual') {
       this.lastManualSyncChanged = Boolean(result.changed)
@@ -567,6 +599,15 @@ function getCredentialStatusMessage(status: DesktopSyncCredentialStatus) {
   }
 
   return '请先保存 GitHub token。'
+}
+
+function getAuthFailureOperationResult(error: unknown): SyncOperationResult | null {
+  const message = getJournalGitAuthenticationErrorMessage(error)
+
+  return message ? {
+    message,
+    needsAuth: true,
+  } : null
 }
 
 function getErrorMessage(error: unknown) {

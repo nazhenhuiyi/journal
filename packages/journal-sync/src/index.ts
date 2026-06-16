@@ -2,9 +2,11 @@ export {
   assertSafeRemoteUrl,
   createJournalGitAuthenticatedHttpClient,
   createJournalGitAuthHeaders,
+  createJournalGitObjectRepairThrottle,
   cloneJournalGitSyncRepository,
   commitJournalChanges,
   getJournalGitSyncStatus,
+  getJournalGitAuthenticationErrorMessage,
   initJournalGitSyncRepository,
   pullJournalUpdates,
   pushJournalChanges,
@@ -12,6 +14,7 @@ export {
   type JournalGitCredentials,
   type JournalGitHttpClientOptions,
   type JournalGitOperationOptions,
+  type JournalGitObjectRepairThrottle,
   type JournalGitPullResult,
   type JournalGitPushResult,
   type JournalGitRecentCommit,
@@ -26,21 +29,10 @@ export {
   type JournalGitTraceValue,
 } from './gitCore'
 export {
-  chooseFallbackMergeContent,
-  chooseLastWriteWinsContent,
-  createFallbackMergeDriver,
-  createLastWriteWinsMergeDriver,
-  type FallbackMergeInput,
-  type FallbackMergeResult,
-  type FallbackMergeSide,
-  type LastWriteWinsInput,
-  type LastWriteWinsResult,
-  type LastWriteWinsSide,
-} from './lastWriteWins'
-export {
-  createJournalMergeDriver,
   createJournalMergeStats,
+  mergeJournalFileContents,
   mergeTextDiff3,
+  type JournalFileMergeInput,
   type JournalMergeStats,
   type TextMergeInput,
   type TextMergeResult,
@@ -75,6 +67,14 @@ export {
   type JournalSyncStatusPresentationOptions,
   type JournalSyncStatusTone,
 } from './statusPresentation'
+export {
+  createJournalSyncBlockedError,
+  getJournalSyncBlock,
+  JournalSyncBlockedError,
+  normalizeSyncBlock,
+  type SyncBlock,
+  type SyncBlockedReason,
+} from './syncBlock'
 export {
   createConsoleJournalGitTrace,
   createConsoleJournalGitTraceSink,

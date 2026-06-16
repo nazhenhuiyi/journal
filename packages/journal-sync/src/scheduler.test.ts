@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JournalSyncCoordinator, type SyncOperationRequest, type SyncOperationResult } from './scheduler'
+import { createJournalSyncBlockedError } from './syncBlock'
 
 describe('JournalSyncCoordinator', () => {
   beforeEach(() => {
@@ -240,6 +241,7 @@ describe('JournalSyncCoordinator', () => {
 
     expect(runOperation).toHaveBeenCalledOnce()
     expect(coordinator.getSnapshot()).toEqual({
+      block: null,
       lastError: null,
       lastSyncedAt: '2026-06-08T10:00:00.000Z',
       pendingReason: null,
@@ -484,5 +486,124 @@ describe('JournalSyncCoordinator', () => {
 
     expect(coordinator.getSnapshot().status).toBe('retrying')
     expect(runOperation).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks blocked errors without scheduling retry', async () => {
+    const runOperation = vi.fn().mockRejectedValue(createJournalSyncBlockedError({
+      message: 'Resolve the journal conflict before syncing.',
+      paths: ['entries/2026/06/2026-06-08.md'],
+      reason: 'content-conflict',
+    }))
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      retryDelayMs: 300_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-08.md'])
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      block: {
+        paths: ['entries/2026/06/2026-06-08.md'],
+        reason: 'content-conflict',
+      },
+      lastError: 'Resolve the journal conflict before syncing.',
+      pendingReason: null,
+      status: 'blocked',
+    })
+
+    await vi.advanceTimersByTimeAsync(300_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+  })
+
+  it('records local saves without clearing a blocked state', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      initialSnapshot: {
+        block: {
+          message: 'Choose sync direction.',
+          reason: 'first-sync-needs-choice',
+        },
+        lastError: 'Choose sync direction.',
+        lastSyncedAt: null,
+        pendingReason: null,
+        status: 'blocked',
+      },
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-08.md'])
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      block: {
+        reason: 'first-sync-needs-choice',
+      },
+      status: 'blocked',
+    })
+    expect(runOperation).not.toHaveBeenCalled()
+  })
+
+  it('does not let automatic pulls clear a blocked state', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      initialSnapshot: {
+        block: {
+          message: 'Resolve the journal conflict before syncing.',
+          reason: 'content-conflict',
+        },
+        lastError: 'Resolve the journal conflict before syncing.',
+        lastSyncedAt: '2026-06-08T09:00:00.000Z',
+        pendingReason: null,
+        status: 'blocked',
+      },
+      pullIntervalMs: 180_000,
+      runOperation,
+    })
+
+    coordinator.startPulling()
+    expect(vi.getTimerCount()).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(180_001)
+    await coordinator.notifyForeground()
+    await coordinator.notifyNetworkOnline()
+
+    expect(runOperation).not.toHaveBeenCalled()
+    expect(coordinator.getSnapshot()).toMatchObject({
+      block: {
+        reason: 'content-conflict',
+      },
+      lastError: 'Resolve the journal conflict before syncing.',
+      status: 'blocked',
+    })
+  })
+
+  it('clears blocked state after a successful manual sync', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      initialSnapshot: {
+        block: {
+          message: 'Local object store needs repair.',
+          reason: 'object-store-corrupt',
+        },
+        lastError: 'Local object store needs repair.',
+        lastSyncedAt: null,
+        pendingReason: null,
+        status: 'blocked',
+      },
+      runOperation,
+    })
+
+    await coordinator.syncNow()
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      block: null,
+      lastError: null,
+      pendingReason: null,
+      status: 'synced',
+    })
   })
 })

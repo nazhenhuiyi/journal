@@ -152,32 +152,27 @@ describe('createExpoGitFileSystem', () => {
     expect(mockModernFileSystem.state.fileText).toHaveBeenCalledWith('/repo/README.md')
   })
 
-  it('writes Uint8Array values through the modern binary write API', async () => {
+  it('writes Uint8Array values through legacy base64 to avoid native typed-array bridge crashes', async () => {
     const fs = createTestFileSystem()
 
     await fs.promises.writeFile('/repo/.git/objects/blob', new Uint8Array([1, 2, 3]))
 
-    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
-      '/repo/.git/objects/blob',
-      expect.any(Buffer),
-    )
-    const [, writtenBytes] = mockModernFileSystem.state.fileWrite.mock.calls[0]
-
-    expect(Buffer.from(writtenBytes).equals(Buffer.from([1, 2, 3]))).toBe(true)
-  })
-
-  it('falls back to legacy base64 writes when the modern binary write API throws at runtime', async () => {
-    const fs = createTestFileSystem()
-
-    mockModernFileSystem.state.fileWrite.mockImplementationOnce(() => {
-      throw new Error('native bridge failed')
-    })
-
-    await fs.promises.writeFile('/repo/.git/objects/blob', new Uint8Array([1, 2, 3]))
-
+    expect(mockModernFileSystem.state.fileWrite).not.toHaveBeenCalled()
     expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
       '/repo/.git/objects/blob',
       Buffer.from([1, 2, 3]).toString('base64'),
+      { encoding: 'base64' },
+    )
+  })
+
+  it('preserves already-base64 binary strings when writing Git files', async () => {
+    const fs = createTestFileSystem()
+
+    await fs.promises.writeFile('/repo/.git/objects/blob', 'AQID', 'base64')
+
+    expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      '/repo/.git/objects/blob',
+      'AQID',
       { encoding: 'base64' },
     )
   })
@@ -197,9 +192,10 @@ describe('createExpoGitFileSystem', () => {
       '/repo/.git/objects/78',
       { intermediates: true },
     )
-    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
+    expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
       '/repo/.git/objects/78/blob',
-      expect.any(Buffer),
+      Buffer.from([1, 2, 3]).toString('base64'),
+      { encoding: 'base64' },
     )
   })
 

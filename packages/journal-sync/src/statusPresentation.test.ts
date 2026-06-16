@@ -3,6 +3,7 @@ import type { SyncSnapshot } from './scheduler'
 import { getJournalSyncStatusPresentation } from './statusPresentation'
 
 const syncedSnapshot: SyncSnapshot = {
+  block: null,
   lastError: null,
   lastSyncedAt: '2026-06-09T00:00:00.000Z',
   pendingReason: null,
@@ -129,5 +130,30 @@ describe('getJournalSyncStatusPresentation', () => {
     )
 
     expect(presentation.label).toBe('同步受阻')
+  })
+
+  it.each([
+    ['content-conflict', '需要处理冲突'],
+    ['first-sync-needs-choice', '需要选择方向'],
+    ['unrelated-histories', '历史不兼容'],
+    ['object-store-corrupt', '本地仓库需修复'],
+  ] as const)('presents blocked reason %s', (reason, label) => {
+    const presentation = getJournalSyncStatusPresentation(
+      {
+        ...syncedSnapshot,
+        block: {
+          message: '同步需要处理后再继续。',
+          reason,
+        },
+        lastError: '同步需要处理后再继续。',
+        status: 'blocked',
+      },
+      '旧成功文案不应覆盖阻断状态',
+      'https://github.com/example/journal.git',
+      true,
+    )
+
+    expect(presentation.kind).toBe('blocked')
+    expect(presentation.label).toBe(label)
   })
 })

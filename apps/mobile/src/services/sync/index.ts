@@ -1,11 +1,4 @@
 export {
-  chooseLastWriteWinsContent,
-  createLastWriteWinsMergeDriver,
-  type LastWriteWinsInput,
-  type LastWriteWinsResult,
-  type LastWriteWinsSide,
-} from '@journal/sync'
-export {
   clearGitHubSyncCredentials,
   clearGitHubSyncSettings,
   loadGitHubSyncCredentials,

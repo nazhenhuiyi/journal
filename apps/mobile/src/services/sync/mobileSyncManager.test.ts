@@ -1,19 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
+  type MockSyncBlock = {
+    message: string
+    paths?: string[]
+    reason: string
+    retryAfterMs?: number
+  }
+  type MockSyncSnapshot = {
+    block: MockSyncBlock | null
+    lastError: string | null
+    lastSyncedAt: string | null
+    pendingReason: string | null
+    status: string
+  }
+
   let lastCoordinator: MockJournalSyncCoordinator | null = null
   let coordinatorOptions: {
-    onSnapshot?: (snapshot: {
-      lastError: string | null
-      lastSyncedAt: string | null
-      pendingReason: string | null
-      status: string
-    }) => void
+    onSnapshot?: (snapshot: MockSyncSnapshot) => void
     runOperation: (request: {
       changedPaths?: readonly string[]
       operation: 'full' | 'pull' | 'push'
       trigger: string
     }) => Promise<{
+      block?: MockSyncBlock | null
       changed?: boolean
       message?: string
       needsAuth?: boolean
@@ -39,7 +49,7 @@ const mocks = vi.hoisted(() => {
       lastCoordinator = this
     }
 
-    syncNow = vi.fn(async () => {
+    syncNow = vi.fn(async (): Promise<MockSyncSnapshot> => {
       if (!coordinatorOptions) {
         throw new Error('Coordinator options were not captured.')
       }
@@ -48,11 +58,12 @@ const mocks = vi.hoisted(() => {
         operation: 'full',
         trigger: 'manual',
       })
-      const snapshot = {
+      const snapshot: MockSyncSnapshot = {
+        block: result.block ?? null,
         lastError: result.message ?? null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
-        status: result.needsAuth ? 'needs-auth' : 'synced',
+        status: result.block ? 'blocked' : result.needsAuth ? 'needs-auth' : 'synced',
       }
 
       coordinatorOptions.onSnapshot?.(snapshot)
@@ -63,6 +74,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     MockJournalSyncCoordinator,
+    mockGetJournalGitAuthenticationErrorMessage: vi.fn(),
     mockGetMobileGitSyncStatus: vi.fn(),
     mockLoadGitHubSyncCredentials: vi.fn(),
     mockLoadGitHubSyncSettings: vi.fn(),
@@ -102,11 +114,13 @@ vi.mock('@journal/sync', () => ({
     remoteUrl: input.remoteUrl?.trim() ?? '',
   }),
   getDefaultSyncSnapshot: () => ({
+    block: null,
     lastError: null,
     lastSyncedAt: null,
     pendingReason: null,
     status: 'idle',
   }),
+  getJournalGitAuthenticationErrorMessage: mocks.mockGetJournalGitAuthenticationErrorMessage,
   JournalSyncCoordinator: mocks.MockJournalSyncCoordinator,
   shouldPersistSyncSnapshot: (snapshot: {
     lastSyncedAt: string | null
@@ -184,6 +198,7 @@ describe('mobile sync manager', () => {
     })
     mocks.mockLoadPendingMobileSyncPaths.mockResolvedValue([])
     mocks.mockLoadMobileSyncSnapshot.mockResolvedValue(null)
+    mocks.mockGetJournalGitAuthenticationErrorMessage.mockReturnValue(null)
     mocks.mockPullMobileJournalUpdatesFromGitHub.mockResolvedValue({
       dirtyPathsAfterPull: [],
       fetchResult: null,
@@ -279,6 +294,65 @@ describe('mobile sync manager', () => {
     expect(coordinator.stopPulling).toHaveBeenCalledTimes(1)
     expect(coordinator.startPulling).toHaveBeenCalledWith({
       immediate: false,
+    })
+  })
+
+  it('reports blocked manual sync results without treating them as success', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+    const coordinator = mocks.getCoordinator()
+
+    if (!coordinator) {
+      throw new Error('Expected coordinator to be created.')
+    }
+
+    coordinator.syncNow.mockResolvedValueOnce({
+      block: {
+        message: '首次同步前需要选择方向。',
+        reason: 'first-sync-needs-choice',
+      },
+      lastError: '首次同步前需要选择方向。',
+      lastSyncedAt: null,
+      pendingReason: null,
+      status: 'blocked',
+    })
+
+    mobileSyncManager.setSyncRemoteUrl('https://github.com/example/journal-sync.git')
+    mobileSyncManager.setSyncTokenDraft('runtime-token')
+
+    const result = await mobileSyncManager.syncNow()
+
+    expect(result).toMatchObject({
+      alertMessage: '首次同步前需要选择方向。',
+      alertTitle: '同步受阻',
+      ok: false,
+    })
+    expect(mocks.mockGetMobileGitSyncStatus).not.toHaveBeenCalled()
+  })
+
+  it('marks remote authentication failures as needing auth', async () => {
+    const authError = Object.assign(new Error('HTTP Error: 401 Unauthorized'), {
+      data: {
+        statusCode: 401,
+      },
+    })
+
+    mocks.mockSyncMobileJournalWithGitHub.mockRejectedValueOnce(authError)
+    mocks.mockGetJournalGitAuthenticationErrorMessage.mockReturnValueOnce('GitHub token 无效或已过期，请重新保存 token。')
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    mobileSyncManager.setSyncRemoteUrl('https://github.com/example/journal-sync.git')
+    mobileSyncManager.setSyncTokenDraft('runtime-token')
+
+    const result = await mobileSyncManager.syncNow()
+
+    expect(result).toMatchObject({
+      alertMessage: 'GitHub token 无效或已过期，请重新保存 token。',
+      ok: false,
+    })
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      lastError: 'GitHub token 无效或已过期，请重新保存 token。',
+      status: 'needs-auth',
     })
   })
 

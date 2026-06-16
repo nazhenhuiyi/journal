@@ -45,6 +45,8 @@ flowchart LR
 | first commit bootstrap | 新设备本地已有内容且远端已有分支时，会保护本地 paths 并合并重叠文件 |
 | 按变化路径 checkout | fast-forward / merge 后用 `git.walk()` 计算变化路径，只 checkout 变化的 tracked paths |
 
+`changedPaths` 不是 isomorphic-git 的 `filepaths` 直通语义。空 `changedPaths` 只能代表“本轮没有已知待提交路径”；首次同步要判断本地是否确实为空时，core 会扫描受管范围，或由调用方显式声明 `firstSyncLocalContent: 'empty'`。
+
 ## 3. 快路径与慢路径
 
 保存一篇普通日记的理想快路径：
@@ -100,7 +102,7 @@ flowchart TD
 | `commit.status.globalFallback` | 是否退回全量 tracked scope |
 | `remote.fetchSkipped.reason` | fetch 跳过原因，目前主要是 `remote-unchanged` |
 | `pull.postFetchDirtyStatus.skipped` | 已知 paths 场景下是否跳过 pull 前 dirty 扫描 |
-| `merge.strategy` | Markdown / JSON 合并策略统计：`markdownPaths`、`journalStructurePaths`、`fallbackPaths`、`conflictPaths` |
+| `merge.strategy` | Markdown / JSON 合并策略统计：`markdownPaths`、`journalStructurePaths`、`sideChoicePaths`、`conflictPaths` |
 | `checkout.*Diff.paths` | merge / fast-forward 后实际 checkout 的 tracked 路径数量 |
 | `http.gitRequest` | 移动端 Git HTTP 方法、host、service、状态码和耗时 |
 

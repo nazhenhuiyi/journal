@@ -1,4 +1,5 @@
 import type { SyncSnapshot } from './scheduler'
+import type { SyncBlock } from './syncBlock'
 
 export type JournalSyncStatusTone =
   | 'idle'
@@ -10,6 +11,7 @@ export type JournalSyncStatusTone =
   | 'danger'
 
 export type JournalSyncStatusKind =
+  | 'blocked'
   | 'configured'
   | 'error'
   | 'local-error'
@@ -109,6 +111,10 @@ export function getJournalSyncStatusPresentation(
     }
   }
 
+  if (syncSnapshot.status === 'blocked') {
+    return getBlockedStatusPresentation(syncSnapshot.block, syncSnapshot.lastError)
+  }
+
   if (syncMessage) {
     const isDanger = syncSnapshot.status === 'error'
     const isWarning = syncSnapshot.status === 'retrying'
@@ -180,6 +186,54 @@ export function getJournalSyncStatusPresentation(
     kind: 'pending',
     label: '已保存',
     tone: 'success',
+  }
+}
+
+function getBlockedStatusPresentation(
+  block: SyncBlock | null,
+  fallbackMessage: string | null,
+): JournalSyncStatusPresentation {
+  if (block?.reason === 'content-conflict') {
+    return {
+      detail: block.message,
+      kind: 'blocked',
+      label: '需要处理冲突',
+      tone: 'danger',
+    }
+  }
+
+  if (block?.reason === 'first-sync-needs-choice') {
+    return {
+      detail: block.message,
+      kind: 'blocked',
+      label: '需要选择方向',
+      tone: 'warning',
+    }
+  }
+
+  if (block?.reason === 'unrelated-histories') {
+    return {
+      detail: block.message,
+      kind: 'blocked',
+      label: '历史不兼容',
+      tone: 'danger',
+    }
+  }
+
+  if (block?.reason === 'object-store-corrupt') {
+    return {
+      detail: block.message,
+      kind: 'blocked',
+      label: '本地仓库需修复',
+      tone: 'danger',
+    }
+  }
+
+  return {
+    detail: fallbackMessage ?? '同步受阻，需要处理后再继续。',
+    kind: 'blocked',
+    label: '同步受阻',
+    tone: 'danger',
   }
 }
 

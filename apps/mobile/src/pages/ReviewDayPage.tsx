@@ -92,7 +92,7 @@ export function ReviewDayPage({ date, onBack, onPreviewImage }: ReviewDayPagePro
 
               {record.longEntryMarkdown.trim() ? (
                 <View className="rounded-lg border border-border bg-surface px-4 py-4">
-                  <Text className="text-base leading-7 text-foreground">{record.longEntryMarkdown.trim()}</Text>
+                  <Text className="text-[18px] leading-8 text-foreground">{record.longEntryMarkdown.trim()}</Text>
                 </View>
               ) : null}
 

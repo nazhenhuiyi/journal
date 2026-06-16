@@ -138,6 +138,7 @@ describe('mobile diagnostic package', () => {
 
 function createSnapshot(input: Partial<SyncSnapshot> = {}): SyncSnapshot {
   return {
+    block: input.block ?? null,
     lastError: null,
     lastSyncedAt: null,
     pendingReason: null,

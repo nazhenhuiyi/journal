@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  chooseFallbackMergeContent,
-  createFallbackMergeDriver,
-} from './lastWriteWins'
+import { chooseStructuredFileMergeContent } from './structuredFileMerge'
 
-describe('chooseFallbackMergeContent', () => {
+describe('chooseStructuredFileMergeContent', () => {
   it('does not use journal markdown updatedAt to choose a whole-file winner', () => {
     const ours = [
       '---',
@@ -23,14 +20,14 @@ describe('chooseFallbackMergeContent', () => {
       'theirs',
     ].join('\n')
 
-    expect(chooseFallbackMergeContent({
-      fallbackSide: 'ours',
+    expect(chooseStructuredFileMergeContent({
+      defaultSide: 'ours',
       ours,
       path: 'entries/2026/06/2026-06-08.md',
       theirs,
     })).toEqual({
       content: ours,
-      reason: 'fallback',
+      reason: 'default-side',
       side: 'ours',
     })
   })
@@ -61,41 +58,23 @@ describe('chooseFallbackMergeContent', () => {
       version: 1,
     })
 
-    expect(chooseFallbackMergeContent({
+    expect(chooseStructuredFileMergeContent({
       ours,
       path: 'annotations/2026/06/2026-06-08.json',
       theirs,
     }).side).toBe('ours')
   })
 
-  it('uses the configured fallback when no timestamp is available', () => {
-    expect(chooseFallbackMergeContent({
-      fallbackSide: 'ours',
+  it('uses the configured default side when no timestamp is available', () => {
+    expect(chooseStructuredFileMergeContent({
+      defaultSide: 'ours',
       ours: 'local',
       path: 'media/2026/06/img.txt',
       theirs: 'remote',
     })).toEqual({
       content: 'local',
-      reason: 'fallback',
+      reason: 'default-side',
       side: 'ours',
-    })
-  })
-
-  it('treats missing merge driver contents as empty text', async () => {
-    const driver = createFallbackMergeDriver('ours')
-    const result = await driver({
-      branches: ['base', 'ours', 'theirs'],
-      contents: [
-        '',
-        undefined as unknown as string,
-        'remote',
-      ],
-      path: 'media/2026/06/img.txt',
-    })
-
-    expect(result).toEqual({
-      cleanMerge: true,
-      mergedText: '',
     })
   })
 })

@@ -2,8 +2,13 @@ import {
   getDefaultSyncSnapshot,
   normalizeRestoredSyncSnapshot,
 } from './persistedSnapshot'
+import {
+  getJournalSyncBlock,
+  type SyncBlock,
+} from './syncBlock'
 
 export type SyncState =
+  | 'blocked'
   | 'disabled'
   | 'idle'
   | 'pending'
@@ -26,6 +31,7 @@ export type SyncOperation = 'full' | 'pull' | 'push'
 export type SyncPendingReason = 'local-save' | 'remote-check' | 'retry'
 
 export type SyncSnapshot = {
+  block: SyncBlock | null
   lastError: string | null
   lastSyncedAt: string | null
   pendingReason: SyncPendingReason | null
@@ -39,6 +45,7 @@ export type SyncOperationRequest = {
 }
 
 export type SyncOperationResult = {
+  block?: SyncBlock | null
   changed?: boolean
   message?: string
   needsAuth?: boolean
@@ -136,7 +143,13 @@ export class JournalSyncCoordinator {
   private markLocalChangesPending() {
     this.clearPushTimer()
     this.clearRetryTimer()
+
+    if (this.snapshot.status === 'blocked') {
+      return
+    }
+
     this.updateSnapshot({
+      block: null,
       lastError: null,
       pendingReason: 'local-save',
       status: 'pending',
@@ -149,6 +162,10 @@ export class JournalSyncCoordinator {
 
   startPulling(options: { immediate?: boolean } = {}) {
     this.stopPulling()
+
+    if (this.snapshot.status === 'blocked') {
+      return
+    }
 
     if (options.immediate ?? true) {
       void this.pullNow('app-open')
@@ -229,6 +246,10 @@ export class JournalSyncCoordinator {
   }
 
   private async runSingleFlight(operation: SyncOperation, trigger: SyncTrigger): Promise<SyncSnapshot> {
+    if (!this.shouldRunOperation(operation, trigger)) {
+      return this.snapshot
+    }
+
     if (this.activeRun) {
       if (operation === 'pull' && trigger === 'pull-interval') {
         return this.activeRun.then(() => this.snapshot)
@@ -245,6 +266,7 @@ export class JournalSyncCoordinator {
 
     if (this.shouldSurfaceSyncing(operation, trigger)) {
       this.updateSnapshot({
+        block: null,
         lastError: null,
         status: 'syncing',
       })
@@ -289,15 +311,19 @@ export class JournalSyncCoordinator {
       const request = this.createOperationRequest(operation, trigger)
       const result = await this.options.runOperation(request)
 
-      if (result.needsAuth) {
+      if (result.block) {
+        this.markBlocked(result.block)
+      } else if (result.needsAuth) {
         this.clearRetryTimer()
         this.updateSnapshot({
+          block: null,
           lastError: result.message ?? null,
           pendingReason: null,
           status: 'needs-auth',
         })
       } else if (operation === 'pull' && this.pushTimeoutHandle !== null) {
         this.updateSnapshot({
+          block: null,
           lastError: null,
           pendingReason: 'local-save',
           status: 'pending',
@@ -306,6 +332,7 @@ export class JournalSyncCoordinator {
         this.markLocalChangesPending()
       } else if (result.skipped && operation === 'pull') {
         this.updateSnapshot({
+          block: null,
           pendingReason: null,
           status: this.snapshot.lastSyncedAt ? 'synced' : 'idle',
         })
@@ -315,6 +342,7 @@ export class JournalSyncCoordinator {
         this.clearRetryTimer()
         this.clearCompletedLocalChanges(operation)
         this.updateSnapshot({
+          block: null,
           lastError: null,
           lastSyncedAt: this.now().toISOString(),
           pendingReason: null,
@@ -322,8 +350,16 @@ export class JournalSyncCoordinator {
         })
       }
     } catch (error) {
+      const block = getJournalSyncBlock(error)
+
+      if (block) {
+        this.markBlocked(block)
+        return this.snapshot
+      }
+
       if (operation === 'pull' && this.pushTimeoutHandle !== null) {
         this.updateSnapshot({
+          block: null,
           lastError: null,
           pendingReason: 'local-save',
           status: 'pending',
@@ -337,6 +373,7 @@ export class JournalSyncCoordinator {
       }
 
       this.updateSnapshot({
+        block: null,
         lastError: getErrorMessage(error),
         pendingReason: operation === 'pull' ? 'remote-check' : 'retry',
         status: operation === 'pull' ? 'error' : 'retrying',
@@ -349,6 +386,17 @@ export class JournalSyncCoordinator {
     }
 
     return this.snapshot
+  }
+
+  private markBlocked(block: SyncBlock) {
+    this.clearPushTimer()
+    this.clearRetryTimer()
+    this.updateSnapshot({
+      block,
+      lastError: block.message,
+      pendingReason: null,
+      status: 'blocked',
+    })
   }
 
   private createLeaveTimeout() {
@@ -455,6 +503,14 @@ export class JournalSyncCoordinator {
 
   private shouldSurfaceSyncing(operation: SyncOperation, trigger: SyncTrigger) {
     return operation !== 'pull' || trigger === 'manual'
+  }
+
+  private shouldRunOperation(operation: SyncOperation, trigger: SyncTrigger) {
+    if (this.snapshot.status !== 'blocked') {
+      return true
+    }
+
+    return operation === 'full' && trigger === 'manual'
   }
 
   private get leaveFlushTimeoutMs() {

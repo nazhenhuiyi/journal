@@ -58,7 +58,7 @@ manifest.json
 
 | 路径 | 用户意义 | 同步策略 |
 | --- | --- | --- |
-| `entries/` | 长日记、碎碎念、天气和位置 front matter | Markdown 日记合并，冲突时停止 |
+| `entries/` | 长日记、碎碎念、天气和位置 front matter | 受管 Markdown 日记合并，冲突时停止；临时和隐藏文件不纳入同步 |
 | `media/` | 用户导入的图片和媒体 | 文件整体同步，冲突时远端版本胜出 |
 | `annotations/` | 旧批注数据 | JSON 时间字段选较新，否则选边 |
 | `reviews/` | 当天回顾展示快照 | JSON 时间字段选较新，否则选边 |
@@ -83,7 +83,7 @@ manifest.json
 - 执行日记领域合并，生成 fast-forward 或 merge commit。
 - 对可恢复 Git 对象库问题做本地自愈。
 - 给应用层返回 dirty paths、sync result、错误和 trace。
-- 维护跨端一致的调度状态机：pending、syncing、synced、retrying、needs-auth、error。
+- 维护跨端一致的调度状态机：pending、syncing、synced、retrying、needs-auth、blocked、error。
 - 记录足够定位问题的同步 trace，但不记录 token、Authorization header、请求体、日记正文或完整私密 URL。
 
 ### 4.2 应用层应该负责
@@ -127,7 +127,7 @@ manifest.json
 | 本地已有 conflict markers | 继续提交会把冲突标记推到远端 | 先解决冲突再同步 |
 | 首次同步本地和远端都有历史 | 自动提交会制造历史断裂 | 让用户选择方向 |
 | 本地和远端无共同祖先 | 合并语义不可信 | 做一次性迁移或重建 |
-| token 缺失、失效或损坏 | 无法认证远端 | 重新登录 / 保存 token |
+| token 缺失、失效、权限不足或损坏 | 无法认证远端 | 重新登录 / 保存 token，并检查仓库权限 |
 | remote URL 内含凭据 | 有泄露风险 | 拒绝保存地址 |
 | 对象库修复后仍不可读 | 无法证明 merge 输入完整 | 节流后提示修复 |
 | 受管范围外的本地编辑 | 应用不理解语义 | 不作为日记内容提交 |
@@ -207,7 +207,6 @@ manifest.json
 这些是从用户故事看仍然欠缺的产品能力：
 
 - 冲突还缺专门页面：用户不能直观看到本机 / 远端 / 合并草稿。
-- 阻断状态还不够结构化：`error` 里混有认证、冲突、历史断裂、对象库异常等不同问题。
 - 首次同步方向选择还需要 UI：保留本地、导入远端、合并为草稿。
 - 大媒体治理还不足：同步能搬运图片，但不能帮助用户理解仓库体积。
 - 对象库修复失败后的用户指引还偏底层：应该解释为“本地同步仓库损坏，需要修复或重新拉取”，而不是暴露 Git 错误。

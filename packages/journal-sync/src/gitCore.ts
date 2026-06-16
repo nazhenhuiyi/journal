@@ -10,14 +10,47 @@ import type {
 } from 'isomorphic-git'
 import * as defaultGit from 'isomorphic-git'
 import {
-  createJournalMergeDriver,
+  createJournalGitAuthenticatedHttpClient,
+  type JournalGitCredentials,
+} from './gitAuth'
+import {
   createJournalMergeStats,
 } from './smartMerge'
+import { runJournalDomainMergeOperation } from './journalDomainMerge'
+import {
+  getBranchName,
+  getLocalBranchRef,
+  getRemoteBranchRef,
+  getRemoteTrackingBranchRef,
+} from './gitRefs'
+import {
+  isCommitReadable,
+  rebuildMissingPackIndexesForCommit,
+  type MissingPackIndexRepairResult,
+} from './gitObjectRepair'
+import {
+  createJournalGitObjectRepairThrottle,
+  type JournalGitObjectRepairThrottle,
+} from './gitObjectRepairThrottle'
+import {
+  isSafeRepositoryPath,
+  isTrackedJournalEntryPath,
+  isTrackedJournalPath,
+  normalizeCheckoutFilepaths,
+  normalizeRepositoryPath,
+  trackedStatusFilepaths,
+} from './trackedPaths'
+import {
+  createJournalSyncBlockedError,
+} from './syncBlock'
 
-export type JournalGitCredentials = {
-  token: string
-  username?: string
-}
+export {
+  createJournalGitAuthenticatedHttpClient,
+  createJournalGitAuthHeaders,
+  getJournalGitAuthenticationErrorMessage,
+  type JournalGitCredentials,
+  type JournalGitHttpClientOptions,
+} from './gitAuth'
 
 export type JournalGitSyncConfig = {
   authorEmail?: string
@@ -31,6 +64,7 @@ export type JournalGitSyncConfig = {
 export type JournalGitOperationOptions = {
   changedPaths?: readonly string[]
   collectDirtyPathsAfterSync?: boolean
+  firstSyncLocalContent?: 'empty' | 'unknown'
   skipDirtyCheckBeforeMerge?: boolean
 }
 
@@ -45,6 +79,11 @@ export type JournalGitTraceEvent = {
 }
 export type JournalGitTrace = (event: JournalGitTraceEvent) => void
 
+export {
+  createJournalGitObjectRepairThrottle,
+  type JournalGitObjectRepairThrottle,
+} from './gitObjectRepairThrottle'
+
 export type JournalGitRuntime = {
   cache: object
   dir: string
@@ -52,11 +91,8 @@ export type JournalGitRuntime = {
   git?: typeof defaultGit
   http: HttpClient
   httpRequestTimeoutMs?: number | null
+  objectRepairThrottle?: JournalGitObjectRepairThrottle
   trace?: JournalGitTrace
-}
-
-export type JournalGitHttpClientOptions = {
-  requestTimeoutMs?: number | null
 }
 
 export type JournalGitRecentCommit = {
@@ -110,29 +146,22 @@ export type JournalGitPullResult = {
 type PromiseGitFileSystem = {
   promises: {
     readFile?: (path: string, options?: unknown) => Promise<string | Uint8Array>
+    readdir?: (path: string) => Promise<string[]>
     stat: (path: string) => Promise<unknown>
     unlink?: (path: string) => Promise<void>
+    writeFile?: (path: string, data: string | Uint8Array, options?: unknown) => Promise<void>
   }
 }
 
-type Base64Buffer = {
-  toString: (encoding: 'base64') => string
-}
-
-type Base64BufferConstructor = {
-  from: (value: string, encoding: 'utf8') => Base64Buffer
-}
-
-type Base64RuntimeGlobals = {
-  Buffer?: Base64BufferConstructor
-}
-
-type JournalGitHttpRequest = Parameters<HttpClient['request']>[0]
-type JournalGitHttpResponse = Awaited<ReturnType<HttpClient['request']>>
-
 type RemoteFetchDecision = {
   fetchResult: FetchResult | null
+  repairCooldownKey: string | null
+  restoredTrackingObjectFromPack: boolean
   skipped: boolean
+}
+
+type RemoteMergeRepairHints = {
+  preferRetryWithoutRefetch?: boolean
 }
 
 const defaultAuthorEmail = 'journal-sync@example.invalid'
@@ -140,151 +169,8 @@ const defaultAuthorName = 'Journal Sync'
 const defaultBranch = 'main'
 const defaultCommitMessage = 'Sync journal changes'
 const defaultRemote = 'origin'
-const trackedPathPrefixes = [
-  'annotations/',
-  'entries/',
-  'media/',
-  'reviews/',
-]
-const trackedPathFiles = new Set(['manifest.json'])
-const trackedStatusFilepaths = [
-  ...trackedPathPrefixes.map((pathPrefix) => pathPrefix.slice(0, -1)),
-  ...trackedPathFiles,
-]
-const journalEntryPathPattern = /^entries\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.md$/
-const journalAnnotationPathPattern = /^annotations\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/
-const journalReviewPathPattern = /^reviews\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.json$/
-
-export function createJournalGitAuthenticatedHttpClient(
-  http: HttpClient,
-  credentials?: JournalGitCredentials | null,
-  options: JournalGitHttpClientOptions = {},
-): HttpClient {
-  return {
-    ...http,
-    request: async (request) => {
-      const requestTimeoutMs = normalizeGitHttpRequestTimeoutMs(options.requestTimeoutMs)
-      const authenticatedRequest = {
-        ...request,
-        headers: createJournalGitAuthHeaders(request.headers, credentials),
-      }
-      const timeoutAt = requestTimeoutMs === null ? null : Date.now() + requestTimeoutMs
-      const response = await withGitHttpRequestTimeout(
-        http.request(authenticatedRequest),
-        timeoutAt,
-        authenticatedRequest,
-        requestTimeoutMs,
-      )
-
-      if (!response.body || timeoutAt === null || requestTimeoutMs === null) {
-        return response
-      }
-
-      return {
-        ...response,
-        body: withGitHttpBodyTimeout(
-          response.body,
-          timeoutAt,
-          authenticatedRequest,
-          requestTimeoutMs,
-        ),
-      }
-    },
-  }
-}
-
-export function createJournalGitAuthHeaders(
-  headers: Record<string, string> | undefined,
-  credentials?: JournalGitCredentials | null,
-) {
-  const nextHeaders = {
-    ...(headers ?? {}),
-  }
-
-  if (!credentials?.token || hasAuthorizationHeader(nextHeaders)) {
-    return nextHeaders
-  }
-
-  nextHeaders.Authorization = `Basic ${encodeBase64(
-    `${getJournalGitAuthUsername(credentials)}:${credentials.token}`,
-  )}`
-
-  return nextHeaders
-}
-
-function normalizeGitHttpRequestTimeoutMs(requestTimeoutMs: number | null | undefined) {
-  if (requestTimeoutMs === undefined || requestTimeoutMs === null) {
-    return null
-  }
-
-  return Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : null
-}
-
-async function withGitHttpRequestTimeout<T>(
-  promise: Promise<T>,
-  timeoutAt: number | null,
-  request: JournalGitHttpRequest,
-  requestTimeoutMs: number | null,
-): Promise<T> {
-  if (timeoutAt === null || requestTimeoutMs === null) {
-    return promise
-  }
-
-  const remainingMs = timeoutAt - Date.now()
-
-  if (remainingMs <= 0) {
-    throw createGitHttpRequestTimeoutError(request, requestTimeoutMs)
-  }
-
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(createGitHttpRequestTimeoutError(request, requestTimeoutMs))
-    }, remainingMs)
-  })
-
-  return Promise.race([
-    promise,
-    timeout,
-  ]).finally(() => {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId)
-    }
-  })
-}
-
-async function* withGitHttpBodyTimeout(
-  body: NonNullable<JournalGitHttpResponse['body']>,
-  timeoutAt: number,
-  request: JournalGitHttpRequest,
-  requestTimeoutMs: number,
-): AsyncIterableIterator<Uint8Array> {
-  const iterator = body[Symbol.asyncIterator]()
-
-  while (true) {
-    const result = await withGitHttpRequestTimeout(
-      iterator.next(),
-      timeoutAt,
-      request,
-      requestTimeoutMs,
-    )
-
-    if (result.done) {
-      return
-    }
-
-    yield result.value
-  }
-}
-
-function createGitHttpRequestTimeoutError(
-  request: JournalGitHttpRequest,
-  requestTimeoutMs: number,
-) {
-  return new Error(
-    `GitHub 请求超时（${Math.round(requestTimeoutMs / 1000)} 秒）：${request.method ?? 'GET'} ${request.url}`,
-  )
-}
+const missingObjectRefetchCooldownMs = 10 * 60 * 1000
+const defaultObjectRepairThrottle = createJournalGitObjectRepairThrottle()
 
 function createAuthenticatedRuntimeHttpClient(
   runtime: JournalGitRuntime,
@@ -868,6 +754,102 @@ async function readCommit(runtime: JournalGitRuntime, oid: string): Promise<Read
   })
 }
 
+async function repairMissingPackIndexForCommit(
+  runtime: JournalGitRuntime,
+  oid: string,
+  traceName: string,
+): Promise<MissingPackIndexRepairResult> {
+  return traceGitStep(
+    runtime,
+    traceName,
+    () => rebuildMissingPackIndexesForCommit(runtime, oid),
+    (result) => ({
+      failedPacks: result.failedPacks,
+      indexedPacks: result.indexedPacks,
+      orphanPacks: result.orphanPacks,
+      restored: result.restored,
+      targetOid: shortTraceOid(oid),
+      unavailableReason: result.unavailableReason,
+    }),
+  )
+}
+
+function createMissingObjectRefetchCooldownKey(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+  oid: string,
+) {
+  return [
+    runtime.dir,
+    remote,
+    getBranchName(branch),
+    oid,
+  ].join('\0')
+}
+
+async function assertMissingObjectRefetchAllowed(
+  runtime: JournalGitRuntime,
+  cooldownKey: string | null,
+  traceName: string,
+  details: JournalGitTraceDetails,
+) {
+  if (!cooldownKey) {
+    return
+  }
+
+  const remainingMs = getMissingObjectRefetchCooldownRemainingMs(runtime, cooldownKey)
+
+  if (remainingMs <= 0) {
+    return
+  }
+
+  await traceGitStep(runtime, traceName, async () => {
+    throw createObjectStoreCorruptBlockedError({
+      message: `本地同步仓库对象库仍不可读，已暂缓重新下载以避免反复消耗流量。请稍后手动同步，或重新修复本地同步仓库。剩余等待时间：${Math.ceil(remainingMs / 1000)} 秒。`,
+      retryAfterMs: remainingMs,
+    })
+  }, {
+    ...details,
+    cooldownMs: missingObjectRefetchCooldownMs,
+    remainingMs,
+  })
+}
+
+function getMissingObjectRefetchCooldownRemainingMs(runtime: JournalGitRuntime, cooldownKey: string) {
+  const objectRepairThrottle = getObjectRepairThrottle(runtime)
+  const attemptedAt = objectRepairThrottle.getAttemptedAt(cooldownKey)
+
+  if (!attemptedAt) {
+    return 0
+  }
+
+  const remainingMs = attemptedAt + missingObjectRefetchCooldownMs - Date.now()
+
+  if (remainingMs <= 0) {
+    objectRepairThrottle.clearAttempt(cooldownKey)
+    return 0
+  }
+
+  return remainingMs
+}
+
+function rememberMissingObjectRefetchAttempt(runtime: JournalGitRuntime, cooldownKey: string | null) {
+  if (cooldownKey) {
+    getObjectRepairThrottle(runtime).rememberAttempt(cooldownKey, Date.now())
+  }
+}
+
+function clearMissingObjectRefetchAttempt(runtime: JournalGitRuntime, cooldownKey: string | null) {
+  if (cooldownKey) {
+    getObjectRepairThrottle(runtime).clearAttempt(cooldownKey)
+  }
+}
+
+function getObjectRepairThrottle(runtime: JournalGitRuntime) {
+  return runtime.objectRepairThrottle ?? defaultObjectRepairThrottle
+}
+
 async function fetchRemote(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
@@ -899,6 +881,63 @@ async function fetchRemoteIfRemoteChanged(
   const remoteTrackingOid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
 
   if (remoteBranchOid && remoteTrackingOid && remoteBranchOid === remoteTrackingOid) {
+    if (!(await isCommitReadable(runtime, remoteTrackingOid))) {
+      const packRepair = await repairMissingPackIndexForCommit(
+        runtime,
+        remoteTrackingOid,
+        'remote.packIndexRepair',
+      )
+
+      if (packRepair.restored && await isCommitReadable(runtime, remoteTrackingOid)) {
+        return {
+          fetchResult: null,
+          repairCooldownKey: null,
+          restoredTrackingObjectFromPack: true,
+          skipped: false,
+        }
+      }
+
+      const repairCooldownKey = createMissingObjectRefetchCooldownKey(
+        runtime,
+        remote,
+        branch,
+        remoteTrackingOid,
+      )
+
+      await assertMissingObjectRefetchAllowed(
+        runtime,
+        repairCooldownKey,
+        'remote.fetchRepairThrottled',
+        {
+          branch,
+          reason: 'missing-tracking-object',
+          remote,
+          remoteTrackingOid: shortTraceOid(remoteTrackingOid),
+        },
+      )
+      await traceGitStep(runtime, 'remote.fetchRepair', async () => {
+        await clearRemoteTrackingBranchRef(runtime, remote, branch)
+        return null
+      }, {
+        branch,
+        indexedPacks: packRepair.indexedPacks,
+        reason: 'missing-tracking-object',
+        remote,
+        remoteTrackingOid: shortTraceOid(remoteTrackingOid),
+        restoredFromPack: packRepair.restored,
+      })
+      const fetchResult = await fetchRemote(runtime, config, credentials)
+
+      rememberMissingObjectRefetchAttempt(runtime, repairCooldownKey)
+
+      return {
+        fetchResult,
+        repairCooldownKey,
+        restoredTrackingObjectFromPack: false,
+        skipped: false,
+      }
+    }
+
     await traceGitStep(runtime, 'remote.fetchSkipped', async () => null, {
       branch,
       reason: 'remote-unchanged',
@@ -907,12 +946,16 @@ async function fetchRemoteIfRemoteChanged(
 
     return {
       fetchResult: null,
+      repairCooldownKey: null,
+      restoredTrackingObjectFromPack: false,
       skipped: true,
     }
   }
 
   return {
     fetchResult: await fetchRemote(runtime, config, credentials),
+    repairCooldownKey: null,
+    restoredTrackingObjectFromPack: false,
     skipped: false,
   }
 }
@@ -926,6 +969,10 @@ async function assertCanCreateFirstLocalCommit(
   const branch = getBranchName(config.branch ?? defaultBranch)
 
   if (await hasLocalBranchCommit(runtime, branch)) {
+    return
+  }
+
+  if (options.firstSyncLocalContent === 'empty') {
     return
   }
 
@@ -950,7 +997,7 @@ async function getFirstCommitDirtyPaths(
 ) {
   const knownChangedPaths = normalizeKnownChangedPaths(options.changedPaths)
 
-  if (knownChangedPaths) {
+  if (knownChangedPaths && knownChangedPaths.length > 0) {
     return knownChangedPaths
   }
 
@@ -990,22 +1037,23 @@ async function mergeRemoteBranch(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  repairHints: RemoteMergeRepairHints = {},
 ) {
   const branch = getBranchName(config.branch ?? defaultBranch)
   const remote = config.remote ?? defaultRemote
   const mergeStats = createJournalMergeStats()
 
   try {
-    const mergeResult = await runRemoteMerge(runtime, config, mergeStats, 'remote.merge')
+    const mergeResult = await runJournalDomainMerge(runtime, config, mergeStats, 'remote.merge')
 
     await traceGitStep(runtime, 'merge.strategy', async () => null, {
       clean: mergeStats.conflictPaths === 0,
       conflictPaths: mergeStats.conflictPaths,
-      fallbackPaths: mergeStats.fallbackPaths,
       journalStructurePaths: mergeStats.journalStructurePaths,
       markdownPaths: mergeStats.markdownPaths,
       result: getMergeResultKind(mergeResult),
-      strategy: 'markdown-diff3-fallback-lww',
+      sideChoicePaths: mergeStats.sideChoicePaths,
+      strategy: 'journal-domain-merge',
     })
 
     return mergeResult
@@ -1013,28 +1061,79 @@ async function mergeRemoteBranch(
     if (isRecoverableInternalMergeError(error)) {
       const retryStats = createJournalMergeStats()
 
-      await traceGitStep(runtime, 'remote.mergeRepair', async () => {
+      const repairResult = await traceGitStep(runtime, 'remote.mergeRepair', async () => {
+        const remoteTrackingOid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
+        const packRepair = remoteTrackingOid
+          ? await repairMissingPackIndexForCommit(
+            runtime,
+            remoteTrackingOid,
+            'remote.mergePackIndexRepair',
+          )
+          : null
+
+        const canRetryWithoutRefetch = remoteTrackingOid &&
+          (packRepair?.restored || repairHints.preferRetryWithoutRefetch) &&
+          await isCommitReadable(runtime, remoteTrackingOid)
+
+        if (remoteTrackingOid && canRetryWithoutRefetch) {
+          return {
+            indexedPacks: packRepair?.indexedPacks ?? 0,
+            refetched: false,
+            repairCooldownKey: null,
+            retryWithoutRefetch: true,
+            restoredFromPack: Boolean(packRepair?.restored || repairHints.preferRetryWithoutRefetch),
+          }
+        }
+
+        const repairCooldownKey = remoteTrackingOid
+          ? createMissingObjectRefetchCooldownKey(runtime, remote, branch, remoteTrackingOid)
+          : null
+
+        await assertMissingObjectRefetchAllowed(
+          runtime,
+          repairCooldownKey,
+          'remote.mergeRefetchThrottled',
+          {
+            branch,
+            reason: 'merge-repair-refetch',
+            remote,
+            remoteTrackingOid: shortTraceOid(remoteTrackingOid),
+          },
+        )
         await clearRemoteTrackingBranchRef(runtime, remote, branch)
         await fetchRemote(runtime, config, credentials, 'remote.refetchAfterMergeError')
-        return null
-      }, {
+        rememberMissingObjectRefetchAttempt(runtime, repairCooldownKey)
+
+        return {
+          indexedPacks: packRepair?.indexedPacks ?? 0,
+          refetched: true,
+          repairCooldownKey,
+          retryWithoutRefetch: false,
+          restoredFromPack: false,
+        }
+      }, (result) => ({
         branch,
         error: getErrorMessage(error),
+        indexedPacks: result.indexedPacks,
+        refetched: result.refetched,
         remote,
-      })
+        retryWithoutRefetch: result.retryWithoutRefetch,
+        restoredFromPack: result.restoredFromPack,
+      }))
 
       try {
-        const retryResult = await runRemoteMerge(runtime, config, retryStats, 'remote.mergeRetry')
+        const retryResult = await runJournalDomainMerge(runtime, config, retryStats, 'remote.mergeRetry')
 
         await traceGitStep(runtime, 'merge.strategy', async () => null, {
           clean: retryStats.conflictPaths === 0,
           conflictPaths: retryStats.conflictPaths,
-          fallbackPaths: retryStats.fallbackPaths,
           journalStructurePaths: retryStats.journalStructurePaths,
           markdownPaths: retryStats.markdownPaths,
           result: getMergeResultKind(retryResult),
-          strategy: 'markdown-diff3-fallback-lww',
+          sideChoicePaths: retryStats.sideChoicePaths,
+          strategy: 'journal-domain-merge',
         })
+        clearMissingObjectRefetchAttempt(runtime, repairResult.repairCooldownKey)
 
         return retryResult
       } catch (retryError) {
@@ -1047,31 +1146,34 @@ async function mergeRemoteBranch(
     }
 
     if (isMergeConflictError(error)) {
-      const conflictPathCount = getMergeConflictPathCount(error) ?? mergeStats.conflictPaths
+      const conflictPaths = getMergeConflictPaths(error)
+      const conflictPathCount = conflictPaths.length || mergeStats.conflictPaths
 
       await traceGitStep(runtime, 'merge.strategy', async () => null, {
         clean: false,
         conflictPaths: conflictPathCount,
-        fallbackPaths: mergeStats.fallbackPaths,
         journalStructurePaths: mergeStats.journalStructurePaths,
         markdownPaths: mergeStats.markdownPaths,
         result: 'conflict',
-        strategy: 'markdown-diff3-fallback-lww',
+        sideChoicePaths: mergeStats.sideChoicePaths,
+        strategy: 'journal-domain-merge',
       })
       await traceGitStep(runtime, 'merge.conflict', async () => null, {
         conflictPaths: conflictPathCount,
-        fallbackPaths: mergeStats.fallbackPaths,
         journalStructurePaths: mergeStats.journalStructurePaths,
         markdownPaths: mergeStats.markdownPaths,
-        strategy: 'markdown-diff3-fallback-lww',
+        sideChoicePaths: mergeStats.sideChoicePaths,
+        strategy: 'journal-domain-merge',
       })
+
+      throw createContentConflictBlockedError(conflictPaths, error)
     }
 
     throw error
   }
 }
 
-async function runRemoteMerge(
+async function runJournalDomainMerge(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   mergeStats: ReturnType<typeof createJournalMergeStats>,
@@ -1081,30 +1183,35 @@ async function runRemoteMerge(
   const remote = config.remote ?? defaultRemote
   const mergeDetails = await traceMergeInputs(runtime, traceName, branch, remote)
 
-  return traceGitStep(runtime, traceName, () => getGit(runtime).merge({
-    abortOnConflict: false,
-    allowUnrelatedHistories: true,
-    author: {
-      email: config.authorEmail ?? defaultAuthorEmail,
-      name: config.authorName ?? defaultAuthorName,
-    },
-    cache: runtime.cache,
-    dir: runtime.dir,
-    fs: runtime.fs,
-    mergeDriver: createJournalMergeDriver('theirs', mergeStats),
-    ours: getLocalBranchRef(branch),
-    theirs: getRemoteTrackingBranchRef(remote, branch),
-  }), (result) => ({
-    ...mergeDetails,
-    branch,
-    conflictPaths: mergeStats.conflictPaths,
-    fallbackPaths: mergeStats.fallbackPaths,
-    journalStructurePaths: mergeStats.journalStructurePaths,
-    missingContentPaths: mergeStats.missingContentPaths,
-    markdownPaths: mergeStats.markdownPaths,
-    remote,
-    result: getMergeResultKind(result),
-  }), mergeDetails)
+  const domainResult = await traceGitStep(
+    runtime,
+    traceName,
+    () => runJournalDomainMergeOperation(runtime, config, mergeStats, {
+      attachHeadToLocalBranchIfSameCommit,
+      getLocalBranchCommitOid,
+      getRemoteTrackingBranchCommitOid,
+    }),
+    (result) => ({
+      ...mergeDetails,
+      baseOid: shortTraceOid(result.baseOid),
+      branch,
+      changedPaths: result.changedPaths,
+      conflictPaths: mergeStats.conflictPaths,
+      journalStructurePaths: mergeStats.journalStructurePaths,
+      localOid: shortTraceOid(result.localOid),
+      markdownPaths: mergeStats.markdownPaths,
+      missingContentPaths: mergeStats.missingContentPaths,
+      nonJournalRemoteWins: result.nonJournalRemoteWins,
+      reason: result.reason,
+      remote,
+      remoteOid: shortTraceOid(result.remoteOid),
+      result: getMergeResultKind(result.mergeResult),
+      sideChoicePaths: mergeStats.sideChoicePaths,
+    }),
+    mergeDetails,
+  )
+
+  return domainResult.mergeResult
 }
 
 async function throwRecoverableMergeFailure(
@@ -1220,7 +1327,12 @@ async function pullRemoteIntoWorktree(
       runtime,
       config,
       credentials,
+      {
+        preferRetryWithoutRefetch: fetchDecision.restoredTrackingObjectFromPack,
+      },
     )
+
+    clearMissingObjectRefetchAttempt(runtime, fetchDecision.repairCooldownKey)
 
     return {
       dirtyPathsBeforeMerge: [],
@@ -1235,6 +1347,7 @@ async function pullRemoteIntoWorktree(
     branch,
     remote: config.remote ?? defaultRemote,
   })
+  clearMissingObjectRefetchAttempt(runtime, fetchDecision.repairCooldownKey)
 
   return {
     dirtyPathsBeforeMerge: [],
@@ -1441,10 +1554,11 @@ async function mergeRemoteBranchAndCommitChanges(
   runtime: JournalGitRuntime,
   config: JournalGitSyncConfig,
   credentials: JournalGitCredentials,
+  repairHints: RemoteMergeRepairHints = {},
 ) {
   const branch = getBranchName(config.branch ?? defaultBranch)
   const beforeMergeOid = await getLocalBranchCommitOid(runtime, branch)
-  const mergeResult = await mergeRemoteBranch(runtime, config, credentials)
+  const mergeResult = await mergeRemoteBranch(runtime, config, credentials, repairHints)
 
   if (!mergeResult || isAlreadyMergedMergeResult(mergeResult)) {
     return {
@@ -1457,7 +1571,7 @@ async function mergeRemoteBranchAndCommitChanges(
   if (isFastForwardMergeResult(mergeResult)) {
     const afterMergeOid = getMergeResultOid(mergeResult) ?? await getLocalBranchCommitOid(runtime, branch)
     const checkoutPaths = beforeMergeOid && afterMergeOid
-      ? await getChangedTrackedPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.fastForwardDiff')
+      ? await getChangedCheckoutPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.fastForwardDiff')
       : trackedStatusFilepaths
     const updatedWorktree = await checkoutLocalBranch(runtime, branch, checkoutPaths)
 
@@ -1473,7 +1587,7 @@ async function mergeRemoteBranchAndCommitChanges(
     : null
   const afterMergeOid = mergeCommitOid ?? getMergeResultOid(mergeResult) ?? await getLocalBranchCommitOid(runtime, branch)
   const checkoutPaths = beforeMergeOid && afterMergeOid
-    ? await getChangedTrackedPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.mergeDiff')
+    ? await getChangedCheckoutPathsBetweenRefs(runtime, beforeMergeOid, afterMergeOid, 'checkout.mergeDiff')
     : trackedStatusFilepaths
 
   const updatedWorktree = await checkoutLocalBranch(runtime, branch, checkoutPaths)
@@ -1529,14 +1643,16 @@ function isMergeConflictError(error: unknown) {
   return getErrorCode(error) === 'MergeConflictError'
 }
 
-function getMergeConflictPathCount(error: unknown) {
+function getMergeConflictPaths(error: unknown) {
   if (!isRecord(error) || !isRecord(error.data)) {
-    return null
+    return []
   }
 
   const filepaths = error.data.filepaths
 
-  return Array.isArray(filepaths) ? filepaths.length : null
+  return Array.isArray(filepaths)
+    ? filepaths.filter((filepath): filepath is string => typeof filepath === 'string' && filepath.trim().length > 0)
+    : []
 }
 
 async function tryPushRemote(
@@ -1834,7 +1950,7 @@ async function getDirtyTrackedPathsBeforeMerge(
   return getDirtyTrackedPaths(runtime, 'pull.postFetchDirtyStatus')
 }
 
-async function getChangedTrackedPathsBetweenRefs(
+async function getChangedCheckoutPathsBetweenRefs(
   runtime: JournalGitRuntime,
   beforeRef: string,
   afterRef: string,
@@ -1864,10 +1980,12 @@ async function getChangedTrackedPathsBetweenRefs(
         const entryType = beforeType ?? afterType
 
         if (entryType === 'tree') {
-          return shouldWalkTrackedJournalTree(filepath) ? undefined : null
+          return isSafeRepositoryPath(filepath) ? undefined : null
         }
 
-        if (!isTrackedJournalPath(filepath)) {
+        const normalizedPath = normalizeRepositoryPath(filepath)
+
+        if (!isSafeRepositoryPath(normalizedPath)) {
           return undefined
         }
 
@@ -1876,7 +1994,7 @@ async function getChangedTrackedPathsBetweenRefs(
           afterEntry?.oid(),
         ])
 
-        return beforeOid !== afterOid ? filepath : undefined
+        return beforeOid !== afterOid ? normalizedPath : undefined
       },
       reduce: async (parent, children) => {
         const flattened: string[] = []
@@ -1902,7 +2020,7 @@ async function getChangedTrackedPathsBetweenRefs(
     })
 
     const changedPaths: string[] = rawChangedPaths.filter((filepath: unknown): filepath is string => {
-      return typeof filepath === 'string' && isTrackedJournalPath(filepath)
+      return typeof filepath === 'string' && isSafeRepositoryPath(filepath)
     })
 
     return [...new Set(changedPaths)].sort()
@@ -2124,58 +2242,61 @@ async function getConfigForTrace(runtime: JournalGitRuntime, path: string) {
   }
 }
 
-function getBranchName(branch: string) {
-  return branch.startsWith('refs/heads/') ? branch.slice('refs/heads/'.length) : branch
-}
-
-function getLocalBranchRef(branch: string) {
-  return `refs/heads/${getBranchName(branch)}`
-}
-
-function getRemoteBranchRef(branch: string) {
-  return `refs/heads/${getBranchName(branch)}`
-}
-
-function getRemoteTrackingBranchRef(remote: string, branch: string) {
-  return `refs/remotes/${remote}/${getBranchName(branch)}`
-}
-
 function isRecoverableInternalMergeError(error: unknown) {
-  const message = getErrorMessage(error)
-
-  return (
-    message.includes("Cannot read property 'match' of undefined") ||
-    message.includes("Cannot read properties of undefined (reading 'match')")
-  )
+  return isMissingGitObjectError(error)
 }
 
 function createMergeRecoveryError(error: unknown) {
-  return new Error(
-    `Git merge failed after refreshing remote tracking refs: ${getErrorMessage(error)}`,
-  )
+  return createObjectStoreCorruptBlockedError({
+    cause: error,
+    message: `本地同步仓库对象库修复后仍不可读，同步已停止以避免写出不完整的合并结果。请稍后手动同步，或重新修复本地同步仓库。原始错误：${getErrorMessage(error)}`,
+  })
 }
 
 function createUnrelatedHistoriesError(error: unknown) {
-  return new Error(
-    `Local and remote journal histories do not share a common ancestor. Sync stopped before merging or pushing; choose one history or run a one-time repair before syncing again. Original merge error: ${getErrorMessage(error)}`,
-  )
+  return createJournalSyncBlockedError({
+    message: `本地和远端日记历史没有共同祖先。同步已停止；请先选择保留本地内容、导入远端内容，或做一次性迁移修复。原始错误：${getErrorMessage(error)}`,
+    reason: 'unrelated-histories',
+  }, error)
 }
 
 function createFirstSyncNeedsChoiceError(localDirtyPaths: string[]) {
   const previewPaths = localDirtyPaths.slice(0, 3).join(', ')
   const suffix = localDirtyPaths.length > 3 ? ` 等 ${localDirtyPaths.length} 个路径` : previewPaths
 
-  return new Error(
-    `首次同步前本地已有日记内容，而远端分支也已有历史。为避免创建没有共同祖先的 Git 历史，同步已停止；请先选择保留本地内容或先导入远端内容。受影响路径：${suffix}`,
-  )
+  return createJournalSyncBlockedError({
+    message: `首次同步前本地已有日记内容，而远端分支也已有历史。为避免创建没有共同祖先的 Git 历史，同步已停止；请先选择保留本地内容或先导入远端内容。受影响路径：${suffix}`,
+    paths: localDirtyPaths,
+    reason: 'first-sync-needs-choice',
+  })
+}
+
+function createContentConflictBlockedError(paths: string[], cause?: unknown) {
+  const suffix = paths.length > 0
+    ? `冲突路径：${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ` 等 ${paths.length} 个路径` : ''}`
+    : '冲突路径暂时无法读取。'
+
+  return createJournalSyncBlockedError({
+    message: `日记内容存在需要人工处理的合并冲突，同步已停止且不会自动推送冲突结果。${suffix}`,
+    paths,
+    reason: 'content-conflict',
+  }, cause)
+}
+
+function createObjectStoreCorruptBlockedError(input: {
+  cause?: unknown
+  message: string
+  retryAfterMs?: number
+}) {
+  return createJournalSyncBlockedError({
+    message: input.message,
+    reason: 'object-store-corrupt',
+    ...(input.retryAfterMs ? { retryAfterMs: input.retryAfterMs } : {}),
+  }, input.cause)
 }
 
 function isSafeShortRefFileName(branch: string) {
   return /^[A-Za-z0-9._-]+$/.test(branch)
-}
-
-function getJournalGitAuthUsername(credentials: JournalGitCredentials) {
-  return credentials.username ?? 'x-access-token'
 }
 
 function getPushResultFromError(error: unknown): PushResult | null {
@@ -2278,20 +2399,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function hasAuthorizationHeader(headers: Record<string, string>) {
-  return Object.keys(headers).some((key) => key.toLowerCase() === 'authorization')
-}
-
-function encodeBase64(value: string) {
-  const runtimeGlobals = globalThis as Base64RuntimeGlobals
-
-  if (!runtimeGlobals.Buffer) {
-    throw new Error('Base64 encoding requires a runtime Buffer implementation.')
-  }
-
-  return runtimeGlobals.Buffer.from(value, 'utf8').toString('base64')
-}
-
 function shortTraceOid(value: string | null) {
   if (!value) {
     return 'missing'
@@ -2341,7 +2448,7 @@ async function assertNoConflictMarkersInChangedMarkdown(
     let checked = 0
 
     for (const [filepath, , workdirStatus] of changedRows) {
-      if (workdirStatus === 0 || !journalEntryPathPattern.test(filepath)) {
+      if (workdirStatus === 0 || !isTrackedJournalEntryPath(filepath)) {
         continue
       }
 
@@ -2353,7 +2460,7 @@ async function assertNoConflictMarkersInChangedMarkdown(
       }
 
       if (hasConflictMarkers(toUtf8String(content))) {
-        throw new Error(`Journal sync conflict markers remain in ${filepath}. Resolve conflicts before syncing.`)
+        throw createContentConflictBlockedError([filepath])
       }
     }
 
@@ -2407,46 +2514,6 @@ function normalizeKnownChangedPaths(changedPaths: readonly string[] | undefined)
   return normalizedPaths
 }
 
-function normalizeCheckoutFilepaths(filepaths: readonly string[]) {
-  return [...new Set(filepaths.map(normalizeRepositoryPath))]
-    .filter((filepath) => trackedPathFiles.has(filepath) || trackedStatusFilepaths.includes(filepath) || isTrackedJournalPath(filepath))
-    .sort()
-}
-
-function normalizeRepositoryPath(filepath: string) {
-  return filepath.trim().replace(/\\/g, '/').replace(/^\.?\//, '')
-}
-
-function isTrackedJournalPath(filepath: string) {
-  return trackedPathFiles.has(filepath) ||
-    journalEntryPathPattern.test(filepath) ||
-    journalAnnotationPathPattern.test(filepath) ||
-    journalReviewPathPattern.test(filepath) ||
-    isTrackedJournalMediaPath(filepath)
-}
-
-function shouldWalkTrackedJournalTree(filepath: string) {
-  const normalizedPath = normalizeRepositoryPath(filepath)
-
-  return trackedPathPrefixes.some((pathPrefix) => {
-    const treeRoot = pathPrefix.slice(0, -1)
-
-    return normalizedPath === treeRoot || normalizedPath.startsWith(`${treeRoot}/`)
-  })
-}
-
-function isTrackedJournalMediaPath(filepath: string) {
-  return filepath.startsWith('media/') && !hasTemporaryOrHiddenPathSegment(filepath)
-}
-
-function hasTemporaryOrHiddenPathSegment(filepath: string) {
-  return filepath.split('/').some((segment) => {
-    return segment === '' ||
-      segment.startsWith('.') ||
-      segment.endsWith('.tmp')
-  })
-}
-
 function isEmptyRemoteError(error: unknown) {
   const code = getErrorCode(error)
 
@@ -2463,6 +2530,15 @@ function isFileNotFoundError(error: unknown) {
   const code = getErrorCode(error)
 
   return code === 'ENOENT' || code === 'NotFoundError'
+}
+
+function isMissingGitObjectError(error: unknown) {
+  const message = getErrorMessage(error)
+
+  return (
+    getErrorCode(error) === 'NotFoundError' &&
+    /could not find [0-9a-f]{40}/i.test(message)
+  )
 }
 
 function isRetryablePushError(error: unknown) {

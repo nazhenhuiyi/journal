@@ -19,6 +19,7 @@ describe('persisted sync snapshots', () => {
       identity,
       now: new Date('2026-06-14T12:30:00.000Z'),
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -29,6 +30,7 @@ describe('persisted sync snapshots', () => {
     expect(persisted).toEqual({
       identity,
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -44,6 +46,7 @@ describe('persisted sync snapshots', () => {
     const persisted = createPersistedSyncSnapshot({
       identity,
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -77,6 +80,7 @@ describe('persisted sync snapshots', () => {
     expect(normalizePersistedSyncSnapshot({
       identity,
       snapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -94,6 +98,7 @@ describe('persisted sync snapshots', () => {
       pendingReason: null,
       status: 'syncing',
     })).toEqual({
+      block: null,
       lastError: null,
       lastSyncedAt: '2026-06-14T12:00:00.000Z',
       pendingReason: null,
@@ -106,6 +111,7 @@ describe('persisted sync snapshots', () => {
       pendingReason: 'local-save',
       status: 'syncing',
     })).toEqual({
+      block: null,
       lastError: null,
       lastSyncedAt: null,
       pendingReason: 'local-save',
@@ -120,6 +126,7 @@ describe('persisted sync snapshots', () => {
       pendingReason: 'retry',
       status: 'retrying',
     })).toEqual({
+      block: null,
       lastError: 'network down',
       lastSyncedAt: '2026-06-14T12:00:00.000Z',
       pendingReason: 'retry',
@@ -132,6 +139,7 @@ describe('persisted sync snapshots', () => {
       pendingReason: null,
       status: 'error',
     })).toEqual({
+      block: null,
       lastError: 'pull failed',
       lastSyncedAt: '2026-06-14T12:00:00.000Z',
       pendingReason: null,
@@ -139,8 +147,55 @@ describe('persisted sync snapshots', () => {
     })
   })
 
+  it('round-trips blocked snapshots', () => {
+    const persisted = createPersistedSyncSnapshot({
+      identity,
+      now: new Date('2026-06-14T12:30:00.000Z'),
+      snapshot: {
+        block: {
+          message: 'Resolve conflicts before syncing.',
+          paths: ['entries/2026/06/2026-06-14.md'],
+          reason: 'content-conflict',
+        },
+        lastError: 'Resolve conflicts before syncing.',
+        lastSyncedAt: '2026-06-14T12:00:00.000Z',
+        pendingReason: 'retry',
+        status: 'blocked',
+      },
+    })
+
+    expect(persisted?.snapshot).toEqual({
+      block: {
+        message: 'Resolve conflicts before syncing.',
+        paths: ['entries/2026/06/2026-06-14.md'],
+        reason: 'content-conflict',
+      },
+      lastError: 'Resolve conflicts before syncing.',
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'blocked',
+    })
+    expect(normalizePersistedSyncSnapshot(persisted, identity)?.snapshot.status).toBe('blocked')
+  })
+
+  it('adds a null block to older restored snapshots', () => {
+    expect(normalizeRestoredSyncSnapshot({
+      lastError: null,
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })).toEqual({
+      block: null,
+      lastError: null,
+      lastSyncedAt: '2026-06-14T12:00:00.000Z',
+      pendingReason: null,
+      status: 'synced',
+    })
+  })
+
   it('does not persist idle snapshots without a sync time', () => {
     expect(shouldPersistSyncSnapshot({
+      block: null,
       lastError: null,
       lastSyncedAt: null,
       pendingReason: null,
@@ -151,6 +206,7 @@ describe('persisted sync snapshots', () => {
   it('restores a coordinator snapshot without surfacing syncing', () => {
     const coordinator = new JournalSyncCoordinator({
       initialSnapshot: {
+        block: null,
         lastError: null,
         lastSyncedAt: '2026-06-14T12:00:00.000Z',
         pendingReason: null,
@@ -160,6 +216,7 @@ describe('persisted sync snapshots', () => {
     })
 
     expect(coordinator.getSnapshot()).toEqual({
+      block: null,
       lastError: null,
       lastSyncedAt: '2026-06-14T12:00:00.000Z',
       pendingReason: null,

@@ -1,6 +1,7 @@
 import {
   createSyncSnapshotPersistenceIdentity,
   getDefaultSyncSnapshot,
+  getJournalGitAuthenticationErrorMessage,
   JournalSyncCoordinator,
   shouldPersistSyncSnapshot,
   type SyncOperationRequest,
@@ -402,7 +403,14 @@ class MobileSyncManager {
 
       const snapshot = await this.coordinator.syncNow()
 
-      if (snapshot.status === 'error' || snapshot.status === 'retrying' || snapshot.status === 'needs-auth') {
+      if (
+        snapshot.status === 'blocked' ||
+        snapshot.status === 'error' ||
+        snapshot.status === 'retrying' ||
+        snapshot.status === 'needs-auth'
+      ) {
+        const isBlocked = snapshot.status === 'blocked'
+
         mobileDiagnosticLog.error('sync.manual', 'Manual sync finished with error snapshot', {
           branch,
           lastError: snapshot.lastError,
@@ -410,8 +418,8 @@ class MobileSyncManager {
           status: snapshot.status,
         })
         return {
-          alertMessage: snapshot.lastError ?? '同步过程中出现未知错误。',
-          alertTitle: '同步失败',
+          alertMessage: snapshot.lastError ?? (isBlocked ? '同步受阻，需要处理后再继续。' : '同步过程中出现未知错误。'),
+          alertTitle: isBlocked ? '同步受阻' : '同步失败',
           ok: false,
         }
       }
@@ -660,18 +668,30 @@ class MobileSyncManager {
       }
 
       const trustCleanWorktree = saveState !== undefined && canApplyRemoteUpdates(saveState)
-      const result = await this.traceStep(
-        'mobile.pullCore',
-        () => pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
-          collectDirtyPathsAfterSync: false,
-          skipDirtyCheckBeforeMerge: trustCleanWorktree,
-        }),
-        {
-          operation,
-          skipDirtyCheckBeforeMerge: trustCleanWorktree,
-          trigger,
-        },
-      )
+      let result: Awaited<ReturnType<typeof pullMobileJournalUpdatesFromGitHub>>
+
+      try {
+        result = await this.traceStep(
+          'mobile.pullCore',
+          () => pullMobileJournalUpdatesFromGitHub({ branch, remoteUrl }, undefined, {
+            collectDirtyPathsAfterSync: false,
+            skipDirtyCheckBeforeMerge: trustCleanWorktree,
+          }),
+          {
+            operation,
+            skipDirtyCheckBeforeMerge: trustCleanWorktree,
+            trigger,
+          },
+        )
+      } catch (error) {
+        const authResult = getAuthFailureOperationResult(error)
+
+        if (authResult) {
+          return authResult
+        }
+
+        throw error
+      }
       let didReloadFromDisk = false
 
       if (result.dirtyPathsAfterPull.length > 0) {
@@ -772,21 +792,33 @@ class MobileSyncManager {
       ok: true,
     })
 
-    const result = await this.traceStep(
-      'mobile.syncCore',
-      () => syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
-        changedPaths: changedPathsForSync,
-        collectDirtyPathsAfterSync,
-        skipDirtyCheckBeforeMerge: trustCleanWorktree,
-      }),
-      {
-        changedPathCount: operationChangedPaths.length,
-        collectDirtyPathsAfterSync,
-        operation,
-        skipDirtyCheckBeforeMerge: trustCleanWorktree,
-        trigger,
-      },
-    )
+    let result: Awaited<ReturnType<typeof syncMobileJournalWithGitHub>>
+
+    try {
+      result = await this.traceStep(
+        'mobile.syncCore',
+        () => syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
+          changedPaths: changedPathsForSync,
+          collectDirtyPathsAfterSync,
+          skipDirtyCheckBeforeMerge: trustCleanWorktree,
+        }),
+        {
+          changedPathCount: operationChangedPaths.length,
+          collectDirtyPathsAfterSync,
+          operation,
+          skipDirtyCheckBeforeMerge: trustCleanWorktree,
+          trigger,
+        },
+      )
+    } catch (error) {
+      const authResult = getAuthFailureOperationResult(error)
+
+      if (authResult) {
+        return authResult
+      }
+
+      throw error
+    }
 
     if (binding && canApplyRemoteUpdates(binding.getSaveState())) {
       await this.traceStep('mobile.reloadToday', () => binding.reloadTodayFromDisk(), {
@@ -923,6 +955,15 @@ function getSyncConfigurationError(
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+}
+
+function getAuthFailureOperationResult(error: unknown): SyncOperationResult | null {
+  const message = getJournalGitAuthenticationErrorMessage(error)
+
+  return message ? {
+    message,
+    needsAuth: true,
+  } : null
 }
 
 function getRemoteHost(remoteUrl: string) {

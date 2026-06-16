@@ -3,6 +3,7 @@ import type { SyncSnapshot } from '@journal/sync/scheduler'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
 
 const syncedSnapshot: SyncSnapshot = {
+  block: null,
   lastError: null,
   lastSyncedAt: '2026-06-09T00:00:00.000Z',
   pendingReason: null,

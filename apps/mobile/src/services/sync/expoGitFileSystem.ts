@@ -88,17 +88,15 @@ async function writeFile(
     return
   }
 
-  const buffer = typeof data === 'string'
-    ? Buffer.from(data, encoding === 'base64' ? 'base64' : 'utf8')
-    : Buffer.from(data)
+  const base64Contents = typeof data === 'string'
+    ? encoding === 'base64'
+      ? data
+      : Buffer.from(data, 'utf8').toString('base64')
+    : Buffer.from(data).toString('base64')
 
-  try {
-    await file.write(buffer)
-  } catch {
-    await FileSystem.writeAsStringAsync(path, buffer.toString('base64'), {
-      encoding: FileSystem.EncodingType.Base64,
-    })
-  }
+  await FileSystem.writeAsStringAsync(path, base64Contents, {
+    encoding: FileSystem.EncodingType.Base64,
+  })
 }
 
 async function ensureParentDirectory(path: string, knownDirectoryPaths: Set<string>) {

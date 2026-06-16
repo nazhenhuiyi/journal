@@ -19,10 +19,6 @@
       "types": "./src/gitCore.ts",
       "default": "./src/gitCore.ts"
     },
-    "./lastWriteWins": {
-      "types": "./src/lastWriteWins.ts",
-      "default": "./src/lastWriteWins.ts"
-    },
     "./smartMerge": {
       "types": "./src/smartMerge.ts",
       "default": "./src/smartMerge.ts"
@@ -38,6 +34,10 @@
     "./statusPresentation": {
       "types": "./src/statusPresentation.ts",
       "default": "./src/statusPresentation.ts"
+    },
+    "./syncBlock": {
+      "types": "./src/syncBlock.ts",
+      "default": "./src/syncBlock.ts"
     },
     "./trace": {
       "types": "./src/trace.ts",

@@ -34,9 +34,11 @@ flowchart LR
 
 | 层 | 位置 | 职责 |
 | --- | --- | --- |
-| 同步核心 | `packages/journal-sync/src/gitCore.ts` | init / clone / status / commit / pull / push / full sync |
+| 同步核心 | `packages/journal-sync/src/gitCore.ts` | init / clone / status / commit / pull / push / full sync 编排 |
 | 调度器 | `packages/journal-sync/src/scheduler.ts` | 单飞、排队、保存后延迟推送、定时拉取、后台 flush、失败重试 |
-| 合并策略 | `packages/journal-sync/src/smartMerge.ts`、`lastWriteWins.ts` | Markdown diff3、JSON / 非文本 fallback |
+| Git 认证 | `packages/journal-sync/src/gitAuth.ts` | Basic auth header、Git HTTP 超时、认证失败识别 |
+| 合并策略 | `packages/journal-sync/src/journalDomainMerge.ts`、`smartMerge.ts`、`structuredFileMerge.ts` | Git tree 领域合并、Markdown diff3、JSON / 非文本选边 |
+| 对象库自愈 | `packages/journal-sync/src/gitObjectRepair.ts` | commit 可读性验证、缺失 pack index 重建 |
 | 桌面平台适配 | `apps/desktop/electron/journalSync.ts` | Node `fs`、`isomorphic-git/http/node`、桌面凭据、journal directory |
 | 桌面 UI 编排 | `apps/desktop/src/services/sync/desktopSyncManager.ts` | 编辑器脏状态、保存 flush、设置页、手动同步、状态展示 |
 | 移动平台适配 | `apps/mobile/src/services/sync/mobileGitSync.ts` | Expo 文件系统、`expo/fetch` HTTP client、SecureStore、worktree 目录 |
@@ -66,7 +68,7 @@ type JournalGitRuntime = {
 | 移动端 | `createExpoGitFileSystem()` | 包装 `expo/fetch` 的 web client | Expo document directory 下的 `journal-worktree/` |
 | 测试 | mock 或临时目录 | mock http | 独立临时目录 |
 
-`runtime.cache` 是单次 public operation 内共享的 `isomorphic-git` cache，操作结束后丢弃。桌面端和移动端当前 Git HTTP 超时都是 300 秒；移动端额外记录 `http.gitRequest` trace。
+`runtime.cache` 是单次 public operation 内共享的 `isomorphic-git` cache，操作结束后丢弃。对象库缺失 refetch 节流通过 runtime 注入的 object repair throttle 保持跨操作记忆，避免同一缺失对象反复触发大下载。桌面端和移动端当前 Git HTTP 超时都是 300 秒；移动端额外记录 `http.gitRequest` trace。
 
 `JournalGitSyncConfig` 的默认值：
 
@@ -101,6 +103,12 @@ reviews/2026/06/2026-06-10.json
 
 有可靠 `changedPaths` 时，`commitTrackedChanges()` 只检查这些路径；没有可靠路径时才回到整个 tracked scope。
 
+这里要把两层语义分开：
+
+- `changedPaths` 是 journal sync 的业务增量提示，表示“这次保存已知改了哪些受管路径”。空数组只表示“这次没有已知待提交路径”，不代表本地仓库没有日记内容。
+- isomorphic-git 的 `filepaths` 是底层 API 的路径限制参数，保持库自身定义；业务层不要用空 `changedPaths` 去改写或推断底层 `filepaths` 语义。
+- 首次同步如果需要证明“本地没有内容”，必须使用单独语义，例如 `firstSyncLocalContent: 'empty'`，不能复用 `changedPaths: []`。
+
 共享核心主要 public operations：
 
 | 操作 | 用途 |
@@ -118,6 +126,7 @@ reviews/2026/06/2026-06-10.json
 ```mermaid
 stateDiagram-v2
   state "disabled" as disabled
+  state "blocked" as blocked
   state "needs-auth" as needsAuth
 
   [*] --> disabled: 未配置或停用
@@ -132,8 +141,10 @@ stateDiagram-v2
   syncing --> pending: skipped or still editing
   syncing --> retrying: push or full sync failed
   syncing --> error: manual pull failed
+  syncing --> blocked: conflict / history / object store
   syncing --> needsAuth: credentials required
   needsAuth --> syncing: save credentials / manual
+  blocked --> syncing: manual repair / manual sync
   error --> syncing: manual / app-open
 ```
 
@@ -147,6 +158,7 @@ stateDiagram-v2
 | 定时拉取 | 配置后 app open 触发一次，再每 180 秒 pull |
 | 后台 flush | 离开 App 时最多等 5 秒推送 pending save |
 | 失败重试 | push / full sync 失败后 300 秒 retry |
+| 阻断状态 | 内容冲突、首次同步需选择、历史断裂、对象库损坏进入 `blocked`；后台 pull / retry 不会清除阻断，只能由手动处理或手动同步成功清除 |
 | 后台 pull | 默认不强行打扰主界面状态 |
 
 触发源是 `app-open`、`app-background`、`manual`、`network-online`、`pull-interval`、`retry-timer`、`save-idle`。
@@ -200,7 +212,7 @@ flowchart TD
   refs["listServerRefs()"]
   changed{"远端 oid 变化?"}
   dirty{"merge 前存在<br/>本地 dirty tracked paths?"}
-  fetchMerge["fetch() -> merge()"]
+  fetchMerge["fetch() -> journal-domain merge"]
   checkout["只 checkout 变化的 tracked paths"]
   pending["返回 dirtyPaths<br/>端侧转 pending push"]
   reload["端侧按需 reload UI / widget"]
@@ -223,7 +235,7 @@ flowchart LR
   commit["commitTrackedChanges()"]
   refs["listServerRefs()"]
   fetch["fetch if remote changed"]
-  merge["merge()"]
+  merge["journal-domain merge"]
   push["push()"]
   retry["rejected: fetch -> merge -> retry once"]
 
@@ -248,11 +260,11 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  merge["merge driver"]
+  merge["journal-domain merge"]
   type{"路径类型"}
   markdown["Markdown diff3<br/>front matter updatedAt 不决定胜负"]
-  json["JSON / 结构化文件<br/>可靠时间字段 last-write-wins"]
-  fallback["其他文本或无法判断<br/>按配置 fallback side"]
+  json["JSON / 结构化文件<br/>可靠时间字段选较新"]
+  defaultSide["其他文本或无法判断<br/>按默认侧选边"]
   conflict{"true conflict?"}
   markers["保留冲突标记<br/>停止自动 push"]
   clean["自动合并完成"]
@@ -260,10 +272,12 @@ flowchart TD
   merge --> type
   type -- "entries/*.md" --> markdown --> conflict
   type -- "annotations / reviews" --> json --> clean
-  type -- "其他" --> fallback --> clean
+  type -- "其他" --> defaultSide --> clean
   conflict -- 是 --> markers
   conflict -- 否 --> clean
 ```
+
+当前不再把 `isomorphic-git.merge()` 作为主路径。`@journal/sync` 使用 `findMergeBase()`、`walk()`、`readBlob()`、`writeBlob()`、`writeTree()`、`writeCommit()` 和 `writeRef()` 自己写 journal-domain merge commit；`isomorphic-git` 仍负责对象库、refs、HTTP transport、status、checkout 和 push/fetch。
 
 冲突策略变更时必须同步更新测试和本文档。性能、trace 和慢路径排查细节见 `docs/product/Git 同步性能笔记.md`。
 

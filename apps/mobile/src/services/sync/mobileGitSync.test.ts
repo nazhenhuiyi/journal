@@ -33,6 +33,7 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     commit: vi.fn(),
     currentBranch: vi.fn(),
     fetch: vi.fn(),
+    findMergeBase: vi.fn(),
     getConfig: vi.fn(),
     init: vi.fn(),
     listFiles: vi.fn(),
@@ -40,6 +41,7 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     log: vi.fn(),
     merge: vi.fn(),
     push: vi.fn(),
+    readBlob: vi.fn(),
     readCommit: vi.fn(),
     readObject: vi.fn(),
     remove: vi.fn(),
@@ -48,7 +50,10 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     statusMatrix: vi.fn(),
     TREE: vi.fn(),
     walk: vi.fn(),
+    writeBlob: vi.fn(),
+    writeCommit: vi.fn(),
     writeRef: vi.fn(),
+    writeTree: vi.fn(),
   },
 }))
 
@@ -91,6 +96,7 @@ describe('mobile git sync', () => {
     mockGit.fetch.mockResolvedValue({
       fetchHead: 'remote-head',
     })
+    mockGit.findMergeBase.mockResolvedValue(['local-head'])
     mockGit.getConfig.mockResolvedValue('https://github.com/example/journal-sync.git')
     mockGit.init.mockResolvedValue(undefined)
     mockGit.listFiles.mockResolvedValue([])
@@ -144,13 +150,22 @@ describe('mobile git sync', () => {
       oid: `${oid}:${filepath}`,
       source: oid,
     }))
+    mockGit.readBlob.mockResolvedValue({
+      blob: new Uint8Array(),
+      oid: 'blob-oid',
+    })
     mockGit.remove.mockResolvedValue(undefined)
-    mockGit.resolveRef.mockResolvedValue('local-head')
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => (
+      ref === 'refs/remotes/origin/main' ? 'remote-head' : 'local-head'
+    ))
     mockGit.setConfig.mockResolvedValue(undefined)
     mockGit.statusMatrix.mockResolvedValue([])
     mockGit.TREE.mockImplementation(({ ref }: { ref: string }) => ({ ref }))
     mockGit.walk.mockResolvedValue([])
+    mockGit.writeBlob.mockResolvedValue('written-blob')
+    mockGit.writeCommit.mockResolvedValue('merge-commit')
     mockGit.writeRef.mockResolvedValue(undefined)
+    mockGit.writeTree.mockResolvedValue('written-tree')
     mockExpoFetch.mockResolvedValue(new Response('', {
       headers: {
         'content-type': 'application/x-git-upload-pack-advertisement',
@@ -196,7 +211,7 @@ describe('mobile git sync', () => {
     ])
   })
 
-  it('commits tracked journal changes, fetches, merges, and pushes', async () => {
+  it('commits tracked journal changes, skips unchanged fetches, domain-merges, and pushes', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 0, 2, 0],
@@ -220,14 +235,15 @@ describe('mobile git sync', () => {
       message: 'Sync mobile journal changes',
       ref: 'refs/heads/main',
     }))
-    expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
-      ref: 'main',
-      remote: 'origin',
-      singleBranch: true,
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.findMergeBase).toHaveBeenCalledWith(expect.objectContaining({
+      oids: ['local-head', 'remote-head'],
     }))
-    expect(mockGit.merge).toHaveBeenCalledWith(expect.objectContaining({
-      ours: 'refs/heads/main',
-      theirs: 'refs/remotes/origin/main',
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'refs/heads/main',
+      value: 'remote-head',
     }))
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
       ref: 'refs/heads/main',
@@ -239,8 +255,6 @@ describe('mobile git sync', () => {
     expect(runtimeCache).toEqual(expect.any(Object))
     expect(mockGit.add.mock.calls[0][0].cache).toBe(runtimeCache)
     expect(mockGit.commit.mock.calls[0][0].cache).toBe(runtimeCache)
-    expect(mockGit.fetch.mock.calls[0][0].cache).toBe(runtimeCache)
-    expect(mockGit.merge.mock.calls[0][0].cache).toBe(runtimeCache)
     expect(mockGit.push.mock.calls[0][0].cache).toBe(runtimeCache)
     expect(result.localCommitOid).toBe('commit-oid')
     expect(result.retriedPush).toBe(false)
@@ -296,8 +310,9 @@ describe('mobile git sync', () => {
       token: 'runtime-token',
     })
 
-    expect(mockGit.fetch).toHaveBeenCalledTimes(1)
-    expect(mockGit.merge).toHaveBeenCalledTimes(1)
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.findMergeBase).toHaveBeenCalledTimes(1)
     expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
       filepaths: ['entries/2026/06/2026-06-08.md'],
     }))
@@ -306,6 +321,15 @@ describe('mobile git sync', () => {
   })
 
   it('preemptively adds authorization to mobile Git HTTP requests', async () => {
+    let didFetch = false
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return didFetch ? 'remote-head' : 'stale-remote-head'
+      }
+
+      return 'local-head'
+    })
     mockGit.fetch.mockImplementationOnce(async ({ http }) => {
       mockExpoFetch.mockResolvedValueOnce(new Response('git-response', {
         headers: {
@@ -326,6 +350,8 @@ describe('mobile git sync', () => {
       expect(firstChunk.done).toBe(false)
       expect(Buffer.from(firstChunk.value).toString('utf8')).toBe('git-response')
       expect(secondChunk.done).toBe(true)
+
+      didFetch = true
 
       return {
         fetchHead: 'remote-head',
@@ -368,7 +394,7 @@ describe('mobile git sync', () => {
         code: 'NotFoundError',
       }))
       .mockResolvedValue('local-head')
-    mockGit.listServerRefs.mockResolvedValueOnce([])
+    mockGit.listServerRefs.mockResolvedValue([])
     mockGit.fetch.mockRejectedValueOnce(Object.assign(new Error('empty remote'), {
       code: 'EmptyServerResponseError',
     }))
@@ -415,6 +441,10 @@ describe('mobile git sync', () => {
       }
     })
     mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
       if (ref === 'refs/heads/main' && !localBranchCreated) {
         throw Object.assign(new Error('no local branch'), {
           code: 'NotFoundError',
@@ -475,8 +505,9 @@ describe('mobile git sync', () => {
       token: 'runtime-token',
     })
 
-    expect(mockGit.fetch).toHaveBeenCalledTimes(2)
-    expect(mockGit.merge).toHaveBeenCalledTimes(2)
+    expect(mockGit.fetch).toHaveBeenCalledTimes(1)
+    expect(mockGit.merge).not.toHaveBeenCalled()
+    expect(mockGit.findMergeBase).toHaveBeenCalledTimes(2)
     expect(mockGit.push).toHaveBeenCalledTimes(2)
     expect(result.retriedPush).toBe(true)
   })

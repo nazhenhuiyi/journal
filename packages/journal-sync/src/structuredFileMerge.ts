@@ -1,27 +1,20 @@
-import type { MergeDriverCallback } from 'isomorphic-git'
-import { getMergeDriverContents } from './mergeDriverContent'
+export type StructuredMergeSide = 'ours' | 'theirs'
 
-export type FallbackMergeSide = 'ours' | 'theirs'
-
-export type FallbackMergeInput = {
-  fallbackSide?: FallbackMergeSide
+export type StructuredFileMergeInput = {
+  defaultSide?: StructuredMergeSide
   ours: string
   path: string
   theirs: string
 }
 
-export type FallbackMergeResult = {
+export type StructuredFileMergeResult = {
   content: string
-  reason: 'fallback' | 'updatedAt'
-  side: FallbackMergeSide
+  reason: 'default-side' | 'updatedAt'
+  side: StructuredMergeSide
 }
 
-export type LastWriteWinsSide = FallbackMergeSide
-export type LastWriteWinsInput = FallbackMergeInput
-export type LastWriteWinsResult = FallbackMergeResult
-
-export function chooseFallbackMergeContent(input: FallbackMergeInput): FallbackMergeResult {
-  const fallbackSide = input.fallbackSide ?? 'theirs'
+export function chooseStructuredFileMergeContent(input: StructuredFileMergeInput): StructuredFileMergeResult {
+  const defaultSide = input.defaultSide ?? 'theirs'
   const oursUpdatedAt = getContentUpdatedAt(input.path, input.ours)
   const theirsUpdatedAt = getContentUpdatedAt(input.path, input.theirs)
 
@@ -44,33 +37,11 @@ export function chooseFallbackMergeContent(input: FallbackMergeInput): FallbackM
   }
 
   return {
-    content: fallbackSide === 'ours' ? input.ours : input.theirs,
-    reason: 'fallback',
-    side: fallbackSide,
+    content: defaultSide === 'ours' ? input.ours : input.theirs,
+    reason: 'default-side',
+    side: defaultSide,
   }
 }
-
-export function createFallbackMergeDriver(
-  fallbackSide: FallbackMergeSide = 'theirs',
-): MergeDriverCallback {
-  return ({ contents, path }) => {
-    const { ours, theirs } = getMergeDriverContents(contents)
-    const result = chooseFallbackMergeContent({
-      fallbackSide,
-      ours,
-      path,
-      theirs,
-    })
-
-    return {
-      cleanMerge: true,
-      mergedText: result.content,
-    }
-  }
-}
-
-export const chooseLastWriteWinsContent = chooseFallbackMergeContent
-export const createLastWriteWinsMergeDriver = createFallbackMergeDriver
 
 function getContentUpdatedAt(path: string, content: string) {
   if (isJsonPath(path)) {

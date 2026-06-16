@@ -4,6 +4,7 @@ import http from 'isomorphic-git/http/node'
 import {
   assertSafeRemoteUrl,
   createConsoleJournalGitTrace,
+  createJournalGitObjectRepairThrottle,
   getJournalGitSyncStatus,
   initJournalGitSyncRepository,
   pullJournalUpdates as pullSharedJournalUpdates,
@@ -54,6 +55,7 @@ export type JournalGitSyncStatus = {
 const defaultAuthorEmail = 'journal-desktop@example.invalid'
 const defaultAuthorName = 'Journal Desktop'
 const gitHttpRequestTimeoutMs = 300_000
+const desktopObjectRepairThrottle = createJournalGitObjectRepairThrottle()
 
 export async function loadJournalGitSyncStatus(journalDirectory: string): Promise<JournalGitSyncStatus> {
   const settings = await loadJournalSettings(journalDirectory)
@@ -204,6 +206,7 @@ async function createDesktopGitRuntime(journalDirectory: string): Promise<Journa
     fs,
     http,
     httpRequestTimeoutMs: gitHttpRequestTimeoutMs,
+    objectRepairThrottle: desktopObjectRepairThrottle,
     trace: createDesktopGitTraceLogger(),
   }
 }

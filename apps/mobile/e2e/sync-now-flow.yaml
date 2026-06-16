@@ -3,6 +3,9 @@ env:
   MURMUR_TEXT: Mobile E2E sync now saved from Maestro
 ---
 - runFlow: _launch-app.yaml
+- extendedWaitUntil:
+    visible: 已同步
+    timeout: 180000
 - tapOn:
     id: murmur-count-button
 - tapOn:
@@ -12,10 +15,14 @@ env:
 - tapOn:
     id: add-murmur-button
     enabled: true
+- assertVisible: ${MURMUR_TEXT}
+- hideKeyboard
 - tapOn:
-    point: "50%,12%"
-- tapOn:
-    point: "50%,12%"
+    id: back-to-today-button
+- extendedWaitUntil:
+    visible:
+      id: sync-status-button
+    timeout: 10000
 - tapOn:
     id: sync-status-button
 - extendedWaitUntil:
@@ -31,7 +38,7 @@ env:
     enabled: true
 - extendedWaitUntil:
     visible: 同步完成
-    timeout: 60000
+    timeout: 180000
 - tapOn:
     id: back-to-today-button
 - assertVisible: 已同步

@@ -3,6 +3,9 @@ import type {
   SyncSnapshot,
   SyncState,
 } from './scheduler'
+import {
+  normalizeSyncBlock,
+} from './syncBlock'
 
 export type SyncSnapshotPersistenceIdentity = {
   branch: string
@@ -18,6 +21,7 @@ export type PersistedSyncSnapshot = {
 
 const persistedSyncSnapshotVersion = 1
 const syncStates = new Set<SyncState>([
+  'blocked',
   'disabled',
   'idle',
   'pending',
@@ -33,6 +37,7 @@ const syncPendingReasons = new Set<SyncPendingReason>([
   'retry',
 ])
 const defaultSyncSnapshot: SyncSnapshot = {
+  block: null,
   lastError: null,
   lastSyncedAt: null,
   pendingReason: null,
@@ -127,11 +132,31 @@ export function normalizeRestoredSyncSnapshot(value: unknown): SyncSnapshot | nu
   const pendingReason = normalizePendingReason(value.pendingReason)
   const lastSyncedAt = normalizeTimestamp(value.lastSyncedAt)
   const lastError = normalizeOptionalString(value.lastError)
+  const block = normalizeSyncBlock(value.block)
   const restoredSnapshot: SyncSnapshot = {
+    block: status === 'blocked' ? block : null,
     lastError,
     lastSyncedAt,
     pendingReason,
     status,
+  }
+
+  if (status === 'blocked') {
+    if (!block) {
+      return {
+        ...restoredSnapshot,
+        block: null,
+        lastError: lastError ?? '同步受阻，需要处理后再继续。',
+        pendingReason: null,
+        status: 'error',
+      }
+    }
+
+    return {
+      ...restoredSnapshot,
+      lastError: block.message,
+      pendingReason: null,
+    }
   }
 
   if (status === 'syncing') {
@@ -168,6 +193,7 @@ export function getDefaultSyncSnapshot(): SyncSnapshot {
 
 export function shouldPersistSyncSnapshot(snapshot: SyncSnapshot) {
   return snapshot.status === 'synced' ||
+    snapshot.status === 'blocked' ||
     snapshot.status === 'pending' ||
     snapshot.status === 'retrying' ||
     snapshot.status === 'needs-auth' ||
@@ -179,6 +205,7 @@ function normalizeInterruptedSyncSnapshot(snapshot: SyncSnapshot): SyncSnapshot 
   if (snapshot.pendingReason === 'local-save') {
     return {
       ...snapshot,
+      block: null,
       lastError: null,
       pendingReason: 'local-save',
       status: 'pending',
@@ -188,6 +215,7 @@ function normalizeInterruptedSyncSnapshot(snapshot: SyncSnapshot): SyncSnapshot 
   if (snapshot.lastError) {
     return {
       ...snapshot,
+      block: null,
       pendingReason: snapshot.pendingReason === 'retry' ? 'retry' : null,
       status: snapshot.pendingReason === 'retry' ? 'retrying' : 'error',
     }
@@ -196,6 +224,7 @@ function normalizeInterruptedSyncSnapshot(snapshot: SyncSnapshot): SyncSnapshot 
   if (snapshot.lastSyncedAt) {
     return {
       ...snapshot,
+      block: null,
       pendingReason: null,
       status: 'synced',
     }
