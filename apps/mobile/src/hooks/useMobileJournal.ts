@@ -54,11 +54,31 @@ export function useMobileJournal() {
   const saveStateRef = useRef<SaveState>('loading')
   const todayRef = useRef(today)
 
+  const updateSaveState = useCallback((nextSaveState: SaveState) => {
+    saveStateRef.current = nextSaveState
+    setSaveState(nextSaveState)
+  }, [])
+
+  const applyLoadedRecord = useCallback((
+    loadedRecord: MobileJournalRecord,
+    nextSaveState: SaveState,
+  ) => {
+    journalContentRef.current = {
+      longEntryMarkdown: loadedRecord.longEntryMarkdown,
+      murmurs: loadedRecord.murmurs,
+    }
+    saveStateRef.current = nextSaveState
+    setRecord(loadedRecord)
+    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
+    setMurmurs(loadedRecord.murmurs)
+    setSaveState(nextSaveState)
+  }, [])
+
   useEffect(() => {
     let isMounted = true
     const loadingVersion = journalVersionRef.current
 
-    setSaveState('loading')
+    updateSaveState('loading')
 
     loadDailyJournal(today)
       .then((loadedRecord) => {
@@ -71,14 +91,11 @@ export function useMobileJournal() {
           diagnosticCount: loadedRecord.diagnostics.length,
           murmurCount: loadedRecord.murmurs.length,
         })
-        setRecord(loadedRecord)
 
         if (journalVersionRef.current === loadingVersion) {
-          setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-          setMurmurs(loadedRecord.murmurs)
-          setSaveState('idle')
+          applyLoadedRecord(loadedRecord, 'idle')
         } else {
-          setSaveState('dirty')
+          updateSaveState('dirty')
         }
       })
       .catch((error) => {
@@ -89,14 +106,14 @@ export function useMobileJournal() {
         console.error(error)
 
         if (isMounted) {
-          setSaveState('error')
+          updateSaveState('error')
         }
       })
 
     return () => {
       isMounted = false
     }
-  }, [today])
+  }, [applyLoadedRecord, today, updateSaveState])
 
   useEffect(() => {
     todayRef.current = today
@@ -115,16 +132,27 @@ export function useMobileJournal() {
 
   const markJournalDirty = useCallback(() => {
     journalVersionRef.current += 1
-    setSaveState((currentSaveState) => {
-      if (currentSaveState === 'loading' || currentSaveState === 'saving') {
-        return currentSaveState
-      }
+    const currentSaveState = saveStateRef.current
 
-      return 'dirty'
-    })
-  }, [])
+    updateSaveState(
+      currentSaveState === 'loading' || currentSaveState === 'saving'
+        ? currentSaveState
+        : 'dirty',
+    )
+  }, [updateSaveState])
 
   const handleLongEntryChange = useCallback((value: string) => {
+    if (!isLongEntryFocusedRef.current) {
+      mobileDiagnosticLog.info('journal.input', 'Ignored long entry change while input is not focused', {
+        date: todayRef.current,
+      })
+      return
+    }
+
+    if (value === journalContentRef.current.longEntryMarkdown) {
+      return
+    }
+
     lastLongEntryEditedAtRef.current = Date.now()
     markJournalDirty()
     setLongEntryMarkdown(value)
@@ -141,7 +169,7 @@ export function useMobileJournal() {
     const shouldScheduleSync = options.scheduleSync ?? true
     const shouldShowAlert = options.showAlert ?? true
 
-    setSaveState('saving')
+    updateSaveState('saving')
 
     try {
       const savedRecord = await saveDailyJournal({
@@ -161,14 +189,18 @@ export function useMobileJournal() {
       setRecord(savedRecord)
 
       if (journalVersionRef.current === savingVersion) {
+        journalContentRef.current = {
+          longEntryMarkdown: nextLongEntryMarkdown,
+          murmurs: savedRecord.murmurs,
+        }
         // Keep the editor draft exactly as typed; persisted Markdown trims trailing blank lines.
         if (nextMurmurs !== journalContentRef.current.murmurs) {
           setMurmurs(savedRecord.murmurs)
         }
 
-        setSaveState('saved')
+        updateSaveState('saved')
       } else {
-        setSaveState('dirty')
+        updateSaveState('dirty')
       }
 
       if (shouldEmitEvent && savedRecord.didWrite) {
@@ -187,7 +219,7 @@ export function useMobileJournal() {
         reason,
       })
       console.error(error)
-      setSaveState('error')
+      updateSaveState('error')
 
       if (shouldShowAlert) {
         Alert.alert('保存失败', '本地日记没有写入成功。')
@@ -195,7 +227,7 @@ export function useMobileJournal() {
 
       return null
     }
-  }, [longEntryMarkdown, murmurs, today])
+  }, [longEntryMarkdown, murmurs, today, updateSaveState])
 
   useEffect(() => {
     saveCurrentJournalRef.current = (options?: SaveCurrentJournalOptions) => {
@@ -227,7 +259,7 @@ export function useMobileJournal() {
       }
     }
 
-    setSaveState('loading')
+    updateSaveState('loading')
     const previousDate = todayRef.current
     todayRef.current = nextToday
     setToday(nextToday)
@@ -241,7 +273,7 @@ export function useMobileJournal() {
     })
 
     return true
-  }, [])
+  }, [updateSaveState])
 
   useEffect(() => {
     if (saveState !== 'dirty') {
@@ -385,11 +417,8 @@ export function useMobileJournal() {
     const loadedRecord = await loadDailyJournal(today)
 
     journalVersionRef.current += 1
-    setRecord(loadedRecord)
-    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-    setMurmurs(loadedRecord.murmurs)
-    setSaveState('idle')
-  }, [today])
+    applyLoadedRecord(loadedRecord, 'idle')
+  }, [applyLoadedRecord, today])
 
   const reloadTodayFromDiskIfChanged = useCallback(async () => {
     const loadedRecord = await loadDailyJournal(today)
@@ -403,13 +432,10 @@ export function useMobileJournal() {
     }
 
     journalVersionRef.current += 1
-    setRecord(loadedRecord)
-    setLongEntryMarkdown(loadedRecord.longEntryMarkdown)
-    setMurmurs(loadedRecord.murmurs)
-    setSaveState('idle')
+    applyLoadedRecord(loadedRecord, 'idle')
 
     return true
-  }, [today])
+  }, [applyLoadedRecord, today])
 
   const updateTodayFrontMatter = useCallback(async (frontMatterPatch: DayFrontMatter) => {
     const updatedRecord = await updateDailyJournalFrontMatter(today, frontMatterPatch)

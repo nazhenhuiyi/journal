@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   appendMobileE2eSuffix,
   getMobileE2eRunId,
-  getMobileE2eSyncConfiguration,
+  isMobileE2eDebugLinkEnabled,
+  setMobileE2eRuntimeConfig,
 } from './e2eEnvironment'
 
 describe('mobile E2E environment', () => {
   beforeEach(() => {
     vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', '')
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_BRANCH', '')
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL', '')
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_TOKEN', '')
+    setMobileE2eRuntimeConfig(null)
   })
 
   afterEach(() => {
+    setMobileE2eRuntimeConfig(null)
     vi.unstubAllEnvs()
   })
 
@@ -21,22 +21,19 @@ describe('mobile E2E environment', () => {
     vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', ' sync/run:1 ')
 
     expect(getMobileE2eRunId()).toBe('sync-run-1')
+    expect(isMobileE2eDebugLinkEnabled()).toBe(true)
     expect(appendMobileE2eSuffix('journal.key')).toBe('journal.key.sync-run-1')
   })
 
-  it('only exposes sync configuration during an E2E run', () => {
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_BRANCH', ' mobile-e2e/test ')
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL', ' https://github.com/example/journal.git ')
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_TOKEN', ' ghp_secret ')
-
-    expect(getMobileE2eSyncConfiguration()).toBeNull()
-
-    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', 'run-1')
-
-    expect(getMobileE2eSyncConfiguration()).toEqual({
-      branch: 'mobile-e2e/test',
-      remoteUrl: 'https://github.com/example/journal.git',
-      token: 'ghp_secret',
+  it('lets runtime config override build-time env without enabling debug links by default', () => {
+    vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', ' build-run ')
+    setMobileE2eRuntimeConfig({
+      debugFixturesEnabled: false,
+      runId: ' runtime/run:1 ',
     })
+
+    expect(getMobileE2eRunId()).toBe('runtime-run-1')
+    expect(isMobileE2eDebugLinkEnabled()).toBe(false)
+    expect(appendMobileE2eSuffix('journal.key')).toBe('journal.key.runtime-run-1')
   })
 })

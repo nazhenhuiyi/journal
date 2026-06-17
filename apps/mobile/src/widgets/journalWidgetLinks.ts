@@ -1,4 +1,5 @@
 import type { JournalWidgetAction } from '@journal/core'
+import type { SyncBlockedReason } from '@journal/sync'
 
 export type ParsedJournalDeepLink =
   | {
@@ -12,8 +13,23 @@ export type ParsedJournalDeepLink =
   | {
       type: 'review'
     }
+  | {
+      reason: SyncBlockedReason
+      type: 'debugSyncBlocked'
+    }
+  | {
+      date: string
+      localText: string
+      type: 'debugSyncConflictFixture'
+    }
 
 const dateKeyPattern = /^\d{4}-\d{2}-\d{2}$/
+const debugSyncBlockedReasons = new Set<SyncBlockedReason>([
+  'content-conflict',
+  'first-sync-needs-choice',
+  'object-store-corrupt',
+  'unrelated-histories',
+])
 
 export function buildJournalWidgetDeepLink(action: JournalWidgetAction) {
   if (action.type === 'write') {
@@ -60,5 +76,30 @@ export function parseJournalDeepLink(url: string): ParsedJournalDeepLink | null 
     return { type: 'review' }
   }
 
+  if (host === 'debug' && parsedUrl.pathname === '/sync-blocked') {
+    const reason = parsedUrl.searchParams.get('reason')?.trim()
+
+    return isSyncBlockedReason(reason)
+      ? { reason, type: 'debugSyncBlocked' }
+      : null
+  }
+
+  if (host === 'debug' && parsedUrl.pathname === '/sync-conflict-fixture') {
+    const date = parsedUrl.searchParams.get('date')?.trim()
+    const localText = parsedUrl.searchParams.get('localText')?.trim()
+
+    return date && dateKeyPattern.test(date) && localText
+      ? {
+          date,
+          localText,
+          type: 'debugSyncConflictFixture',
+        }
+      : null
+  }
+
   return null
+}
+
+function isSyncBlockedReason(value: string | undefined): value is SyncBlockedReason {
+  return Boolean(value && debugSyncBlockedReasons.has(value as SyncBlockedReason))
 }

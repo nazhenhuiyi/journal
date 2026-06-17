@@ -1,0 +1,21 @@
+appId: ${APP_ID}
+---
+- runFlow: _launch-app-preserve-state.yaml
+- openLink: journal://debug/sync-blocked?reason=content-conflict
+- extendedWaitUntil:
+    visible:
+      id: sync-settings-page
+    timeout: 10000
+- assertVisible:
+    id: sync-blocked-card
+- assertVisible: 内容有冲突
+- assertVisible: 本机和远端改到了同一段内容，同步已暂停。
+- assertVisible: entries/2026/06/2026-06-16.md
+- assertVisible: 本机段落：移动端 blocked 验收。
+- assertVisible: 远端段落：GitHub 同段修改。
+- assertVisible:
+    id: resolve-conflict-keep-local-button
+- assertVisible:
+    id: resolve-conflict-keep-both-button
+- assertVisible:
+    id: resolve-conflict-keep-remote-button

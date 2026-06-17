@@ -1,28 +1,48 @@
 declare const process: {
   env: {
     EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID?: string
-    EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_BRANCH?: string
-    EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL?: string
-    EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_TOKEN?: string
   }
 }
 
-export type MobileE2eSyncConfiguration = {
-  branch: string
-  remoteUrl: string
-  token: string
+export type MobileE2eRuntimeConfig = {
+  debugFixturesEnabled?: boolean
+  runId?: string
+}
+
+let runtimeConfig: {
+  debugFixturesEnabled: boolean
+  runId: string
+} | null = null
+
+export function setMobileE2eRuntimeConfig(config: MobileE2eRuntimeConfig | null) {
+  runtimeConfig = config
+    ? {
+        debugFixturesEnabled: config.debugFixturesEnabled === true,
+        runId: sanitizeMobileE2eRunId(config.runId ?? ''),
+      }
+    : null
 }
 
 export function getMobileE2eRunId() {
-  const value = process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID?.trim() ?? ''
+  const value = runtimeConfig?.runId ||
+    process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID?.trim() ||
+    ''
 
-  if (!value) {
-    return ''
+  return sanitizeMobileE2eRunId(value)
+}
+
+export function isMobileE2eDebugLinkEnabled() {
+  const hasRunId = Boolean(getMobileE2eRunId())
+
+  if (!hasRunId) {
+    return false
   }
 
-  return value
-    .replace(/[^A-Za-z0-9_-]/g, '-')
-    .slice(0, 80)
+  if (runtimeConfig) {
+    return runtimeConfig.debugFixturesEnabled
+  }
+
+  return true
 }
 
 export function appendMobileE2eSuffix(value: string) {
@@ -31,21 +51,14 @@ export function appendMobileE2eSuffix(value: string) {
   return runId ? `${value}.${runId}` : value
 }
 
-export function getMobileE2eSyncConfiguration(): MobileE2eSyncConfiguration | null {
-  if (!getMobileE2eRunId()) {
-    return null
+function sanitizeMobileE2eRunId(value: string) {
+  const normalizedValue = value.trim()
+
+  if (!normalizedValue) {
+    return ''
   }
 
-  const remoteUrl = process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_REMOTE_URL?.trim() ?? ''
-  const token = process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_TOKEN?.trim() ?? ''
-
-  if (!remoteUrl || !token) {
-    return null
-  }
-
-  return {
-    branch: process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_SYNC_BRANCH?.trim() || 'main',
-    remoteUrl,
-    token,
-  }
+  return normalizedValue
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .slice(0, 80)
 }

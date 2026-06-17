@@ -131,11 +131,11 @@ pnpm run e2e:desktop:sync
 移动端原生回归：
 
 ```sh
-pnpm run e2e:mobile:ios
-pnpm run e2e:mobile:android
+pnpm run e2e:mobile:ios:artifact
+pnpm run e2e:mobile:android:artifact
 ```
 
-真实 GitHub 同步回归必须使用专用测试仓库，不使用真实日记仓库。失败排查时优先看 trace、dirty paths、`.git/HEAD`、最近 commit、通过 `@journal/sync` clone 后的远端内容，以及移动端是否恢复了 pending paths。
+真实 GitHub 同步回归必须使用专用测试仓库，不使用真实日记仓库；移动端真实同步性能回归使用 `pnpm run e2e:mobile:ios:sync` / `pnpm run e2e:mobile:android:sync`。失败排查时优先看 trace、dirty paths、`.git/HEAD`、最近 commit、通过 `@journal/sync` clone 后的远端内容，以及移动端是否恢复了 pending paths。
 
 性能基线数据集建议：
 

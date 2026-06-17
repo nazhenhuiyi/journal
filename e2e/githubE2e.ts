@@ -7,6 +7,7 @@ import path from 'node:path'
 import {
   cloneJournalGitSyncRepository,
   getJournalGitSyncStatus,
+  syncJournalNow,
   type JournalGitCredentials,
   type JournalGitRuntime,
   type JournalGitSyncConfig,
@@ -18,7 +19,6 @@ export type GitHubE2eConfig = {
   credentials: JournalGitCredentials
   remote: GitHubRemote
   remoteUrl: string
-  shouldKeepBranch: boolean
 }
 
 export type GitHubRemote = {
@@ -26,28 +26,36 @@ export type GitHubRemote = {
   repo: string
 }
 
-export function loadGitHubE2eConfig(): GitHubE2eConfig | null {
+export type GitHubE2eBranchEnvironment = {
+  branch: string
+  gitConfig: JournalGitSyncConfig
+  dispose(): Promise<void>
+}
+
+export function loadGitHubE2eConfig(): GitHubE2eConfig {
   const token = process.env['JOURNAL_E2E_GITHUB_TOKEN']?.trim() ?? ''
   const remoteUrl = process.env['JOURNAL_E2E_GITHUB_REMOTE_URL']?.trim() ?? ''
   const remote = parseGitHubRemote(remoteUrl)
 
   if (remoteUrl && !remote) {
-    throw new Error('JOURNAL_E2E_GITHUB_REMOTE_URL must point at github.com and use an HTTPS or SSH GitHub remote URL.')
+    throw new Error('JOURNAL_E2E_GITHUB_REMOTE_URL must point at github.com and use an HTTPS GitHub remote URL.')
   }
 
-  if (!token || !remoteUrl) {
-    return null
+  if (!remoteUrl || !token) {
+    throw new Error([
+      'GitHub E2E requires JOURNAL_E2E_GITHUB_REMOTE_URL and JOURNAL_E2E_GITHUB_TOKEN.',
+      'Use a dedicated private E2E repository; missing env is a failed test setup, not a skipped test.',
+    ].join('\n'))
   }
 
   return {
     branchPrefix: process.env['JOURNAL_E2E_GITHUB_BRANCH_PREFIX']?.trim() || 'e2e/playwright',
     credentials: {
       token,
-      username: process.env['JOURNAL_E2E_GITHUB_USERNAME']?.trim() || 'x-access-token',
+      username: 'x-access-token',
     },
     remote,
     remoteUrl,
-    shouldKeepBranch: process.env['JOURNAL_E2E_GITHUB_KEEP_BRANCH'] === '1',
   }
 }
 
@@ -73,11 +81,31 @@ export async function createGitHubE2eBranch(config: GitHubE2eConfig, branch: str
   throw new Error(`GitHub E2E branch creation failed with ${response.status}: ${await response.text()}`)
 }
 
-export async function deleteGitHubE2eBranch(config: GitHubE2eConfig, branch: string) {
-  if (config.shouldKeepBranch) {
-    return
-  }
+export async function createGitHubE2eBranchEnvironment(
+  config: GitHubE2eConfig,
+  label: string,
+): Promise<GitHubE2eBranchEnvironment> {
+  const branch = createGitHubE2eBranchName(config, label)
 
+  await createGitHubE2eBranch(config, branch)
+
+  let disposed = false
+
+  return {
+    branch,
+    gitConfig: createJournalGitConfig(config, branch),
+    dispose: async () => {
+      if (disposed) {
+        return
+      }
+
+      disposed = true
+      await deleteGitHubE2eBranch(config, branch)
+    },
+  }
+}
+
+export async function deleteGitHubE2eBranch(config: GitHubE2eConfig, branch: string) {
   const response = await fetch(
     createGitHubApiUrl(config.remote, `/git/refs/${encodeGitHubRefPath(branch)}`),
     {
@@ -142,6 +170,36 @@ export async function cloneGitHubE2eBranch(
   }
 }
 
+export async function seedGitHubE2eBranch(
+  config: GitHubE2eConfig,
+  branch: string,
+  worktreeDir: string,
+  files: Record<string, string | Uint8Array>,
+) {
+  const runtime = createNodeGitRuntime(worktreeDir)
+  const gitConfig = createJournalGitConfig(config, branch)
+
+  await cloneJournalGitSyncRepository(runtime, gitConfig, config.credentials)
+
+  for (const [filepath, contents] of Object.entries(files)) {
+    const absolutePath = path.join(worktreeDir, filepath)
+
+    await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.promises.writeFile(absolutePath, contents)
+  }
+
+  await syncJournalNow(runtime, gitConfig, config.credentials, {
+    changedPaths: Object.keys(files),
+    collectDirtyPathsAfterSync: true,
+  })
+
+  return {
+    gitConfig,
+    runtime,
+    status: await getJournalGitSyncStatus(runtime, gitConfig, config.credentials),
+  }
+}
+
 export async function expectHeadAttachedToBranch(worktreeDir: string, branch: string) {
   await expect.poll(
     async () => readFile(path.join(worktreeDir, '.git', 'HEAD'), 'utf8'),
@@ -166,15 +224,6 @@ function parseGitHubRemote(remoteUrl: string): GitHubRemote | null {
     return {
       owner: httpsMatch[1],
       repo: httpsMatch[2],
-    }
-  }
-
-  const sshMatch = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(remoteUrl)
-
-  if (sshMatch) {
-    return {
-      owner: sshMatch[1],
-      repo: sshMatch[2],
     }
   }
 

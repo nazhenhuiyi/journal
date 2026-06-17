@@ -36,4 +36,27 @@ describe('journal widget links', () => {
     expect(parseJournalDeepLink('journal://write')).toBeNull()
     expect(parseJournalDeepLink('journal://review-day?date=bad')).toBeNull()
   })
+
+  it('parses E2E sync blocked debug links', () => {
+    expect(parseJournalDeepLink('journal://debug/sync-blocked?reason=content-conflict')).toEqual({
+      reason: 'content-conflict',
+      type: 'debugSyncBlocked',
+    })
+    expect(parseJournalDeepLink('journal://debug/sync-blocked?reason=bad')).toBeNull()
+  })
+
+  it('parses E2E sync conflict fixture links', () => {
+    const link = [
+      'journal://debug/sync-conflict-fixture',
+      '?date=2026-06-17',
+      '&localText=local%20text',
+    ].join('')
+
+    expect(parseJournalDeepLink(link)).toEqual({
+      date: '2026-06-17',
+      localText: 'local text',
+      type: 'debugSyncConflictFixture',
+    })
+    expect(parseJournalDeepLink('journal://debug/sync-conflict-fixture?date=bad')).toBeNull()
+  })
 })

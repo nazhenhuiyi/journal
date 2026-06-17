@@ -1,0 +1,29 @@
+appId: ${APP_ID}
+---
+- runFlow: _set-home-mode-murmur.yaml
+- tapOn:
+    id: murmur-draft-input
+- setClipboard: Mobile E2E murmur before edit
+- pasteText
+- tapOn:
+    id: add-murmur-button
+    enabled: true
+- assertVisible: Mobile E2E murmur before edit
+- hideKeyboard
+- tapOn:
+    id: murmur-edit-button
+- extendedWaitUntil:
+    visible:
+      id: murmur-edit-body-input
+    timeout: 10000
+- tapOn:
+    id: murmur-edit-body-input
+- eraseText: 120
+- setClipboard: Mobile E2E murmur after edit
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: murmur-edit-done-button
+- assertVisible: Mobile E2E murmur after edit
+- assertVisible:
+    id: journal-list-button

@@ -9,6 +9,7 @@ import {
   pullJournalUpdates,
   type JournalGitRuntime,
 } from './core'
+import { getJournalSyncBlock } from '../state/syncBlock'
 
 const author = {
   email: 'sync-test@example.invalid',
@@ -170,6 +171,250 @@ describe('journal git sync core integration', () => {
     expect(traceEvents).toContain('remote.merge')
     expect(traceEvents).not.toContain('remote.fetch')
   })
+
+  it('includes local and remote preview text when a real domain merge has content conflicts', async () => {
+    const dir = await createTempRepository()
+    const entryPath = 'entries/2026/06/2026-06-17.md'
+
+    await git.init({
+      defaultBranch: 'main',
+      dir,
+      fs,
+    })
+    const baseOid = await commitFiles(dir, 'Base journal state', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E conflict base'),
+    })
+    const remoteOid = await commitFiles(dir, 'Remote journal state', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E remote conflict'),
+    })
+
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/remotes/origin/main',
+      value: remoteOid,
+    })
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+      value: baseOid,
+    })
+    await git.checkout({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+    })
+    await commitFiles(dir, 'Local journal state', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E local conflict'),
+    })
+    const traceEvents: string[] = []
+    const runtime = createRuntime(dir, remoteOid, traceEvents)
+
+    let thrown: unknown = null
+
+    try {
+      await pullJournalUpdates(
+        runtime,
+        {
+          branch: 'main',
+          remoteUrl: 'https://github.com/example/journal-sync.git',
+        },
+        credentials,
+        {
+          collectDirtyPathsAfterSync: false,
+        },
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(getJournalSyncBlock(thrown)).toEqual({
+      conflicts: [{
+        ours: 'Mobile E2E local conflict',
+        path: entryPath,
+        theirs: 'Mobile E2E remote conflict',
+      }],
+      message: '本机和远端改到了同一段内容，同步已暂停。',
+      paths: [entryPath],
+      reason: 'content-conflict',
+    })
+  })
+
+  it('falls back to local and remote blob previews when a content conflict has no marker preview', async () => {
+    const dir = await createTempRepository()
+    const entryPath = 'entries/2026/06/2026-06-17.md'
+
+    await git.init({
+      defaultBranch: 'main',
+      dir,
+      fs,
+    })
+    const seedOid = await commitFiles(dir, 'Seed mobile sync conflict base', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E conflict base'),
+    })
+    const baseOid = await commitFiles(dir, 'Sync mobile journal changes', {
+      [entryPath]: createJournalEntry('2026-06-17', ''),
+    })
+    const remoteOid = await commitFiles(dir, 'Remote journal state', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E remote conflict'),
+    })
+
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/remotes/origin/main',
+      value: remoteOid,
+    })
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+      value: baseOid,
+    })
+    await git.checkout({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+    })
+    await commitFiles(dir, 'Local journal state', {
+      [entryPath]: createJournalEntry('2026-06-17', 'Mobile E2E local conflict'),
+    })
+    const traceEvents: string[] = []
+    const runtime = createRuntime(dir, remoteOid, traceEvents)
+
+    let thrown: unknown = null
+
+    try {
+      await pullJournalUpdates(
+        runtime,
+        {
+          branch: 'main',
+          remoteUrl: 'https://github.com/example/journal-sync.git',
+        },
+        credentials,
+        {
+          collectDirtyPathsAfterSync: false,
+        },
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(seedOid).toMatch(/^[0-9a-f]{40}$/)
+    expect(getJournalSyncBlock(thrown)).toEqual({
+      conflicts: [{
+        ours: 'Mobile E2E local conflict',
+        path: entryPath,
+        theirs: 'Mobile E2E remote conflict',
+      }],
+      message: '本机和远端改到了同一段内容，同步已暂停。',
+      paths: [entryPath],
+      reason: 'content-conflict',
+    })
+  })
+
+  it('prefers body previews over frontmatter marker previews for mobile-shaped conflicts', async () => {
+    const dir = await createTempRepository()
+    const entryPath = 'entries/2026/06/2026-06-17.md'
+
+    await git.init({
+      defaultBranch: 'main',
+      dir,
+      fs,
+    })
+    const baseOid = await commitFiles(dir, 'Seed mobile sync conflict base', {
+      [entryPath]: createJournalEntryWithFrontMatter(
+        [
+          'date: 2026-06-17',
+          'createdAt: 2026-06-17T00:00:00.000Z',
+          'updatedAt: 2026-06-17T00:00:00.000Z',
+        ],
+        'Mobile E2E conflict base',
+      ),
+    })
+    const remoteOid = await commitFiles(dir, 'Remote journal state', {
+      [entryPath]: createJournalEntryWithFrontMatter(
+        [
+          'date: 2026-06-17',
+          'createdAt: 2026-06-17T00:00:00.000Z',
+          'updatedAt: 2026-06-17T09:38:44.937Z',
+        ],
+        'Mobile E2E remote conflict',
+      ),
+    })
+
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/remotes/origin/main',
+      value: remoteOid,
+    })
+    await git.writeRef({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+      value: baseOid,
+    })
+    await git.checkout({
+      dir,
+      force: true,
+      fs,
+      ref: 'refs/heads/main',
+    })
+    await commitFiles(dir, 'Local journal state', {
+      [entryPath]: createJournalEntryWithFrontMatter(
+        [
+          'date: 2026-06-17',
+          'createdAt: 2026-06-17T00:00:00.000Z',
+          'updatedAt: 2026-06-17T09:38:44.937Z',
+          'weather:',
+          '  text: 天气未知',
+          '  temperature: 28',
+        ],
+        'Mobile E2E local conflict',
+      ),
+    })
+    const traceEvents: string[] = []
+    const runtime = createRuntime(dir, remoteOid, traceEvents)
+
+    let thrown: unknown = null
+
+    try {
+      await pullJournalUpdates(
+        runtime,
+        {
+          branch: 'main',
+          remoteUrl: 'https://github.com/example/journal-sync.git',
+        },
+        credentials,
+        {
+          collectDirtyPathsAfterSync: false,
+        },
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(getJournalSyncBlock(thrown)).toEqual({
+      conflicts: [{
+        ours: 'Mobile E2E local conflict',
+        path: entryPath,
+        theirs: 'Mobile E2E remote conflict',
+      }],
+      message: '本机和远端改到了同一段内容，同步已暂停。',
+      paths: [entryPath],
+      reason: 'content-conflict',
+    })
+  })
 })
 
 async function createTempRepository() {
@@ -276,4 +521,27 @@ async function fileExists(filepath: string) {
 
 async function readUtf8File(dir: string, filepath: string) {
   return textDecoder.decode(await readFile(path.join(dir, filepath)))
+}
+
+function createJournalEntry(date: string, body: string) {
+  return createJournalEntryWithFrontMatter(
+    [
+      `date: ${date}`,
+      `createdAt: ${date}T00:00:00.000Z`,
+      `updatedAt: ${date}T00:00:00.000Z`,
+    ],
+    body,
+  )
+}
+
+function createJournalEntryWithFrontMatter(
+  frontMatterLines: readonly string[],
+  body: string,
+) {
+  return `---
+${frontMatterLines.join('\n')}
+---
+
+${body}
+`
 }

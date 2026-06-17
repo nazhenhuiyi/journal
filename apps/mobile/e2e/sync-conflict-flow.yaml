@@ -1,0 +1,34 @@
+appId: ${APP_ID}
+---
+- extendedWaitUntil:
+    visible:
+      id: sync-settings-page
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: sync-now-button
+    timeout: 180000
+- tapOn:
+    id: sync-now-button
+    enabled: true
+- extendedWaitUntil:
+    visible: 同步受阻
+    timeout: 180000
+- tapOn: OK
+- extendedWaitUntil:
+    visible:
+      id: sync-blocked-card
+    timeout: 180000
+- assertVisible: 内容有冲突
+- assertVisible: 本机和远端改到了同一段内容，同步已暂停。
+- assertVisible: ${SYNC_CONFLICT_ENTRY_PATH}
+- assertVisible:
+    id: sync-conflict-preview-0-local-text
+- assertVisible:
+    id: sync-conflict-preview-0-remote-text
+- assertVisible:
+    id: resolve-conflict-keep-local-button
+- assertVisible:
+    id: resolve-conflict-keep-both-button
+- assertVisible:
+    id: resolve-conflict-keep-remote-button

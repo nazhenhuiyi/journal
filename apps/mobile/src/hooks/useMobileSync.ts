@@ -112,13 +112,17 @@ export function useMobileSync({
     setSyncBranch: mobileSyncManager.setSyncBranch,
     setSyncRemoteUrl: mobileSyncManager.setSyncRemoteUrl,
     setSyncTokenDraft: mobileSyncManager.setSyncTokenDraft,
+    prepareDebugSyncConflictFixture: mobileSyncManager.prepareDebugSyncConflictFixture,
+    showDebugSyncBlocked: mobileSyncManager.showDebugBlockedSnapshot,
   } satisfies MobileSyncManagerState & {
     handleSyncNow: () => Promise<void>
+    prepareDebugSyncConflictFixture: typeof mobileSyncManager.prepareDebugSyncConflictFixture
     refreshMobileGitStatus: typeof mobileSyncManager.refreshStatus
     resolveSyncConflict: typeof mobileSyncManager.resolveConflict
     saveSyncConfiguration: () => Promise<boolean>
     setSyncBranch: typeof mobileSyncManager.setSyncBranch
     setSyncRemoteUrl: typeof mobileSyncManager.setSyncRemoteUrl
     setSyncTokenDraft: typeof mobileSyncManager.setSyncTokenDraft
+    showDebugSyncBlocked: typeof mobileSyncManager.showDebugBlockedSnapshot
   }
 }

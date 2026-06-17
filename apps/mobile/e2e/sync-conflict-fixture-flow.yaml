@@ -55,52 +55,8 @@ appId: ${APP_ID}
     visible:
       id: sync-now-button
     timeout: 180000
-- tapOn:
-    id: back-to-today-button
-- extendedWaitUntil:
-    visible:
-      id: journal-list-button
-    timeout: 10000
-- tapOn:
-    id: murmur-count-button
-    optional: true
-- extendedWaitUntil:
-    visible:
-      id: murmur-draft-input
-    timeout: 10000
-- tapOn:
-    id: murmur-draft-input
-- setClipboard: ${SYNC_MARKER_TEXT}
-- pasteText
-- pressKey: Enter
-- tapOn:
-    id: add-murmur-button
-    enabled: true
-- assertVisible: ${SYNC_MARKER_TEXT}
-- hideKeyboard
-- tapOn:
-    id: back-to-today-button
-    optional: true
-- extendedWaitUntil:
-    visible:
-      id: sync-status-button
-    timeout: 10000
-- tapOn:
-    id: sync-status-button
+- openLink: journal://debug/sync-conflict-fixture?date=${SYNC_CONFLICT_DATE}&localText=${SYNC_CONFLICT_LOCAL_TEXT_ENCODED}
 - extendedWaitUntil:
     visible:
       id: sync-settings-page
     timeout: 10000
-- extendedWaitUntil:
-    visible:
-      id: sync-now-button
-    timeout: 30000
-- tapOn:
-    id: sync-now-button
-    enabled: true
-- extendedWaitUntil:
-    visible: 同步完成
-    timeout: 180000
-- tapOn:
-    id: back-to-today-button
-- assertVisible: 已同步

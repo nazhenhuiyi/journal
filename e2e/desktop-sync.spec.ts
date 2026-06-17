@@ -3,14 +3,13 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   cloneGitHubE2eBranch,
-  createGitHubE2eBranch,
-  createGitHubE2eBranchName,
-  deleteGitHubE2eBranch,
+  createGitHubE2eBranchEnvironment,
   expectHeadAttachedToBranch,
   getEntryPath,
   getErrorMessage,
   loadGitHubE2eConfig,
   pathExists,
+  type GitHubE2eBranchEnvironment,
 } from './githubE2e'
 import {
   closeIsolatedDesktopApp,
@@ -31,21 +30,18 @@ test.use({
 
 test('desktop app saves sync settings and syncs a journal entry through GitHub', async () => {
   const githubConfig = loadGitHubE2eConfig()
-
-  test.skip(!githubConfig, 'Set JOURNAL_E2E_GITHUB_TOKEN and JOURNAL_E2E_GITHUB_REMOTE_URL to run this test.')
-
-  const branch = createGitHubE2eBranchName(githubConfig, 'desktop-app')
   const today = getLocalDateKey()
   let context: IsolatedDesktopApp | null = null
+  let environment: GitHubE2eBranchEnvironment | null = null
 
   try {
-    await createGitHubE2eBranch(githubConfig, branch)
+    environment = await createGitHubE2eBranchEnvironment(githubConfig, 'desktop-app')
     context = await createIsolatedDesktopApp()
 
     const page = await waitForPreviewPage(context.app)
 
     await saveDesktopSyncSettings(page, {
-      branch,
+      branch: environment.branch,
       remoteUrl: githubConfig.remoteUrl,
       token: githubConfig.credentials.token,
     })
@@ -55,14 +51,14 @@ test('desktop app saves sync settings and syncs a journal entry through GitHub',
     const configuredStatus = await loadDesktopSyncStatus(page)
 
     expect(configuredStatus).toMatchObject({
-      branch,
+      branch: environment.branch,
       credentialStatus: 'available',
       hasCredentials: true,
       hasRepository: true,
       remoteUrl: githubConfig.remoteUrl,
     })
 
-    const marker = `Desktop app GitHub sync E2E ${branch}`
+    const marker = `Desktop app GitHub sync E2E ${environment.branch}`
     const editor = page.locator('[aria-label="日记正文"][role="textbox"]')
 
     await editor.click()
@@ -89,27 +85,27 @@ test('desktop app saves sync settings and syncs a journal entry through GitHub',
 
     const syncedStatus = await loadDesktopSyncStatus(page)
 
-    expect(syncedStatus.branch).toBe(branch)
+    expect(syncedStatus.branch).toBe(environment.branch)
     expect(syncedStatus.dirtyPaths).toEqual([])
-    await expectHeadAttachedToBranch(context.journalDir, branch)
-    expect(await pathExists(path.join(context.journalDir, '.git', branch))).toBe(false)
+    await expectHeadAttachedToBranch(context.journalDir, environment.branch)
+    expect(await pathExists(path.join(context.journalDir, '.git', environment.branch))).toBe(false)
     expect(await pathExists(path.join(context.journalDir, '.git', 'main'))).toBe(false)
 
     const cloneDir = path.join(context.rootDir, 'remote-clone')
-    const clone = await cloneGitHubE2eBranch(githubConfig, branch, cloneDir)
+    const clone = await cloneGitHubE2eBranch(githubConfig, environment.branch, cloneDir)
     const clonedContent = await readFile(getEntryPath(cloneDir, today), 'utf8')
 
-    expect(clone.status.branch).toBe(branch)
+    expect(clone.status.branch).toBe(environment.branch)
     expect(clone.status.dirtyPaths).toEqual([])
     expect(clonedContent).toContain(marker)
-    await expectHeadAttachedToBranch(cloneDir, branch)
+    await expectHeadAttachedToBranch(cloneDir, environment.branch)
   } finally {
     if (context) {
       await closeIsolatedDesktopApp(context)
     }
 
-    await deleteGitHubE2eBranch(githubConfig, branch).catch((error: unknown) => {
-      console.warn(`Failed to delete GitHub E2E branch ${branch}: ${getErrorMessage(error)}`)
+    await environment?.dispose().catch((error: unknown) => {
+      console.warn(`Failed to delete GitHub E2E branch ${environment?.branch}: ${getErrorMessage(error)}`)
     })
   }
 })

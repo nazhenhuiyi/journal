@@ -1354,9 +1354,19 @@ async function mergeRemoteBranch(
       const worktreeConflictPreviews = conflictPreviews.length > 0
         ? []
         : await collectWorktreeConflictPreviews(runtime, conflictPaths)
+      const mergeSideConflictPreviews = await collectMergeSideConflictPreviews(runtime, branch, remote, conflictPaths)
+      const previewCandidates = conflictPreviews.length > 0
+        ? mergeSideConflictPreviews.length > 0
+          ? replaceMetadataConflictPreviews(conflictPreviews, mergeSideConflictPreviews)
+          : conflictPreviews
+        : worktreeConflictPreviews.length > 0
+          ? mergeSideConflictPreviews.length > 0
+            ? replaceMetadataConflictPreviews(worktreeConflictPreviews, mergeSideConflictPreviews)
+            : worktreeConflictPreviews
+          : mergeSideConflictPreviews
 
       throw createContentConflictBlockedError({
-        conflictPreviews: conflictPreviews.length > 0 ? conflictPreviews : worktreeConflictPreviews,
+        conflictPreviews: previewCandidates,
         paths: conflictPaths,
       }, error)
     }
@@ -3346,6 +3356,144 @@ async function collectWorktreeConflictPreviews(
   }
 
   return previews.slice(0, maxConflictPreviewCount)
+}
+
+async function collectMergeSideConflictPreviews(
+  runtime: JournalGitRuntime,
+  branch: string,
+  remote: string,
+  paths: readonly string[],
+): Promise<SyncBlockConflictPreview[]> {
+  if (paths.length === 0) {
+    return []
+  }
+
+  const [localOid, remoteOid] = await Promise.all([
+    getLocalBranchCommitOid(runtime, branch),
+    getRemoteTrackingBranchCommitOid(runtime, remote, branch),
+  ])
+
+  if (!localOid || !remoteOid) {
+    return []
+  }
+
+  const previews: SyncBlockConflictPreview[] = []
+
+  for (const filepath of paths) {
+    if (!isTextMergeJournalPath(filepath)) {
+      continue
+    }
+
+    const [ours, theirs] = await Promise.all([
+      readCommitPathPreviewText(runtime, localOid, filepath),
+      readCommitPathPreviewText(runtime, remoteOid, filepath),
+    ])
+
+    if (!ours && !theirs) {
+      continue
+    }
+
+    previews.push({
+      ours,
+      path: filepath,
+      theirs,
+    })
+
+    if (previews.length >= maxConflictPreviewCount) {
+      break
+    }
+  }
+
+  return previews
+}
+
+function replaceMetadataConflictPreviews(
+  previews: readonly SyncBlockConflictPreview[],
+  sidePreviews: readonly SyncBlockConflictPreview[],
+): SyncBlockConflictPreview[] {
+  if (previews.length === 0 || sidePreviews.length === 0) {
+    return [...previews]
+  }
+
+  return previews.map((preview) => {
+    const sidePreview = sidePreviews.find((candidate) => candidate.path === preview.path)
+
+    if (!sidePreview || !shouldPreferSideConflictPreview(preview, sidePreview)) {
+      return preview
+    }
+
+    return sidePreview
+  })
+}
+
+function shouldPreferSideConflictPreview(
+  preview: SyncBlockConflictPreview,
+  sidePreview: SyncBlockConflictPreview,
+) {
+  if (!sidePreview.ours && !sidePreview.theirs) {
+    return false
+  }
+
+  return isMetadataConflictPreviewText(preview.ours) ||
+    isMetadataConflictPreviewText(preview.theirs)
+}
+
+async function readCommitPathPreviewText(
+  runtime: JournalGitRuntime,
+  oid: string,
+  filepath: string,
+) {
+  try {
+    const { blob } = await getGit(runtime).readBlob({
+      cache: runtime.cache,
+      dir: runtime.dir,
+      filepath,
+      fs: runtime.fs,
+      oid,
+    })
+
+    return createConflictSidePreviewText(toUtf8String(blob))
+  } catch {
+    return ''
+  }
+}
+
+function createConflictSidePreviewText(content: string) {
+  const body = stripFrontMatterForConflictPreview(content)
+  const previewSource = body.trim() ? body : content
+
+  return trimConflictPreviewLines(previewSource.replace(/\r\n/g, '\n').split('\n'))
+}
+
+function stripFrontMatterForConflictPreview(content: string) {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+
+  if (lines[0]?.trim() !== '---') {
+    return content
+  }
+
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
+
+  if (closingIndex === -1) {
+    return content
+  }
+
+  return lines.slice(closingIndex + 1).join('\n').replace(/^\n/, '')
+}
+
+function isMetadataConflictPreviewText(text: string) {
+  const firstContentLine = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line && line !== '...')
+
+  if (!firstContentLine) {
+    return false
+  }
+
+  return firstContentLine === '---' ||
+    /^(createdAt|date|feelsLike|humidity|location|temperature|text|updatedAt|weather|windSpeed):(?:\s|$)/.test(firstContentLine)
 }
 
 function extractConflictPreviewsFromContent(

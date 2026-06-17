@@ -75,6 +75,7 @@ const mocks = vi.hoisted(() => {
   return {
     MockJournalSyncCoordinator,
     mockGetJournalGitAuthenticationErrorMessage: vi.fn(),
+    mockCommitMobileJournalChanges: vi.fn(),
     mockGetMobileGitSyncStatus: vi.fn(),
     mockLoadGitHubSyncCredentials: vi.fn(),
     mockLoadGitHubSyncSettings: vi.fn(),
@@ -84,6 +85,7 @@ const mocks = vi.hoisted(() => {
     mockResolveMobileJournalSyncConflict: vi.fn(),
     mockSaveGitHubSyncCredentials: vi.fn(),
     mockSaveGitHubSyncSettings: vi.fn(),
+    mockSaveDailyJournal: vi.fn(),
     mockSaveMobileSyncSnapshot: vi.fn(),
     mockSavePendingMobileSyncPaths: vi.fn(),
     mockSyncMobileJournalWithGitHub: vi.fn(),
@@ -130,6 +132,7 @@ vi.mock('@journal/sync', () => ({
 }))
 
 vi.mock('./mobileGitSync', () => ({
+  commitMobileJournalChanges: mocks.mockCommitMobileJournalChanges,
   getMobileGitSyncStatus: mocks.mockGetMobileGitSyncStatus,
   pullMobileJournalUpdatesFromGitHub: mocks.mockPullMobileJournalUpdatesFromGitHub,
   resolveMobileJournalSyncConflict: mocks.mockResolveMobileJournalSyncConflict,
@@ -149,6 +152,10 @@ vi.mock('../diagnostics/log', () => ({
   },
 }))
 
+vi.mock('../mobileJournalStore', () => ({
+  saveDailyJournal: mocks.mockSaveDailyJournal,
+}))
+
 vi.mock('./pendingSyncPaths', () => ({
   loadPendingMobileSyncPaths: mocks.mockLoadPendingMobileSyncPaths,
   savePendingMobileSyncPaths: mocks.mockSavePendingMobileSyncPaths,
@@ -164,10 +171,6 @@ vi.mock('./secureSyncCredentials', () => ({
   loadGitHubSyncSettings: mocks.mockLoadGitHubSyncSettings,
   saveGitHubSyncCredentials: mocks.mockSaveGitHubSyncCredentials,
   saveGitHubSyncSettings: mocks.mockSaveGitHubSyncSettings,
-}))
-
-vi.mock('../e2eEnvironment', () => ({
-  getMobileE2eSyncConfiguration: vi.fn(() => null),
 }))
 
 describe('mobile sync manager', () => {
@@ -210,8 +213,13 @@ describe('mobile sync manager', () => {
     })
     mocks.mockSaveGitHubSyncCredentials.mockResolvedValue(undefined)
     mocks.mockSaveGitHubSyncSettings.mockResolvedValue(undefined)
+    mocks.mockSaveDailyJournal.mockResolvedValue({
+      changedPaths: ['entries/2026/06/2026-06-17.md'],
+      didWrite: true,
+    })
     mocks.mockSaveMobileSyncSnapshot.mockResolvedValue(undefined)
     mocks.mockSavePendingMobileSyncPaths.mockResolvedValue(undefined)
+    mocks.mockCommitMobileJournalChanges.mockResolvedValue('local-fixture-commit')
     mocks.mockResolveMobileJournalSyncConflict.mockResolvedValue({
       localCommitOid: 'resolution-head',
       pushResult: {
@@ -339,6 +347,88 @@ describe('mobile sync manager', () => {
       ok: false,
     })
     expect(mocks.mockGetMobileGitSyncStatus).not.toHaveBeenCalled()
+  })
+
+  it('creates a debug content-conflict blocked snapshot for E2E fixtures', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+    const coordinator = mocks.getCoordinator()
+
+    mobileSyncManager.showDebugBlockedSnapshot('content-conflict')
+
+    expect(coordinator?.stopPulling).toHaveBeenCalledTimes(1)
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      block: {
+        conflicts: [
+          {
+            ours: '本机段落：移动端 blocked 验收。',
+            path: 'entries/2026/06/2026-06-16.md',
+            theirs: '远端段落：GitHub 同段修改。',
+          },
+        ],
+        paths: [
+          'entries/2026/06/2026-06-16.md',
+          'reviews/2026/06/2026-06-16.json',
+        ],
+        reason: 'content-conflict',
+      },
+      status: 'blocked',
+    })
+  })
+
+  it('prepares a debug sync conflict fixture with a committed local side', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    const coordinator = mocks.getCoordinator()
+
+    coordinator?.startPulling.mockClear()
+    coordinator?.stopPulling.mockClear()
+
+    const result = await mobileSyncManager.prepareDebugSyncConflictFixture({
+      date: '2026-06-17',
+      localText: 'local conflict text',
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(coordinator?.stopPulling).toHaveBeenCalled()
+    expect(mocks.mockSyncMobileJournalWithGitHub).toHaveBeenCalledWith(
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      undefined,
+      expect.objectContaining({
+        changedPaths: [],
+        firstSyncLocalContent: 'empty',
+      }),
+    )
+    expect(mocks.mockSaveDailyJournal).toHaveBeenCalledWith({
+      date: '2026-06-17',
+      longEntryMarkdown: 'local conflict text',
+      murmurs: [],
+    })
+    expect(mocks.mockCommitMobileJournalChanges).toHaveBeenCalledWith(
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      'Prepare mobile sync conflict local side',
+      expect.objectContaining({
+        changedPaths: ['entries/2026/06/2026-06-17.md'],
+      }),
+    )
+    expect(coordinator?.startPulling).not.toHaveBeenCalled()
+    expect(mobileSyncManager.getState()).toMatchObject({
+      hasStoredSyncToken: true,
+      syncBranch: 'main',
+      syncMessage: '冲突环境已准备',
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+      syncSnapshot: {
+        pendingReason: 'local-save',
+        status: 'pending',
+      },
+    })
   })
 
   it('resolves restored content conflict blocks through the mobile git adapter', async () => {

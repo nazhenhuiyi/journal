@@ -111,7 +111,7 @@ export function SyncSettingsPage({
 
             {blockPresentation ? (
               <Section title="处理同步阻断">
-                <View style={styles.blockCard}>
+                <View style={styles.blockCard} testID="sync-blocked-card">
                   <Text className="text-sm font-semibold leading-5 text-foreground">
                     {blockPresentation.title}
                   </Text>
@@ -128,8 +128,16 @@ export function SyncSettingsPage({
                           <Text className="font-mono text-xs leading-5 text-text-tertiary" numberOfLines={1}>
                             {conflict.path}
                           </Text>
-                          <ConflictSide label="本机" value={conflict.ours} />
-                          <ConflictSide label="远端" value={conflict.theirs} />
+                          <ConflictSide
+                            label="本机"
+                            testID={`sync-conflict-preview-${index}-local-text`}
+                            value={conflict.ours}
+                          />
+                          <ConflictSide
+                            label="远端"
+                            testID={`sync-conflict-preview-${index}-remote-text`}
+                            value={conflict.theirs}
+                          />
                         </View>
                       ))}
                     </View>
@@ -309,9 +317,11 @@ function getConflictResolutionCopy(strategy: JournalGitConflictResolutionStrateg
 
 function ConflictSide({
   label,
+  testID,
   value,
 }: {
   label: string
+  testID?: string
   value: string
 }) {
   return (
@@ -319,7 +329,7 @@ function ConflictSide({
       <Text className="text-xs font-semibold leading-5 text-text-tertiary">
         {label}
       </Text>
-      <Text className="font-mono text-xs leading-5 text-foreground">
+      <Text className="font-mono text-xs leading-5 text-foreground" testID={testID}>
         {value || '（空）'}
       </Text>
     </View>

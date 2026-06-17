@@ -9,9 +9,10 @@ appId: ${APP_ID}
     timeout: 10000
 - tapOn:
     id: open-sync-configuration-button
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: sync-remote-url-input
+    direction: DOWN
     timeout: 10000
 - tapOn:
     id: sync-remote-url-input

@@ -1,0 +1,51 @@
+appId: ${APP_ID}
+---
+- runFlow: _launch-app.yaml
+- tapOn:
+    id: review-button
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- tapOn:
+    id: back-to-today-button
+- extendedWaitUntil:
+    visible:
+      id: journal-list-button
+    timeout: 10000
+- tapOn:
+    id: review-button
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: journal-list-button
+    timeout: 10000
+- tapOn:
+    id: review-button
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- tapOn:
+    id: back-to-today-button
+- extendedWaitUntil:
+    visible:
+      id: journal-list-button
+    timeout: 10000
+- tapOn:
+    id: review-button
+- extendedWaitUntil:
+    visible:
+      id: review-page
+    timeout: 10000
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: journal-list-button
+    timeout: 10000

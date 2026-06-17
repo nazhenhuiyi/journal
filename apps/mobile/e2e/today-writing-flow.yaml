@@ -2,9 +2,7 @@ appId: ${APP_ID}
 env:
   MURMUR_TEXT: mb
 ---
-- runFlow: _launch-app.yaml
-- tapOn:
-    id: murmur-count-button
+- runFlow: _set-home-mode-murmur.yaml
 - tapOn:
     id: murmur-draft-input
 - inputText: ${MURMUR_TEXT}
@@ -12,10 +10,9 @@ env:
     id: add-murmur-button
     enabled: true
 - assertVisible: ${MURMUR_TEXT}
-- tapOn:
-    point: "50%,12%"
-- tapOn:
-    point: "50%,12%"
+- hideKeyboard
+- assertVisible:
+    id: journal-list-button
 - tapOn:
     id: journal-list-button
 - extendedWaitUntil:

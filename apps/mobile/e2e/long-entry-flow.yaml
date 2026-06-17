@@ -1,0 +1,22 @@
+appId: ${APP_ID}
+---
+- runFlow: _set-home-mode-long-entry.yaml
+- tapOn:
+    id: long-entry-input
+- setClipboard: Mobile E2E long entry saved through native input
+- pasteText
+- tapOn:
+    id: journal-list-button
+- extendedWaitUntil:
+    visible:
+      id: journal-list-page
+    timeout: 10000
+- assertVisible:
+    id: journal-list-row-today
+- tapOn:
+    id: journal-list-row-today
+- extendedWaitUntil:
+    visible:
+      id: long-entry-input
+    timeout: 10000
+- assertVisible: Mobile E2E long entry saved through native input

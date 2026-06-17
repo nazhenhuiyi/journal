@@ -5,12 +5,14 @@ import {
   JournalSyncCoordinator,
   type JournalGitConflictResolutionStrategy,
   shouldPersistSyncSnapshot,
+  type SyncBlockedReason,
   type SyncOperationRequest,
   type SyncOperationResult,
   type SyncSnapshot,
   type SyncSnapshotPersistenceIdentity,
 } from '@journal/sync'
 import {
+  commitMobileJournalChanges,
   getMobileGitSyncStatus,
   pullMobileJournalUpdatesFromGitHub,
   resolveMobileJournalSyncConflict,
@@ -34,8 +36,8 @@ import {
   saveMobileSyncSnapshot,
 } from './mobileSyncState'
 import { createMobileSyncTrace } from './mobileSyncTrace'
-import { getMobileE2eSyncConfiguration } from '../e2eEnvironment'
 import type { SaveDailyJournalResult } from '../mobileJournalStore'
+import { saveDailyJournal } from '../mobileJournalStore'
 import type { JournalSavedReason } from '../journalEffects'
 import { mobileDiagnosticLog } from '../diagnostics/log'
 
@@ -78,6 +80,11 @@ export type MobileSyncActionResult = {
   alertMessage?: string
   alertTitle?: string
   ok: boolean
+}
+
+export type MobileSyncConflictFixtureInput = {
+  date: string
+  localText: string
 }
 
 type MobileTraceDetails = Record<string, boolean | null | number | string>
@@ -153,6 +160,161 @@ class MobileSyncManager {
 
   markLocalSave = (changedPaths: readonly string[]) => {
     this.coordinator.markLocalSave(changedPaths)
+  }
+
+  showDebugBlockedSnapshot = (reason: SyncBlockedReason) => {
+    const block = createDebugSyncBlock(reason)
+
+    this.coordinator.stopPulling()
+    this.setState({
+      gitStatusError: null,
+      isLoadingGitStatus: false,
+      syncMessage: block.message,
+      syncSnapshot: {
+        ...initialSyncSnapshot,
+        block,
+        lastError: block.message,
+        status: 'blocked',
+      },
+    })
+  }
+
+  prepareDebugSyncConflictFixture = async (
+    input: MobileSyncConflictFixtureInput,
+  ): Promise<MobileSyncActionResult> => {
+    const branch = this.state.syncBranch.trim() || 'main'
+    const remoteUrl = this.state.syncRemoteUrl.trim()
+    const localText = input.localText.trim()
+
+    if (!remoteUrl || !this.state.hasStoredSyncToken || !localText) {
+      return {
+        alertMessage: '缺少同步冲突 E2E fixture 参数。',
+        alertTitle: '无法准备冲突环境',
+        ok: false,
+      }
+    }
+
+    try {
+      await this.waitForSyncToSettle()
+    } catch (error) {
+      return {
+        alertMessage: getErrorMessage(error),
+        alertTitle: '无法准备冲突环境',
+        ok: false,
+      }
+    }
+
+    const identity = createSyncSnapshotPersistenceIdentity({ branch, remoteUrl })
+    const syncingSnapshot: SyncSnapshot = {
+      ...initialSyncSnapshot,
+      lastError: null,
+      pendingReason: null,
+      status: 'syncing',
+    }
+
+    this.coordinator.stopPulling()
+    this.syncSnapshotIdentity = identity
+    this.coordinator.restoreSnapshot(syncingSnapshot, { emit: false })
+    this.setState({
+      gitStatusError: null,
+      hasStoredSyncToken: true,
+      isLoadingGitStatus: false,
+      syncBranch: branch,
+      syncCredentialStatus: 'available',
+      syncMessage: '准备冲突环境',
+      syncRemoteUrl: remoteUrl,
+      syncSnapshot: syncingSnapshot,
+      syncTokenDraft: '',
+    })
+
+    try {
+      this.coordinator.stopPulling()
+
+      await this.traceStep(
+        'mobile.debugSyncConflictFixture.syncBase',
+        () => syncMobileJournalWithGitHub({ branch, remoteUrl }, undefined, {
+          changedPaths: [],
+          collectDirtyPathsAfterSync: false,
+          firstSyncLocalContent: 'empty',
+          skipDirtyCheckBeforeMerge: true,
+        }),
+        {
+          branch,
+          remoteHost: getRemoteHost(remoteUrl),
+        },
+      )
+
+      const savedRecord = await this.traceStep(
+        'mobile.debugSyncConflictFixture.writeLocal',
+        () => saveDailyJournal({
+          date: input.date,
+          longEntryMarkdown: localText,
+          murmurs: [],
+        }),
+        {
+          date: input.date,
+        },
+      )
+
+      await this.traceStep(
+        'mobile.debugSyncConflictFixture.commitLocal',
+        () => commitMobileJournalChanges(
+          { branch, remoteUrl },
+          'Prepare mobile sync conflict local side',
+          {
+            changedPaths: savedRecord.changedPaths,
+            collectDirtyPathsAfterSync: false,
+            skipDirtyCheckBeforeMerge: true,
+          },
+        ),
+        {
+          changedPathCount: savedRecord.changedPaths.length,
+        },
+      )
+
+      const preparedSnapshot: SyncSnapshot = {
+        ...initialSyncSnapshot,
+        pendingReason: 'local-save',
+        status: 'pending',
+      }
+
+      this.coordinator.restoreSnapshot(preparedSnapshot, { emit: false })
+      this.setState({
+        syncMessage: '冲突环境已准备',
+        syncSnapshot: preparedSnapshot,
+      })
+      mobileDiagnosticLog.info('sync.debugFixture', 'Prepared mobile sync conflict fixture', {
+        branch,
+        date: input.date,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
+
+      return { ok: true }
+    } catch (error) {
+      const lastError = getErrorMessage(error)
+      const errorSnapshot: SyncSnapshot = {
+        ...initialSyncSnapshot,
+        lastError,
+        status: 'error',
+      }
+
+      this.coordinator.restoreSnapshot(errorSnapshot, { emit: false })
+      this.setState({
+        syncMessage: '冲突环境准备失败',
+        syncSnapshot: errorSnapshot,
+      })
+      mobileDiagnosticLog.error('sync.debugFixture', 'Mobile sync conflict fixture failed', {
+        branch,
+        error,
+        remoteHost: getRemoteHost(remoteUrl),
+      })
+
+      return {
+        alertMessage: lastError,
+        alertTitle: '冲突环境准备失败',
+        ok: false,
+      }
+    }
   }
 
   refreshStatus = async (input?: {
@@ -657,8 +819,6 @@ class MobileSyncManager {
 
   private async loadInitialConfiguration() {
     try {
-      await this.seedE2eSyncConfiguration()
-
       const [settingsState, credentialsState] = await Promise.all([
         loadGitHubSyncSettings(),
         loadGitHubSyncCredentials(),
@@ -719,24 +879,6 @@ class MobileSyncManager {
         },
       })
     }
-  }
-
-  private async seedE2eSyncConfiguration() {
-    const configuration = getMobileE2eSyncConfiguration()
-
-    if (!configuration) {
-      return
-    }
-
-    await Promise.all([
-      saveGitHubSyncSettings({
-        branch: configuration.branch,
-        remoteUrl: configuration.remoteUrl,
-      }),
-      saveGitHubSyncCredentials({
-        token: configuration.token,
-      }),
-    ])
   }
 
   private async startPullingIfConfigured(options: { immediate?: boolean } = {}) {
@@ -987,6 +1129,19 @@ class MobileSyncManager {
     })
   }
 
+  private async waitForSyncToSettle() {
+    const timeoutMs = 30_000
+    const startedAt = Date.now()
+
+    while (this.state.syncSnapshot.status === 'syncing' && Date.now() - startedAt < timeoutMs) {
+      await delay(250)
+    }
+
+    if (this.state.syncSnapshot.status === 'syncing') {
+      throw new Error('同步仍在进行中，请稍后再准备冲突环境。')
+    }
+  }
+
   private async collectSavedJournalChangedPaths(
     binding: MobileSyncRuntimeBinding,
     reason: JournalSavedReason,
@@ -1081,6 +1236,52 @@ function getConflictResolutionSuccessMessage(strategy: JournalGitConflictResolut
   return '已保留两边内容'
 }
 
+function createDebugSyncBlock(reason: SyncBlockedReason) {
+  if (reason === 'content-conflict') {
+    return {
+      conflicts: [
+        {
+          ours: '本机段落：移动端 blocked 验收。',
+          path: 'entries/2026/06/2026-06-16.md',
+          theirs: '远端段落：GitHub 同段修改。',
+        },
+      ],
+      message: '本机和远端改到了同一段内容，同步已暂停。',
+      paths: [
+        'entries/2026/06/2026-06-16.md',
+        'reviews/2026/06/2026-06-16.json',
+      ],
+      reason,
+    }
+  }
+
+  if (reason === 'first-sync-needs-choice') {
+    return {
+      message: '本机和远端都已有内容，需要先选择首次同步方向。',
+      paths: [
+        'entries/2026/06/2026-06-16.md',
+        'manifest.json',
+      ],
+      reason,
+    }
+  }
+
+  if (reason === 'unrelated-histories') {
+    return {
+      message: '本机和远端不是同一条同步历史，同步已暂停。',
+      paths: ['entries/2026/06/2026-06-16.md'],
+      reason,
+    }
+  }
+
+  return {
+    message: '本地同步仓库暂时不可读，同步已暂停。',
+    paths: ['.git/objects/pack'],
+    reason,
+    retryAfterMs: 300_000,
+  }
+}
+
 function canApplyRemoteUpdates(saveState: MobileSyncSaveState) {
   return saveState !== 'dirty' && saveState !== 'saving'
 }
@@ -1108,6 +1309,12 @@ function getAuthFailureOperationResult(error: unknown): SyncOperationResult | nu
     message,
     needsAuth: true,
   } : null
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 function getRemoteHost(remoteUrl: string) {

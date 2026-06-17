@@ -62,6 +62,8 @@ import {
   type MobileHomeMode,
 } from './services/mobileUiSettings'
 import { journalEffects } from './services/journalEffects'
+import { isMobileE2eDebugLinkEnabled } from './services/e2eEnvironment'
+import { loadMobileE2eRuntimeConfig } from './services/mobileE2eRuntimeConfig'
 import {
   parseJournalDeepLink,
   type ParsedJournalDeepLink,
@@ -134,6 +136,34 @@ function goBackOrReturnToToday(navigation: BackNavigation) {
 }
 
 export default function App() {
+  const [hasLoadedE2eRuntimeConfig, setHasLoadedE2eRuntimeConfig] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    void loadMobileE2eRuntimeConfig()
+      .catch((error) => {
+        console.error(error)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setHasLoadedE2eRuntimeConfig(true)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  if (!hasLoadedE2eRuntimeConfig) {
+    return null
+  }
+
+  return <JournalApp />
+}
+
+function JournalApp() {
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null)
   const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
   const hasRequestedInitialUrlRef = useRef(false)
@@ -176,12 +206,14 @@ export default function App() {
     isLoadingGitStatus,
     isSavingSyncConfiguration,
     mobileGitStatus,
+    prepareDebugSyncConflictFixture,
     refreshMobileGitStatus,
     resolveSyncConflict,
     saveSyncConfiguration,
     setSyncBranch,
     setSyncRemoteUrl,
     setSyncTokenDraft,
+    showDebugSyncBlocked,
     syncBranch,
     syncMessage,
     syncRemoteUrl,
@@ -331,11 +363,40 @@ export default function App() {
       return
     }
 
+    if (deepLink.type === 'debugSyncBlocked') {
+      if (!isMobileE2eDebugLinkEnabled()) {
+        return
+      }
+
+      showDebugSyncBlocked(deepLink.reason)
+      resetNavigationStack(navigation, [
+        { name: 'Today' },
+        { name: 'SyncSettings' },
+      ])
+      return
+    }
+
+    if (deepLink.type === 'debugSyncConflictFixture') {
+      if (!isMobileE2eDebugLinkEnabled()) {
+        return
+      }
+
+      resetNavigationStack(navigation, [
+        { name: 'Today' },
+        { name: 'SyncSettings' },
+      ])
+      void prepareDebugSyncConflictFixture({
+        date: deepLink.date,
+        localText: deepLink.localText,
+      })
+      return
+    }
+
     resetNavigationStack(navigation, [
       { name: 'Today' },
       { name: 'Review' },
     ])
-  }, [hasLoadedUiSettings, openMurmurEntryForTheme])
+  }, [hasLoadedUiSettings, openMurmurEntryForTheme, prepareDebugSyncConflictFixture, showDebugSyncBlocked])
 
   const handleJournalDeepLink = useCallback((url: string | null) => {
     if (!url) {
@@ -1562,7 +1623,7 @@ function MurmurItem({
           style={({ pressed }) => ({
             opacity: pressed ? 0.72 : 1,
           })}
-          testID={`murmur-edit-button-${murmur.id}`}
+          testID="murmur-edit-button"
         >
           <Ionicons color={semanticColors['text-tertiary']} name="create-outline" size={17} />
         </Pressable>
@@ -1673,6 +1734,7 @@ function MurmurEditPanel({
           className="min-h-10 rounded-full px-4"
           onPress={onClose}
           size="sm"
+          testID="murmur-edit-done-button"
           variant="secondary"
         >
           完成
@@ -1708,6 +1770,7 @@ function MurmurEditPanel({
                 padding: 0,
               }}
               textAlignVertical="top"
+              testID="murmur-edit-body-input"
               value={murmur.body}
             />
           </View>

@@ -433,6 +433,7 @@ function QuietSwitch({ enabled }: { enabled: boolean }) {
         styles.switchTrack,
         enabled ? styles.switchTrackEnabled : styles.switchTrackDisabled,
       ]}
+      testID={enabled ? 'home-mode-murmur-active' : 'home-mode-long-entry-active'}
     >
       <View
         style={[

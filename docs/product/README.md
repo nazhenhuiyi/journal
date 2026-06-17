@@ -21,5 +21,6 @@
 
 ## 验收
 
-- [E2E 测试](<E2E 测试.md>)：unit、integration、桌面 E2E、移动端 Maestro 和真实 GitHub 同步 E2E。
-- [Electron 桌面端验收工具链](<Electron 桌面端验收工具链.md>)：真实 Electron 窗口、隔离数据目录和同步验收流程。
+- [E2E 测试](../e2e/README.md)：unit、integration、桌面 E2E、移动端 Maestro 和真实 GitHub 同步 E2E。
+- [E2E 覆盖与设计](../e2e/覆盖与设计.md)：当前覆盖、缺口、真实冲突设计和路线图。
+- [Electron 桌面端验收 SOP](<../e2e/Electron 桌面端验收 SOP.md>)：真实 Electron 窗口、隔离数据目录和同步验收流程。
