@@ -53,11 +53,14 @@ describe('journal sync desktop adapter', () => {
       hasRepository: true,
       remoteUrl: 'https://github.com/example/journal-sync.git',
     })
+    expect(mockSafeStorage.decryptString).not.toHaveBeenCalled()
+
     await expect(loadJournalGitSyncStatus(journalDirectory)).resolves.toMatchObject({
       hasCredentials: true,
       credentialStatus: 'available',
       remoteUrl: 'https://github.com/example/journal-sync.git',
     })
+    expect(mockSafeStorage.decryptString).not.toHaveBeenCalled()
   })
 
   it('rejects sync URLs that include credentials before saving settings', async () => {

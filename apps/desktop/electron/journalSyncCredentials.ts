@@ -24,6 +24,16 @@ export type JournalGitSyncCredentialState =
       status: Exclude<JournalGitSyncCredentialStatus, 'available'>
     }
 
+export type JournalGitSyncCredentialAvailabilityState =
+  | {
+      message?: undefined
+      status: 'available'
+    }
+  | {
+      message?: string
+      status: 'corrupt' | 'encryption-unavailable' | 'missing'
+    }
+
 type StoredCredentialsFile = {
   encryptedPayload: string
   version: 1
@@ -46,6 +56,32 @@ const CREDENTIALS_FILE_NAME = 'sync-credentials.json'
 
 export async function hasJournalGitSyncCredentials(journalDirectory: string) {
   return (await inspectJournalGitSyncCredentials(journalDirectory)).status === 'available'
+}
+
+export async function inspectJournalGitSyncCredentialAvailability(
+  journalDirectory: string,
+): Promise<JournalGitSyncCredentialAvailabilityState> {
+  const storedCredentials = await readStoredCredentials(journalDirectory)
+
+  if (storedCredentials.status === 'missing') {
+    return { status: 'missing' }
+  }
+
+  if (storedCredentials.status === 'corrupt') {
+    return {
+      message: storedCredentials.message,
+      status: 'corrupt',
+    }
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return {
+      message: '系统加密存储不可用，无法读取 GitHub token。',
+      status: 'encryption-unavailable',
+    }
+  }
+
+  return { status: 'available' }
 }
 
 export async function inspectJournalGitSyncCredentials(

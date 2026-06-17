@@ -20,7 +20,7 @@ import {
 } from '@journal/sync'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
-  inspectJournalGitSyncCredentials,
+  inspectJournalGitSyncCredentialAvailability,
   loadJournalGitSyncCredentials,
   saveJournalGitSyncCredentials,
   type JournalGitSyncCredentialStatus,
@@ -62,7 +62,7 @@ const desktopObjectRepairThrottle = createJournalGitObjectRepairThrottle()
 export async function loadJournalGitSyncStatus(journalDirectory: string): Promise<JournalGitSyncStatus> {
   const settings = await loadJournalSettings(journalDirectory)
   const runtime = await createDesktopGitRuntime(journalDirectory)
-  const credentialState = await inspectJournalGitSyncCredentials(journalDirectory)
+  const credentialState = await inspectJournalGitSyncCredentialAvailability(journalDirectory)
   const hasCredentials = credentialState.status === 'available'
   const status = await getJournalGitSyncStatus(
     runtime,
