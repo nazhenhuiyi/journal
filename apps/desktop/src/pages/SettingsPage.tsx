@@ -14,6 +14,10 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { parseJournalMarkdown, type DayFrontMatter } from '@journal/core'
+import {
+  getJournalSyncBlockPresentation,
+  type JournalGitConflictResolutionStrategy,
+} from '@journal/sync'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -66,6 +70,13 @@ function SettingsPage() {
   const tokenHint = getTokenHint(credentialStatus, credentialMessage, hasStoredSyncToken)
   const disabled = isLoadingSyncSettings || isSavingSyncSettings || isSyncingNow
   const dirtyPathLabel = dirtyPaths.length === 1 ? dirtyPaths[0] : `${dirtyPaths.length} 个文件等待同步`
+  const blockPresentation = syncSnapshot.status === 'blocked'
+    ? getJournalSyncBlockPresentation(syncSnapshot.block, syncSnapshot.lastError)
+    : null
+  const blockPaths = blockPresentation
+    ? blockPresentation.paths.filter((path) => !blockPresentation.conflicts.some((conflict) => conflict.path === path))
+    : []
+  const shouldShowSnapshotError = Boolean(syncSnapshot.lastError && syncSnapshot.status !== 'blocked')
 
   useEffect(() => {
     void desktopSyncManager.refreshStatus()
@@ -139,6 +150,16 @@ function SettingsPage() {
     }
   }
 
+  function handleResolveConflict(strategy: JournalGitConflictResolutionStrategy) {
+    const didConfirm = window.confirm(getConflictResolutionConfirmMessage(strategy))
+
+    if (!didConfirm) {
+      return
+    }
+
+    void desktopSyncManager.resolveConflict(strategy)
+  }
+
   return (
     <>
       <motion.header
@@ -180,14 +201,81 @@ function SettingsPage() {
                   未提交文件：{dirtyPathLabel}
                 </SettingsMessageRow>
               ) : null}
-              {syncSnapshot.lastError ? (
-                <SettingsMessageRow danger title={syncSnapshot.lastError}>
+              {shouldShowSnapshotError ? (
+                <SettingsMessageRow danger title={syncSnapshot.lastError ?? undefined}>
                   {syncSnapshot.lastError}
                 </SettingsMessageRow>
               ) : null}
             </div>
             <p className="settings-status-detail">{syncStatus.detail}</p>
           </section>
+
+          {blockPresentation ? (
+            <section className="settings-section">
+              <h2 className="settings-section-title">处理同步阻断</h2>
+              <div className="settings-block-card">
+                <h3>{blockPresentation.title}</h3>
+                <p>{blockPresentation.detail}</p>
+                <p>{blockPresentation.suggestion}</p>
+                {blockPresentation.conflicts.length > 0 ? (
+                  <div className="settings-block-conflicts">
+                    {blockPresentation.conflicts.slice(0, 3).map((conflict, index) => (
+                      <div className="settings-block-conflict" key={`${conflict.path}-${index}`}>
+                        <code title={conflict.path}>{conflict.path}</code>
+                        <div className="settings-block-conflict-sides">
+                          <ConflictPreviewSide label="本机" value={conflict.ours} />
+                          <ConflictPreviewSide label="远端" value={conflict.theirs} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {blockPaths.length > 0 ? (
+                  <ul className="settings-block-paths">
+                    {blockPaths.slice(0, 8).map((path) => (
+                      <li key={path}>
+                        <code title={path}>{path}</code>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {blockPresentation.action === 'resolve-content-conflict' ? (
+                  <div className="settings-actions">
+                    <Button
+                      className="settings-secondary-button"
+                      disabled={disabled}
+                      onClick={() => handleResolveConflict('keep-local')}
+                      size="lg"
+                      type="button"
+                      variant="outline"
+                    >
+                      保留本机
+                    </Button>
+                    <Button
+                      className="settings-secondary-button"
+                      disabled={disabled}
+                      onClick={() => handleResolveConflict('keep-both')}
+                      size="lg"
+                      type="button"
+                      variant="outline"
+                    >
+                      两者都保留
+                    </Button>
+                    <Button
+                      className="settings-secondary-button"
+                      disabled={disabled}
+                      onClick={() => handleResolveConflict('keep-remote')}
+                      size="lg"
+                      type="button"
+                      variant="outline"
+                    >
+                      保留远端
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
 
           <section className="settings-section">
             <h2 className="settings-section-title">最近 commit</h2>
@@ -464,6 +552,33 @@ async function resolveBrowserLocationForWeather() {
       },
     )
   })
+}
+
+function getConflictResolutionConfirmMessage(strategy: JournalGitConflictResolutionStrategy) {
+  if (strategy === 'keep-local') {
+    return '保留本机内容，并用本机内容解决这次同步冲突？这会尝试推送到 GitHub，不会 force push。'
+  }
+
+  if (strategy === 'keep-remote') {
+    return '保留远端内容，并用远端内容覆盖本机同步范围内的冲突内容？这不会推送到 GitHub。'
+  }
+
+  return '两者都保留，并把本机和远端的冲突段落都写入日记？这会尝试推送到 GitHub，不会 force push。'
+}
+
+function ConflictPreviewSide({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="settings-block-conflict-side">
+      <span>{label}</span>
+      <pre>{value || '（空）'}</pre>
+    </div>
+  )
 }
 
 function SettingsMessageRow({

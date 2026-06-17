@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => {
     mockLoadMobileSyncSnapshot: vi.fn(),
     mockLoadPendingMobileSyncPaths: vi.fn(),
     mockPullMobileJournalUpdatesFromGitHub: vi.fn(),
+    mockResolveMobileJournalSyncConflict: vi.fn(),
     mockSaveGitHubSyncCredentials: vi.fn(),
     mockSaveGitHubSyncSettings: vi.fn(),
     mockSaveMobileSyncSnapshot: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock('@journal/sync', () => ({
 vi.mock('./mobileGitSync', () => ({
   getMobileGitSyncStatus: mocks.mockGetMobileGitSyncStatus,
   pullMobileJournalUpdatesFromGitHub: mocks.mockPullMobileJournalUpdatesFromGitHub,
+  resolveMobileJournalSyncConflict: mocks.mockResolveMobileJournalSyncConflict,
   syncMobileJournalWithGitHub: mocks.mockSyncMobileJournalWithGitHub,
 }))
 
@@ -210,6 +212,16 @@ describe('mobile sync manager', () => {
     mocks.mockSaveGitHubSyncSettings.mockResolvedValue(undefined)
     mocks.mockSaveMobileSyncSnapshot.mockResolvedValue(undefined)
     mocks.mockSavePendingMobileSyncPaths.mockResolvedValue(undefined)
+    mocks.mockResolveMobileJournalSyncConflict.mockResolvedValue({
+      localCommitOid: 'resolution-head',
+      pushResult: {
+        error: null,
+        ok: true,
+        refs: {},
+      },
+      strategy: 'keep-local',
+      updatedWorktree: false,
+    })
     mocks.mockSyncMobileJournalWithGitHub.mockResolvedValue({
       dirtyPathsAfterSync: [],
       fetchResult: null,
@@ -327,6 +339,84 @@ describe('mobile sync manager', () => {
       ok: false,
     })
     expect(mocks.mockGetMobileGitSyncStatus).not.toHaveBeenCalled()
+  })
+
+  it('resolves restored content conflict blocks through the mobile git adapter', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      block: {
+        message: '日记内容存在需要人工处理的合并冲突。',
+        paths: ['entries/2026/06/2026-06-08.md'],
+        reason: 'content-conflict',
+      },
+      lastError: '日记内容存在需要人工处理的合并冲突。',
+      lastSyncedAt: null,
+      pendingReason: null,
+      status: 'blocked',
+    })
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    const result = await mobileSyncManager.resolveConflict('keep-local')
+
+    expect(result).toEqual({ ok: true })
+    expect(mocks.mockResolveMobileJournalSyncConflict).toHaveBeenCalledWith(
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      { strategy: 'keep-local' },
+    )
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      block: null,
+      status: 'synced',
+    })
+    expect(mobileSyncManager.getState().syncMessage).toBe('已保留本机内容')
+  })
+
+  it('passes keep-both conflict resolution through the mobile git adapter', async () => {
+    mocks.mockLoadMobileSyncSnapshot.mockResolvedValueOnce({
+      block: {
+        message: '本机和远端改到了同一段内容，同步已暂停。',
+        paths: ['entries/2026/06/2026-06-08.md'],
+        reason: 'content-conflict',
+      },
+      lastError: '本机和远端改到了同一段内容，同步已暂停。',
+      lastSyncedAt: null,
+      pendingReason: null,
+      status: 'blocked',
+    })
+    mocks.mockResolveMobileJournalSyncConflict.mockResolvedValueOnce({
+      localCommitOid: 'both-resolution-head',
+      pushResult: {
+        error: null,
+        ok: true,
+        refs: {},
+      },
+      strategy: 'keep-both',
+      updatedWorktree: true,
+    })
+
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    const result = await mobileSyncManager.resolveConflict('keep-both')
+
+    expect(result).toEqual({ ok: true })
+    expect(mocks.mockResolveMobileJournalSyncConflict).toHaveBeenCalledWith(
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      { strategy: 'keep-both' },
+    )
+    expect(mobileSyncManager.getState().syncSnapshot).toMatchObject({
+      block: null,
+      status: 'synced',
+    })
+    expect(mobileSyncManager.getState().syncMessage).toBe('已保留两边内容')
   })
 
   it('marks remote authentication failures as needing auth', async () => {

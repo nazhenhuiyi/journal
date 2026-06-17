@@ -12,6 +12,7 @@ import {
   initJournalGitSyncRepository,
   pullJournalUpdates,
   pushJournalChanges,
+  resolveJournalContentConflict,
   syncJournalNow,
   type JournalGitRuntime,
 } from './core'
@@ -769,6 +770,11 @@ describe('journal git sync core', () => {
     await expect(commitJournalChanges(createRuntime(), syncConfig))
       .rejects.toMatchObject({
         block: {
+          conflicts: [{
+            ours: '桌面内容',
+            path: 'entries/2026/06/2026-06-09.md',
+            theirs: '移动内容',
+          }],
           paths: ['entries/2026/06/2026-06-09.md'],
           reason: 'content-conflict',
         },
@@ -1018,6 +1024,298 @@ describe('journal git sync core', () => {
     }))
   })
 
+  it('resolves a content conflict by keeping local content with a non-force push', async () => {
+    const runtime = createRuntime()
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.writeCommit.mockResolvedValueOnce('resolution-head')
+
+    const result = await resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-local' },
+    )
+
+    expect(result).toMatchObject({
+      localCommitOid: 'resolution-head',
+      strategy: 'keep-local',
+      updatedWorktree: false,
+    })
+    expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'main',
+      remote: 'origin',
+    }))
+    expect(mockGit.writeCommit).toHaveBeenCalledWith(expect.objectContaining({
+      commit: expect.objectContaining({
+        parent: ['local-head', 'remote-head'],
+        tree: 'tree-local-head',
+      }),
+    }))
+    expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      force: false,
+      ref: 'refs/heads/main',
+      remoteRef: 'refs/heads/main',
+    }))
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'refs/heads/main',
+      value: 'resolution-head',
+    }))
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'refs/remotes/origin/main',
+      value: 'resolution-head',
+    }))
+  })
+
+  it('does not create a first local commit when keep-local has no local branch', async () => {
+    const runtime = createRuntime()
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        throw new Error('missing local branch')
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'remote-head'
+    })
+    mockGit.statusMatrix.mockResolvedValueOnce([
+      ['entries/2026/06/2026-06-08.md', 0, 2, 0],
+    ])
+
+    await expect(resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-local' },
+    )).rejects.toThrow('Cannot resolve sync conflict because local branch main has no commit.')
+
+    expect(mockGit.commit).not.toHaveBeenCalled()
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+    expect(mockGit.writeCommit).not.toHaveBeenCalled()
+  })
+
+  it('does not keep local content when a clean tracked markdown file already contains conflict markers', async () => {
+    const runtime = createRuntime()
+    const conflictPath = 'entries/2026/06/2026-06-09.md'
+
+    mockFs.promises.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith(`/${conflictPath}`)) {
+        return [
+          '正文',
+          '<<<<<<< main',
+          '本机内容',
+          '=======',
+          '远端内容',
+          '>>>>>>> origin/main',
+        ].join('\n')
+      }
+
+      throw Object.assign(new Error('missing'), {
+        code: 'ENOENT',
+      })
+    })
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.statusMatrix
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        [conflictPath, 1, 1, 1],
+      ])
+
+    await expect(resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-local' },
+    )).rejects.toMatchObject({
+      block: {
+        conflicts: [{
+          ours: '本机内容',
+          path: conflictPath,
+          theirs: '远端内容',
+        }],
+        paths: [conflictPath],
+        reason: 'content-conflict',
+      },
+      code: 'JournalSyncBlockedError',
+    })
+
+    expect(mockGit.fetch).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+    expect(mockGit.writeCommit).not.toHaveBeenCalled()
+  })
+
+  it('resolves a content conflict by keeping both markdown versions with a non-force push', async () => {
+    const runtime = createRuntime()
+    const conflictPath = 'entries/2026/06/2026-06-08.md'
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockManualMergeTreeWalk(
+      {
+        'base-head': {
+          [conflictPath]: {
+            oid: 'base-entry',
+          },
+        },
+        'local-head': {
+          [conflictPath]: {
+            oid: 'local-entry',
+          },
+        },
+        'remote-head': {
+          [conflictPath]: {
+            oid: 'remote-entry',
+          },
+        },
+      },
+      [],
+    )
+    mockGit.readBlob.mockImplementation(async ({ oid }: { oid: string }) => ({
+      blob: new TextEncoder().encode({
+        'base-entry': 'intro\nbase\nend\n',
+        'local-entry': 'intro\nlocal text\nend\n',
+        'remote-entry': 'intro\nremote text\nend\n',
+      }[oid] ?? ''),
+      oid,
+    }))
+    mockGit.writeBlob.mockResolvedValueOnce('both-entry')
+    mockGit.writeCommit.mockResolvedValueOnce('both-resolution-head')
+
+    const result = await resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-both' },
+    )
+
+    expect(result).toMatchObject({
+      localCommitOid: 'both-resolution-head',
+      strategy: 'keep-both',
+      updatedWorktree: true,
+    })
+    const writeBlobInput = mockGit.writeBlob.mock.calls[0]?.[0]
+
+    expect(writeBlobInput).toBeDefined()
+    expect(new TextDecoder().decode(writeBlobInput!.blob)).toBe('intro\nlocal text\n\nremote text\nend\n')
+    expect(mockGit.writeCommit).toHaveBeenCalledWith(expect.objectContaining({
+      commit: expect.objectContaining({
+        message: 'Resolve journal sync conflict by keeping both sides\n',
+        parent: ['local-head', 'remote-head'],
+      }),
+    }))
+    expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
+      force: false,
+      ref: 'refs/heads/main',
+      remoteRef: 'refs/heads/main',
+    }))
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media', 'reviews'],
+      force: true,
+      ref: 'refs/heads/main',
+    }))
+  })
+
+  it('does not keep both sides when git reports multiple merge bases', async () => {
+    const runtime = createRuntime()
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.findMergeBase.mockResolvedValueOnce(['base-a', 'base-b'])
+
+    await expect(resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-both' },
+    )).rejects.toThrow('Cannot keep both sides because local and remote histories have multiple merge bases: 2.')
+
+    expect(mockGit.writeCommit).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+  })
+
+  it('resolves a content conflict by keeping remote content without pushing', async () => {
+    const runtime = createRuntime()
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'remote-head'
+      }
+
+      return 'local-head'
+    })
+
+    const result = await resolveJournalContentConflict(
+      runtime,
+      syncConfig,
+      credentials,
+      { strategy: 'keep-remote' },
+    )
+
+    expect(result).toMatchObject({
+      localCommitOid: null,
+      pushResult: null,
+      strategy: 'keep-remote',
+      updatedWorktree: true,
+    })
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'refs/heads/main',
+      value: 'remote-head',
+    }))
+    expect(mockGit.checkout).toHaveBeenCalledWith(expect.objectContaining({
+      filepaths: ['annotations', 'entries', 'manifest.json', 'media', 'reviews'],
+      force: true,
+      ref: 'refs/heads/main',
+    }))
+    expect(mockGit.push).not.toHaveBeenCalled()
+  })
+
   it('does not retry push when the retry merge leaves a true conflict', async () => {
     const runtime = createRuntime()
     const trace = vi.fn()
@@ -1098,6 +1396,11 @@ describe('journal git sync core', () => {
       credentials,
     )).rejects.toMatchObject({
       block: {
+        conflicts: [{
+          ours: 'ours',
+          path: conflictPath,
+          theirs: 'theirs',
+        }],
         paths: [conflictPath],
         reason: 'content-conflict',
       },
@@ -2609,6 +2912,20 @@ describe('journal git sync core', () => {
   })
 
   it('pushes committed local changes without fetching first', async () => {
+    let localHead = 'local-head'
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return localHead
+      }
+
+      return 'remote-head'
+    })
+    mockGit.commit.mockImplementationOnce(async () => {
+      localHead = 'commit-oid'
+
+      return 'commit-oid'
+    })
     mockGit.statusMatrix
       .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 0, 2, 0],
@@ -2632,6 +2949,11 @@ describe('journal git sync core', () => {
     expect(mockGit.push).toHaveBeenCalledWith(expect.objectContaining({
       ref: 'refs/heads/main',
       remoteRef: 'refs/heads/main',
+    }))
+    expect(mockGit.writeRef).toHaveBeenCalledWith(expect.objectContaining({
+      force: true,
+      ref: 'refs/remotes/origin/main',
+      value: 'commit-oid',
     }))
     expect(result.localCommitOid).toBe('commit-oid')
   })

@@ -177,6 +177,7 @@ export default function App() {
     isSavingSyncConfiguration,
     mobileGitStatus,
     refreshMobileGitStatus,
+    resolveSyncConflict,
     saveSyncConfiguration,
     setSyncBranch,
     setSyncRemoteUrl,
@@ -739,6 +740,7 @@ export default function App() {
               onBack={() => goBackOrReturnToToday(navigation)}
               onOpenSyncConfiguration={() => navigation.navigate('Settings')}
               onRefreshGitStatus={refreshMobileGitStatus}
+              onResolveConflict={resolveSyncConflict}
               onSyncNow={handleSyncNow}
               syncRemoteUrl={syncRemoteUrl}
               syncSnapshot={syncSnapshot}

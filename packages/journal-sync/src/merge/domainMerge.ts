@@ -20,6 +20,7 @@ import {
 } from '../git/trackedPaths'
 import {
   createJournalSyncBlockedError,
+  type SyncBlockConflictPreview,
 } from '../state/syncBlock'
 import type {
   JournalGitRuntime,
@@ -58,10 +59,18 @@ type ManualTreeNode = {
   type: 'tree'
 }
 
+type ManualMergeBlobResult = {
+  conflictPreviews: SyncBlockConflictPreview[]
+  entry: ManualMergeLeafEntry | null
+}
+
 const defaultAuthorEmail = 'journal-sync@example.invalid'
 const defaultAuthorName = 'Journal Sync'
 const defaultBranch = 'main'
 const defaultRemote = 'origin'
+const maxManualMergeConflictPreviewCount = 4
+const maxManualMergeConflictPreviewLines = 10
+const maxManualMergeConflictPreviewTextLength = 600
 
 export async function runJournalDomainMergeOperation(
   runtime: JournalGitRuntime,
@@ -211,6 +220,7 @@ async function createManualRemoteMergeCommit(
     ...remoteEntries.keys(),
   ])
   const conflictPaths: string[] = []
+  const conflictPreviews: SyncBlockConflictPreview[] = []
   let appliedChanges = 0
   let nonJournalRemoteWins = 0
 
@@ -247,7 +257,7 @@ async function createManualRemoteMergeCommit(
       continue
     }
 
-    const mergedEntry = await mergeManualBlobEntries(
+    const mergeResult = await mergeManualBlobEntries(
       runtime,
       filepath,
       baseEntry,
@@ -256,17 +266,18 @@ async function createManualRemoteMergeCommit(
       input.mergeStats,
     )
 
-    if (!mergedEntry) {
+    if (!mergeResult.entry) {
       conflictPaths.push(filepath)
+      conflictPreviews.push(...mergeResult.conflictPreviews)
       continue
     }
 
-    applyManualMergeEntry(mergedEntries, filepath, mergedEntry)
+    applyManualMergeEntry(mergedEntries, filepath, mergeResult.entry)
     appliedChanges += 1
   }
 
   if (conflictPaths.length > 0) {
-    throw createManualMergeConflictError(conflictPaths)
+    throw createManualMergeConflictError(conflictPaths, conflictPreviews)
   }
 
   const treeOid = await writeManualTree(runtime, mergedEntries)
@@ -358,9 +369,12 @@ async function mergeManualBlobEntries(
   localEntry: ManualMergeLeafEntry | null,
   remoteEntry: ManualMergeLeafEntry | null,
   mergeStats: JournalMergeStats,
-): Promise<ManualMergeLeafEntry | null> {
+): Promise<ManualMergeBlobResult> {
   if (!localEntry || !remoteEntry || localEntry.type !== 'blob' || remoteEntry.type !== 'blob') {
-    return null
+    return {
+      conflictPreviews: [],
+      entry: null,
+    }
   }
 
   const [baseContent, localContent, remoteContent] = await Promise.all([
@@ -380,7 +394,10 @@ async function mergeManualBlobEntries(
   })
 
   if (!result.cleanMerge) {
-    return null
+    return {
+      conflictPreviews: extractManualMergeConflictPreviews(filepath, result.mergedText),
+      entry: null,
+    }
   }
 
   const oid = await getGit(runtime).writeBlob({
@@ -390,11 +407,83 @@ async function mergeManualBlobEntries(
   })
 
   return {
-    filepath,
-    mode: baseEntry?.mode === localEntry.mode ? remoteEntry.mode : localEntry.mode,
-    oid,
-    type: 'blob',
+    conflictPreviews: [],
+    entry: {
+      filepath,
+      mode: baseEntry?.mode === localEntry.mode ? remoteEntry.mode : localEntry.mode,
+      oid,
+      type: 'blob',
+    },
   }
+}
+
+function extractManualMergeConflictPreviews(
+  filepath: string,
+  content: string,
+): SyncBlockConflictPreview[] {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  const previews: SyncBlockConflictPreview[] = []
+  let index = 0
+
+  while (index < lines.length && previews.length < maxManualMergeConflictPreviewCount) {
+    if (!lines[index]?.startsWith('<<<<<<<')) {
+      index += 1
+      continue
+    }
+
+    index += 1
+    const ours: string[] = []
+
+    while (index < lines.length && !lines[index]?.startsWith('=======')) {
+      ours.push(lines[index] ?? '')
+      index += 1
+    }
+
+    if (index >= lines.length) {
+      break
+    }
+
+    index += 1
+    const theirs: string[] = []
+
+    while (index < lines.length && !lines[index]?.startsWith('>>>>>>>')) {
+      theirs.push(lines[index] ?? '')
+      index += 1
+    }
+
+    if (index >= lines.length) {
+      break
+    }
+
+    index += 1
+    const oursText = trimManualMergeConflictPreviewLines(ours)
+    const theirsText = trimManualMergeConflictPreviewLines(theirs)
+
+    if (oursText || theirsText) {
+      previews.push({
+        ours: oursText,
+        path: filepath,
+        theirs: theirsText,
+      })
+    }
+  }
+
+  return previews
+}
+
+function trimManualMergeConflictPreviewLines(lines: string[]) {
+  const selectedLines = lines.slice(0, maxManualMergeConflictPreviewLines)
+  let text = selectedLines.join('\n').trim()
+
+  if (lines.length > maxManualMergeConflictPreviewLines) {
+    text = `${text}\n...`
+  }
+
+  if (text.length > maxManualMergeConflictPreviewTextLength) {
+    return `${text.slice(0, maxManualMergeConflictPreviewTextLength).trimEnd()}...`
+  }
+
+  return text
 }
 
 async function readManualBlobText(runtime: JournalGitRuntime, oid: string) {
@@ -608,12 +697,16 @@ function splitManualTreePath(filepath: string) {
   return parts
 }
 
-function createManualMergeConflictError(filepaths: string[]) {
+function createManualMergeConflictError(
+  filepaths: string[],
+  conflicts: SyncBlockConflictPreview[],
+) {
   return Object.assign(
     new Error(`Git merge conflict in ${filepaths.length} path(s): ${filepaths.slice(0, 3).join(', ')}`),
     {
       code: 'MergeConflictError',
       data: {
+        conflicts,
         filepaths,
       },
       name: 'MergeConflictError',

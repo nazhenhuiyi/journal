@@ -7,6 +7,7 @@ import type {
   ReadCommitResult,
   ServerRef,
   StatusRow,
+  TreeEntry,
 } from 'isomorphic-git'
 import * as defaultGit from 'isomorphic-git'
 import {
@@ -15,6 +16,7 @@ import {
 } from './auth'
 import {
   createJournalMergeStats,
+  mergeJournalFileContents,
 } from '../merge/smartMerge'
 import { runJournalDomainMergeOperation } from '../merge/domainMerge'
 import {
@@ -34,6 +36,7 @@ import {
 } from './objectRepairThrottle'
 import {
   isSafeRepositoryPath,
+  isTextMergeJournalPath,
   isTrackedJournalEntryPath,
   isTrackedJournalPath,
   normalizeCheckoutFilepaths,
@@ -42,6 +45,7 @@ import {
 } from './trackedPaths'
 import {
   createJournalSyncBlockedError,
+  type SyncBlockConflictPreview,
 } from '../state/syncBlock'
 
 export {
@@ -143,6 +147,19 @@ export type JournalGitPullResult = {
   updatedWorktree: boolean
 }
 
+export type JournalGitConflictResolutionStrategy = 'keep-both' | 'keep-local' | 'keep-remote'
+
+export type JournalGitConflictResolutionOptions = {
+  strategy: JournalGitConflictResolutionStrategy
+}
+
+export type JournalGitConflictResolutionResult = {
+  localCommitOid: string | null
+  pushResult: PushResult | null
+  strategy: JournalGitConflictResolutionStrategy
+  updatedWorktree: boolean
+}
+
 type PromiseGitFileSystem = {
   promises: {
     readFile?: (path: string, options?: unknown) => Promise<string | Uint8Array>
@@ -164,6 +181,18 @@ type RemoteMergeRepairHints = {
   preferRetryWithoutRefetch?: boolean
 }
 
+type ResolutionTreeLeafEntry = {
+  filepath: string
+  mode: string
+  oid: string
+  type: 'blob' | 'commit'
+}
+
+type ResolutionTreeNode = {
+  children: Map<string, ResolutionTreeNode | ResolutionTreeLeafEntry>
+  type: 'tree'
+}
+
 const defaultAuthorEmail = 'journal-sync@example.invalid'
 const defaultAuthorName = 'Journal Sync'
 const defaultBranch = 'main'
@@ -171,6 +200,9 @@ const defaultCommitMessage = 'Sync journal changes'
 const defaultRemote = 'origin'
 const missingObjectRefetchCooldownMs = 10 * 60 * 1000
 const defaultObjectRepairThrottle = createJournalGitObjectRepairThrottle()
+const maxConflictPreviewCount = 4
+const maxConflictPreviewLines = 10
+const maxConflictPreviewTextLength = 600
 
 function createAuthenticatedRuntimeHttpClient(
   runtime: JournalGitRuntime,
@@ -506,6 +538,158 @@ async function syncJournalNowInternal(
     pushResult: pushAttempt.pushResult,
     retriedPush: pushAttempt.retriedPush,
   }
+}
+
+export async function resolveJournalContentConflict(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitConflictResolutionOptions,
+): Promise<JournalGitConflictResolutionResult> {
+  return traceGitStep(
+    runtime,
+    'resolveConflict.total',
+    () => resolveJournalContentConflictInternal(runtime, config, credentials, options),
+    (result) => ({
+      changed: Boolean(result.localCommitOid || result.updatedWorktree),
+      pushed: Boolean(result.pushResult),
+      strategy: result.strategy,
+    }),
+  )
+}
+
+async function resolveJournalContentConflictInternal(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  credentials: JournalGitCredentials,
+  options: JournalGitConflictResolutionOptions,
+): Promise<JournalGitConflictResolutionResult> {
+  if (!config.remoteUrl) {
+    throw new Error('GitHub repository URL is required before resolving sync conflicts.')
+  }
+
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+
+  await ensureRepository(runtime, config)
+
+  if (options.strategy === 'keep-local') {
+    await requireLocalBranchCommitOid(runtime, branch)
+
+    const localCommitOid = await commitTrackedChanges(
+      runtime,
+      config,
+      getSyncCommitMessage(config),
+    )
+
+    await assertNoConflictMarkersInWorktreeMarkdown(runtime)
+    await fetchRemote(runtime, config, credentials, 'resolveConflict.fetch')
+
+    const resolutionCommitOid = await createKeepLocalConflictResolutionCommit(
+      runtime,
+      config,
+      remote,
+      branch,
+    )
+    const pushResult = await tryPushRemote(runtime, {
+      branch,
+      credentials,
+      remote,
+    })
+
+    if (!pushResult.ok) {
+      throw new Error(pushResult.error ?? 'GitHub push failed while resolving sync conflict.')
+    }
+
+    await updateRemoteTrackingBranchRef(runtime, remote, branch, resolutionCommitOid)
+
+    return {
+      localCommitOid: resolutionCommitOid ?? localCommitOid,
+      pushResult,
+      strategy: options.strategy,
+      updatedWorktree: false,
+    }
+  }
+
+  if (options.strategy === 'keep-both') {
+    await requireLocalBranchCommitOid(runtime, branch)
+    await resolveConflictMarkersInWorktreeMarkdown(runtime)
+
+    const localCommitOid = await commitTrackedChanges(
+      runtime,
+      config,
+      getSyncCommitMessage(config),
+    )
+
+    await assertNoConflictMarkersInWorktreeMarkdown(runtime)
+    await fetchRemote(runtime, config, credentials, 'resolveConflict.fetch')
+
+    const resolutionCommitOid = await createKeepBothConflictResolutionCommit(
+      runtime,
+      config,
+      remote,
+      branch,
+    )
+    const pushResult = await tryPushRemote(runtime, {
+      branch,
+      credentials,
+      remote,
+    })
+
+    if (!pushResult.ok) {
+      throw new Error(pushResult.error ?? 'GitHub push failed while resolving sync conflict.')
+    }
+
+    await updateRemoteTrackingBranchRef(runtime, remote, branch, resolutionCommitOid)
+
+    return {
+      localCommitOid: resolutionCommitOid ?? localCommitOid,
+      pushResult,
+      strategy: options.strategy,
+      updatedWorktree: true,
+    }
+  }
+
+  if (options.strategy === 'keep-remote') {
+    await fetchRemote(runtime, config, credentials, 'resolveConflict.fetch')
+
+    const localOid = await requireLocalBranchCommitOid(runtime, branch)
+    const remoteTrackingOid = await requireRemoteTrackingBranchCommitOid(runtime, remote, branch)
+
+    await traceGitStep(runtime, 'resolveConflict.keepRemoteRef', () => getGit(runtime).writeRef({
+      dir: runtime.dir,
+      force: true,
+      fs: runtime.fs,
+      ref: getLocalBranchRef(branch),
+      value: remoteTrackingOid,
+    }), {
+      branch,
+      remote,
+      remoteOid: shortTraceOid(remoteTrackingOid),
+    })
+    await traceGitStep(runtime, 'resolveConflict.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
+
+    const checkoutPaths = await getChangedCheckoutPathsBetweenRefs(
+      runtime,
+      localOid,
+      remoteTrackingOid,
+      'resolveConflict.keepRemoteDiff',
+    )
+    const updatedWorktree = await checkoutLocalBranch(
+      runtime,
+      branch,
+      checkoutPaths.length > 0 ? checkoutPaths : trackedStatusFilepaths,
+    )
+
+    return {
+      localCommitOid: null,
+      pushResult: null,
+      strategy: options.strategy,
+      updatedWorktree,
+    }
+  }
+
+  throw new Error(`Unsupported journal conflict resolution strategy: ${String(options.strategy)}`)
 }
 
 async function ensureRepository(runtime: JournalGitRuntime, config: JournalGitSyncConfig) {
@@ -1166,7 +1350,15 @@ async function mergeRemoteBranch(
         strategy: 'journal-domain-merge',
       })
 
-      throw createContentConflictBlockedError(conflictPaths, error)
+      const conflictPreviews = getMergeConflictPreviews(error)
+      const worktreeConflictPreviews = conflictPreviews.length > 0
+        ? []
+        : await collectWorktreeConflictPreviews(runtime, conflictPaths)
+
+      throw createContentConflictBlockedError({
+        conflictPreviews: conflictPreviews.length > 0 ? conflictPreviews : worktreeConflictPreviews,
+        paths: conflictPaths,
+      }, error)
     }
 
     throw error
@@ -1518,6 +1710,8 @@ async function pushRemoteWithRetry(
   }
 
   if (firstPushResult.ok) {
+    await updateRemoteTrackingRefToLocalBranch(runtime, input.remote, input.branch)
+
     return {
       pushResult: firstPushResult,
       retryMergeCommitOid: null,
@@ -1543,11 +1737,537 @@ async function pushRemoteWithRetry(
     throw new Error(secondPushResult.error ?? 'GitHub push failed after retry.')
   }
 
+  await updateRemoteTrackingRefToLocalBranch(runtime, input.remote, input.branch)
+
   return {
     pushResult: secondPushResult,
     retryMergeCommitOid: retryMergeResult.mergeCommitOid,
     retriedPush: true,
   }
+}
+
+async function createKeepLocalConflictResolutionCommit(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  remote: string,
+  branch: string,
+) {
+  const localOid = await requireLocalBranchCommitOid(runtime, branch)
+  const remoteTrackingOid = await requireRemoteTrackingBranchCommitOid(runtime, remote, branch)
+
+  if (localOid === remoteTrackingOid) {
+    return localOid
+  }
+
+  const localCommit = await readCommit(runtime, localOid)
+  const identity = createResolutionCommitIdentity(config)
+  const commitOid = await traceGitStep(runtime, 'resolveConflict.keepLocalCommit', () => getGit(runtime).writeCommit({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    commit: {
+      author: identity,
+      committer: identity,
+      message: `Resolve journal sync conflict by keeping local changes\n`,
+      parent: [localOid, remoteTrackingOid],
+      tree: localCommit.commit.tree,
+    },
+  }), {
+    branch,
+    localOid: shortTraceOid(localOid),
+    remote,
+    remoteOid: shortTraceOid(remoteTrackingOid),
+  })
+
+  await traceGitStep(runtime, 'resolveConflict.keepLocalRef', () => getGit(runtime).writeRef({
+    dir: runtime.dir,
+    force: true,
+    fs: runtime.fs,
+    ref: getLocalBranchRef(branch),
+    value: commitOid,
+  }), {
+    branch,
+    commitOid: shortTraceOid(commitOid),
+  })
+  await traceGitStep(runtime, 'resolveConflict.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
+
+  return commitOid
+}
+
+async function createKeepBothConflictResolutionCommit(
+  runtime: JournalGitRuntime,
+  config: JournalGitSyncConfig,
+  remote: string,
+  branch: string,
+) {
+  const localOid = await requireLocalBranchCommitOid(runtime, branch)
+  const remoteTrackingOid = await requireRemoteTrackingBranchCommitOid(runtime, remote, branch)
+
+  if (localOid === remoteTrackingOid) {
+    return localOid
+  }
+
+  const baseOid = await getSingleMergeBaseOid(runtime, localOid, remoteTrackingOid)
+  const [baseEntries, localEntries, remoteEntries] = await Promise.all([
+    getResolutionTreeLeafEntries(runtime, baseOid),
+    getResolutionTreeLeafEntries(runtime, localOid),
+    getResolutionTreeLeafEntries(runtime, remoteTrackingOid),
+  ])
+  const mergedEntries = new Map(localEntries)
+  const changedPaths = new Set([
+    ...baseEntries.keys(),
+    ...localEntries.keys(),
+    ...remoteEntries.keys(),
+  ])
+  let keptBothPaths = 0
+  let appliedRemotePaths = 0
+
+  for (const filepath of [...changedPaths].sort()) {
+    const baseEntry = baseEntries.get(filepath) ?? null
+    const localEntry = localEntries.get(filepath) ?? null
+    const remoteEntry = remoteEntries.get(filepath) ?? null
+    const localChanged = !areResolutionTreeEntriesEqual(localEntry, baseEntry)
+    const remoteChanged = !areResolutionTreeEntriesEqual(remoteEntry, baseEntry)
+
+    if (!remoteChanged) {
+      continue
+    }
+
+    if (!localChanged || areResolutionTreeEntriesEqual(localEntry, remoteEntry)) {
+      applyResolutionTreeEntry(mergedEntries, filepath, remoteEntry)
+      appliedRemotePaths += 1
+      continue
+    }
+
+    if (!isTrackedJournalPath(filepath)) {
+      applyResolutionTreeEntry(mergedEntries, filepath, remoteEntry)
+      appliedRemotePaths += 1
+      continue
+    }
+
+    if (!isTextMergeJournalPath(filepath) || !localEntry || !remoteEntry || localEntry.type !== 'blob' || remoteEntry.type !== 'blob') {
+      throw new Error(`Cannot keep both sides automatically for non-text sync conflict: ${filepath}`)
+    }
+
+    const combinedEntry = await createKeepBothResolutionEntry(
+      runtime,
+      filepath,
+      baseEntry,
+      localEntry,
+      remoteEntry,
+    )
+
+    applyResolutionTreeEntry(mergedEntries, filepath, combinedEntry)
+    keptBothPaths += 1
+  }
+
+  const treeOid = await writeResolutionTree(runtime, mergedEntries)
+  const identity = createResolutionCommitIdentity(config)
+  const commitOid = await traceGitStep(runtime, 'resolveConflict.keepBothCommit', () => getGit(runtime).writeCommit({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    commit: {
+      author: identity,
+      committer: identity,
+      message: `Resolve journal sync conflict by keeping both sides\n`,
+      parent: [localOid, remoteTrackingOid],
+      tree: treeOid,
+    },
+  }), {
+    appliedRemotePaths,
+    branch,
+    keptBothPaths,
+    localOid: shortTraceOid(localOid),
+    remote,
+    remoteOid: shortTraceOid(remoteTrackingOid),
+  })
+
+  await traceGitStep(runtime, 'resolveConflict.keepBothRef', () => getGit(runtime).writeRef({
+    dir: runtime.dir,
+    force: true,
+    fs: runtime.fs,
+    ref: getLocalBranchRef(branch),
+    value: commitOid,
+  }), {
+    branch,
+    commitOid: shortTraceOid(commitOid),
+  })
+  await traceGitStep(runtime, 'resolveConflict.alignHead', () => attachHeadToLocalBranchIfSameCommit(runtime, branch), { branch })
+  await checkoutLocalBranch(runtime, branch, trackedStatusFilepaths)
+
+  return commitOid
+}
+
+async function getSingleMergeBaseOid(
+  runtime: JournalGitRuntime,
+  localOid: string,
+  remoteOid: string,
+) {
+  const baseOids = await traceGitStep(
+    runtime,
+    'resolveConflict.keepBothMergeBase',
+    () => getGit(runtime).findMergeBase({
+      cache: runtime.cache,
+      dir: runtime.dir,
+      fs: runtime.fs,
+      oids: [localOid, remoteOid],
+    }),
+    (oids) => ({
+      bases: oids.length,
+      localOid: shortTraceOid(localOid),
+      remoteOid: shortTraceOid(remoteOid),
+    }),
+  )
+  const baseOid = baseOids[0]
+
+  if (!baseOid) {
+    throw new Error('Cannot keep both sides because local and remote histories have no common base.')
+  }
+
+  if (baseOids.length > 1) {
+    throw new Error(`Cannot keep both sides because local and remote histories have multiple merge bases: ${baseOids.length}.`)
+  }
+
+  return baseOid
+}
+
+async function getResolutionTreeLeafEntries(runtime: JournalGitRuntime, ref: string) {
+  const git = getGit(runtime)
+  const rawEntries = await git.walk({
+    cache: runtime.cache,
+    dir: runtime.dir,
+    fs: runtime.fs,
+    map: async (filepath, [entry]) => {
+      if (filepath === '.' || !entry) {
+        return undefined
+      }
+
+      const [rawType, rawMode, oid] = await Promise.all([
+        entry.type(),
+        entry.mode(),
+        entry.oid(),
+      ])
+      const type = normalizeResolutionTreeLeafType(rawType, rawMode)
+
+      if (type === 'tree') {
+        return undefined
+      }
+
+      if (!type || !oid) {
+        throw new Error(`Cannot read tree entry metadata for ${filepath}.`)
+      }
+
+      return {
+        filepath: normalizeRepositoryPath(filepath),
+        mode: normalizeResolutionTreeMode(type, rawMode),
+        oid,
+        type,
+      } satisfies ResolutionTreeLeafEntry
+    },
+    reduce: async (parent, children) => {
+      const entries: ResolutionTreeLeafEntry[] = []
+
+      if (isResolutionTreeLeafEntry(parent)) {
+        entries.push(parent)
+      }
+
+      for (const child of children) {
+        if (isResolutionTreeLeafEntry(child)) {
+          entries.push(child)
+        } else if (Array.isArray(child)) {
+          entries.push(...child.filter(isResolutionTreeLeafEntry))
+        }
+      }
+
+      return entries
+    },
+    trees: [
+      git.TREE({ ref }),
+    ],
+  })
+  const entries = Array.isArray(rawEntries)
+    ? rawEntries.filter(isResolutionTreeLeafEntry)
+    : []
+
+  return new Map(entries.map((entry) => [entry.filepath, entry]))
+}
+
+async function createKeepBothResolutionEntry(
+  runtime: JournalGitRuntime,
+  filepath: string,
+  baseEntry: ResolutionTreeLeafEntry | null,
+  localEntry: ResolutionTreeLeafEntry,
+  remoteEntry: ResolutionTreeLeafEntry,
+): Promise<ResolutionTreeLeafEntry> {
+  const [baseText, localText, remoteText] = await Promise.all([
+    baseEntry?.type === 'blob' ? readResolutionBlobText(runtime, baseEntry.oid) : '',
+    readResolutionBlobText(runtime, localEntry.oid),
+    readResolutionBlobText(runtime, remoteEntry.oid),
+  ])
+  const mergedText = mergeKeepBothText(filepath, baseText, localText, remoteText)
+  const oid = await getGit(runtime).writeBlob({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    blob: toUtf8Bytes(mergedText),
+  })
+
+  return {
+    filepath,
+    mode: baseEntry?.mode === localEntry.mode ? remoteEntry.mode : localEntry.mode,
+    oid,
+    type: 'blob',
+  }
+}
+
+function mergeKeepBothText(
+  filepath: string,
+  baseText: string,
+  localText: string,
+  remoteText: string,
+) {
+  const result = mergeJournalFileContents({
+    base: baseText,
+    defaultSide: 'theirs',
+    ours: stripConflictMarkers(localText),
+    oursName: '本机',
+    path: filepath,
+    stats: createJournalMergeStats(),
+    theirs: stripConflictMarkers(remoteText),
+    theirsName: '远端',
+  })
+
+  return ensureTrailingNewline(stripConflictMarkers(result.mergedText).trimEnd())
+}
+
+function stripConflictMarkers(content: string) {
+  return content.replace(
+    /^<<<<<<<[^\r\n]*(?:\r?\n)([\s\S]*?)^=======(?:\r?\n)([\s\S]*?)^>>>>>>>[^\r\n]*(?:\r?\n|$)/gm,
+    (_match, ours: string, theirs: string) => `${ours.trimEnd()}\n\n${theirs.trim()}\n`,
+  )
+}
+
+function ensureTrailingNewline(content: string) {
+  return content.endsWith('\n') ? content : `${content}\n`
+}
+
+async function readResolutionBlobText(runtime: JournalGitRuntime, oid: string) {
+  const { blob } = await getGit(runtime).readBlob({
+    cache: runtime.cache,
+    dir: runtime.dir,
+    fs: runtime.fs,
+    oid,
+  })
+
+  return toUtf8String(blob)
+}
+
+async function writeResolutionTree(
+  runtime: JournalGitRuntime,
+  entries: Map<string, ResolutionTreeLeafEntry>,
+) {
+  const root: ResolutionTreeNode = {
+    children: new Map(),
+    type: 'tree',
+  }
+
+  for (const entry of entries.values()) {
+    insertResolutionTreeEntry(root, entry)
+  }
+
+  return writeResolutionTreeNode(runtime, root)
+}
+
+function insertResolutionTreeEntry(root: ResolutionTreeNode, entry: ResolutionTreeLeafEntry) {
+  const parts = normalizeRepositoryPath(entry.filepath).split('/')
+  let current = root
+
+  for (const directoryName of parts.slice(0, -1)) {
+    const existing = current.children.get(directoryName)
+
+    if (existing && existing.type !== 'tree') {
+      throw new Error(`Cannot create tree for ${entry.filepath}.`)
+    }
+
+    if (!existing) {
+      const nextNode: ResolutionTreeNode = {
+        children: new Map(),
+        type: 'tree',
+      }
+
+      current.children.set(directoryName, nextNode)
+      current = nextNode
+    } else {
+      current = existing
+    }
+  }
+
+  current.children.set(parts[parts.length - 1]!, entry)
+}
+
+async function writeResolutionTreeNode(
+  runtime: JournalGitRuntime,
+  node: ResolutionTreeNode,
+): Promise<string> {
+  const treeEntries: TreeEntry[] = []
+
+  for (const [path, child] of [...node.children.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    if (child.type === 'tree') {
+      treeEntries.push({
+        mode: '040000',
+        oid: await writeResolutionTreeNode(runtime, child),
+        path,
+        type: 'tree',
+      })
+    } else {
+      treeEntries.push({
+        mode: child.mode,
+        oid: child.oid,
+        path,
+        type: child.type,
+      })
+    }
+  }
+
+  return getGit(runtime).writeTree({
+    dir: runtime.dir,
+    fs: runtime.fs,
+    tree: treeEntries,
+  })
+}
+
+function applyResolutionTreeEntry(
+  entries: Map<string, ResolutionTreeLeafEntry>,
+  filepath: string,
+  entry: ResolutionTreeLeafEntry | null,
+) {
+  if (!entry) {
+    entries.delete(filepath)
+    return
+  }
+
+  entries.set(filepath, entry)
+}
+
+function areResolutionTreeEntriesEqual(
+  left: ResolutionTreeLeafEntry | null,
+  right: ResolutionTreeLeafEntry | null,
+) {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return left.mode === right.mode && left.oid === right.oid && left.type === right.type
+}
+
+function isResolutionTreeLeafEntry(value: unknown): value is ResolutionTreeLeafEntry {
+  return isRecord(value) &&
+    typeof value.filepath === 'string' &&
+    typeof value.mode === 'string' &&
+    typeof value.oid === 'string' &&
+    (value.type === 'blob' || value.type === 'commit')
+}
+
+function normalizeResolutionTreeLeafType(type: unknown, mode: unknown) {
+  if (type === 'blob' || type === 'commit' || type === 'tree') {
+    return type
+  }
+
+  if (typeof mode === 'string') {
+    if (/^0?4/.test(mode)) {
+      return 'tree'
+    }
+
+    if (/^160/.test(mode)) {
+      return 'commit'
+    }
+
+    if (/^(100|120)/.test(mode)) {
+      return 'blob'
+    }
+  }
+
+  if (typeof mode === 'number') {
+    return normalizeResolutionTreeLeafType(type, mode.toString(8))
+  }
+
+  return null
+}
+
+function normalizeResolutionTreeMode(type: 'blob' | 'commit', mode: unknown) {
+  if (typeof mode === 'string' && mode) {
+    return mode
+  }
+
+  if (typeof mode === 'number') {
+    return mode.toString(8)
+  }
+
+  return type === 'commit' ? '160000' : '100644'
+}
+
+function createResolutionCommitIdentity(config: JournalGitSyncConfig) {
+  return {
+    email: config.authorEmail ?? defaultAuthorEmail,
+    name: config.authorName ?? defaultAuthorName,
+    timestamp: Math.floor(Date.now() / 1000),
+    timezoneOffset: new Date().getTimezoneOffset(),
+  }
+}
+
+async function requireLocalBranchCommitOid(runtime: JournalGitRuntime, branch: string) {
+  const oid = await getLocalBranchCommitOid(runtime, branch)
+
+  if (!oid) {
+    throw new Error(`Cannot resolve sync conflict because local branch ${getBranchName(branch)} has no commit.`)
+  }
+
+  return oid
+}
+
+async function requireRemoteTrackingBranchCommitOid(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+) {
+  const oid = await getRemoteTrackingBranchCommitOid(runtime, remote, branch)
+
+  if (!oid) {
+    throw new Error(`Cannot resolve sync conflict because ${getRemoteTrackingBranchRef(remote, branch)} is missing.`)
+  }
+
+  return oid
+}
+
+async function updateRemoteTrackingBranchRef(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+  oid: string | null,
+) {
+  if (!oid) {
+    return
+  }
+
+  await traceGitStep(runtime, 'remote.updateTrackingRef', () => getGit(runtime).writeRef({
+    dir: runtime.dir,
+    force: true,
+    fs: runtime.fs,
+    ref: getRemoteTrackingBranchRef(remote, branch),
+    value: oid,
+  }), {
+    branch: getBranchName(branch),
+    remote,
+    remoteOid: shortTraceOid(oid),
+  })
+}
+
+async function updateRemoteTrackingRefToLocalBranch(
+  runtime: JournalGitRuntime,
+  remote: string,
+  branch: string,
+) {
+  const localOid = await getLocalBranchCommitOid(runtime, branch)
+
+  await updateRemoteTrackingBranchRef(runtime, remote, branch, localOid)
 }
 
 async function mergeRemoteBranchAndCommitChanges(
@@ -1653,6 +2373,29 @@ function getMergeConflictPaths(error: unknown) {
   return Array.isArray(filepaths)
     ? filepaths.filter((filepath): filepath is string => typeof filepath === 'string' && filepath.trim().length > 0)
     : []
+}
+
+function getMergeConflictPreviews(error: unknown): SyncBlockConflictPreview[] {
+  if (!isRecord(error) || !isRecord(error.data) || !Array.isArray(error.data.conflicts)) {
+    return []
+  }
+
+  return error.data.conflicts
+    .filter(isMergeConflictPreview)
+    .map((conflict) => ({
+      ours: conflict.ours,
+      path: conflict.path,
+      theirs: conflict.theirs,
+    }))
+}
+
+function isMergeConflictPreview(value: unknown): value is SyncBlockConflictPreview {
+  return isRecord(value) &&
+    typeof value.ours === 'string' &&
+    typeof value.path === 'string' &&
+    typeof value.theirs === 'string' &&
+    value.path.trim().length > 0 &&
+    (value.ours.trim().length > 0 || value.theirs.trim().length > 0)
 }
 
 async function tryPushRemote(
@@ -2271,14 +3014,14 @@ function createFirstSyncNeedsChoiceError(localDirtyPaths: string[]) {
   })
 }
 
-function createContentConflictBlockedError(paths: string[], cause?: unknown) {
-  const suffix = paths.length > 0
-    ? `冲突路径：${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ` 等 ${paths.length} 个路径` : ''}`
-    : '冲突路径暂时无法读取。'
-
+function createContentConflictBlockedError(input: {
+  conflictPreviews?: readonly SyncBlockConflictPreview[]
+  paths: readonly string[]
+}, cause?: unknown) {
   return createJournalSyncBlockedError({
-    message: `日记内容存在需要人工处理的合并冲突，同步已停止且不会自动推送冲突结果。${suffix}`,
-    paths,
+    ...(input.conflictPreviews && input.conflictPreviews.length > 0 ? { conflicts: [...input.conflictPreviews] } : {}),
+    message: '本机和远端改到了同一段内容，同步已暂停。',
+    paths: [...input.paths],
     reason: 'content-conflict',
   }, cause)
 }
@@ -2459,8 +3202,98 @@ async function assertNoConflictMarkersInChangedMarkdown(
         continue
       }
 
-      if (hasConflictMarkers(toUtf8String(content))) {
-        throw createContentConflictBlockedError([filepath])
+      const text = toUtf8String(content)
+
+      if (hasConflictMarkers(text)) {
+        throw createContentConflictBlockedError({
+          conflictPreviews: extractConflictPreviewsFromContent(filepath, text),
+          paths: [filepath],
+        })
+      }
+    }
+
+    return checked
+  }, (checked) => ({
+    checked,
+  }))
+}
+
+async function resolveConflictMarkersInWorktreeMarkdown(runtime: JournalGitRuntime) {
+  const fs = (runtime.fs as unknown as PromiseGitFileSystem).promises
+  const readFile = fs.readFile
+  const writeFile = fs.writeFile
+
+  if (!readFile || !writeFile) {
+    return
+  }
+
+  const rows = await getTrackedStatusRows(runtime, 'resolveConflict.keepBothMarkerStatus')
+
+  await traceGitStep(runtime, 'resolveConflict.keepBothMarkerRewrite', async () => {
+    let rewritten = 0
+
+    for (const [filepath] of rows) {
+      if (!isTrackedJournalEntryPath(filepath)) {
+        continue
+      }
+
+      const content = await readFileIfExists(runtime, filepath, readFile)
+
+      if (content === null) {
+        continue
+      }
+
+      const text = toUtf8String(content)
+
+      if (!hasConflictMarkers(text)) {
+        continue
+      }
+
+      await writeFile(
+        joinRuntimePath(runtime.dir, filepath),
+        stripConflictMarkers(text),
+        { encoding: 'utf8' },
+      )
+      rewritten += 1
+    }
+
+    return rewritten
+  }, (rewritten) => ({
+    rewritten,
+  }))
+}
+
+async function assertNoConflictMarkersInWorktreeMarkdown(runtime: JournalGitRuntime) {
+  const readFile = (runtime.fs as unknown as PromiseGitFileSystem).promises.readFile
+
+  if (!readFile) {
+    return
+  }
+
+  const rows = await getTrackedStatusRows(runtime, 'resolveConflict.conflictMarkerStatus')
+
+  await traceGitStep(runtime, 'resolveConflict.conflictMarkerCheck', async () => {
+    let checked = 0
+
+    for (const [filepath] of rows) {
+      if (!isTrackedJournalEntryPath(filepath)) {
+        continue
+      }
+
+      checked += 1
+      const content = await readFileIfExists(runtime, filepath, readFile)
+
+      if (content === null) {
+        continue
+      }
+
+      const text = toUtf8String(content)
+
+      if (hasConflictMarkers(text)) {
+        throw createContentConflictBlockedError({
+          conflictPreviews: extractConflictPreviewsFromContent(filepath, text),
+          paths: [filepath],
+        })
       }
     }
 
@@ -2486,6 +3319,104 @@ async function readFileIfExists(
   }
 }
 
+async function collectWorktreeConflictPreviews(
+  runtime: JournalGitRuntime,
+  paths: readonly string[],
+): Promise<SyncBlockConflictPreview[]> {
+  const readFile = (runtime.fs as unknown as PromiseGitFileSystem).promises.readFile
+
+  if (!readFile || paths.length === 0) {
+    return []
+  }
+
+  const previews: SyncBlockConflictPreview[] = []
+
+  for (const filepath of paths) {
+    const content = await readFileIfExists(runtime, filepath, readFile)
+
+    if (content === null || content === undefined) {
+      continue
+    }
+
+    previews.push(...extractConflictPreviewsFromContent(filepath, toUtf8String(content)))
+
+    if (previews.length >= maxConflictPreviewCount) {
+      break
+    }
+  }
+
+  return previews.slice(0, maxConflictPreviewCount)
+}
+
+function extractConflictPreviewsFromContent(
+  filepath: string,
+  content: string,
+): SyncBlockConflictPreview[] {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  const previews: SyncBlockConflictPreview[] = []
+  let index = 0
+
+  while (index < lines.length && previews.length < maxConflictPreviewCount) {
+    if (!lines[index]?.startsWith('<<<<<<<')) {
+      index += 1
+      continue
+    }
+
+    index += 1
+    const ours: string[] = []
+
+    while (index < lines.length && !lines[index]?.startsWith('=======')) {
+      ours.push(lines[index] ?? '')
+      index += 1
+    }
+
+    if (index >= lines.length) {
+      break
+    }
+
+    index += 1
+    const theirs: string[] = []
+
+    while (index < lines.length && !lines[index]?.startsWith('>>>>>>>')) {
+      theirs.push(lines[index] ?? '')
+      index += 1
+    }
+
+    if (index >= lines.length) {
+      break
+    }
+
+    index += 1
+    const oursText = trimConflictPreviewLines(ours)
+    const theirsText = trimConflictPreviewLines(theirs)
+
+    if (oursText || theirsText) {
+      previews.push({
+        ours: oursText,
+        path: filepath,
+        theirs: theirsText,
+      })
+    }
+  }
+
+  return previews
+}
+
+function trimConflictPreviewLines(lines: string[]) {
+  const selectedLines = lines.slice(0, maxConflictPreviewLines)
+  let text = selectedLines.join('\n').trim()
+
+  if (lines.length > maxConflictPreviewLines) {
+    text = `${text}\n...`
+  }
+
+  if (text.length > maxConflictPreviewTextLength) {
+    return `${text.slice(0, maxConflictPreviewTextLength).trimEnd()}...`
+  }
+
+  return text
+}
+
 function hasConflictMarkers(content: string) {
   return /^(<<<<<<<|>>>>>>>)(?: .*)?$/m.test(content)
 }
@@ -2496,6 +3427,28 @@ function toUtf8String(content: string | Uint8Array) {
   }
 
   return new TextDecoder().decode(content)
+}
+
+function toUtf8Bytes(value: string) {
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(value)
+  }
+
+  const encoded = encodeURIComponent(value)
+  const bytes: number[] = []
+
+  for (let index = 0; index < encoded.length; index += 1) {
+    const character = encoded[index]
+
+    if (character === '%') {
+      bytes.push(Number.parseInt(encoded.slice(index + 1, index + 3), 16))
+      index += 2
+    } else {
+      bytes.push(character.charCodeAt(0))
+    }
+  }
+
+  return new Uint8Array(bytes)
 }
 
 function normalizeKnownChangedPaths(changedPaths: readonly string[] | undefined) {

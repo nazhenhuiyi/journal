@@ -91,6 +91,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
       push,
       saveState: vi.fn(),
       syncNow: vi.fn(),
+      resolveConflict: vi.fn(),
     })
 
     render(<MarkdownPreviewPage />)
@@ -157,6 +158,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
       push,
       saveState: vi.fn(),
       syncNow: vi.fn(),
+      resolveConflict: vi.fn(),
     })
 
     const view = render(<MarkdownPreviewPage />)
@@ -238,6 +240,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
       push,
       saveState: vi.fn(),
       syncNow: vi.fn(),
+      resolveConflict: vi.fn(),
     })
 
     render(<MarkdownPreviewPage />)
@@ -324,6 +327,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
       push: vi.fn(),
       saveState: vi.fn(),
       syncNow: vi.fn(),
+      resolveConflict: vi.fn(),
     })
 
     render(<MarkdownPreviewPage />)
@@ -387,6 +391,7 @@ describe('MarkdownPreviewPage desktop sync integration', () => {
       push,
       saveState: vi.fn(),
       syncNow: vi.fn(),
+      resolveConflict: vi.fn(),
     })
 
     render(<MarkdownPreviewPage />)

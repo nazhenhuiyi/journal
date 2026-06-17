@@ -9,7 +9,10 @@ import {
   initJournalGitSyncRepository,
   pullJournalUpdates,
   pushJournalChanges,
+  resolveJournalContentConflict,
   syncJournalNow,
+  type JournalGitConflictResolutionOptions,
+  type JournalGitConflictResolutionResult,
   type JournalGitCredentials,
   type JournalGitOperationOptions,
   type JournalGitPullResult,
@@ -34,6 +37,8 @@ import {
 
 export type MobileGitSyncConfig = JournalGitSyncConfig
 export type MobileGitOperationOptions = JournalGitOperationOptions
+export type MobileGitConflictResolutionOptions = JournalGitConflictResolutionOptions
+export type MobileGitConflictResolutionResult = JournalGitConflictResolutionResult
 export type MobileGitSyncStatus = JournalGitSyncStatus
 export type MobileGitSyncStatusOptions = JournalGitSyncStatusOptions
 export type MobileGitSyncResult = JournalGitSyncResult
@@ -138,6 +143,22 @@ export async function syncMobileJournalWithGitHub(
   const runtime = await createMobileGitRuntime()
 
   return syncJournalNow(
+    runtime,
+    withMobileAuthorDefaults(config),
+    resolvedCredentials,
+    options,
+  )
+}
+
+export async function resolveMobileJournalSyncConflict(
+  config: MobileGitSyncConfig,
+  options: MobileGitConflictResolutionOptions,
+  credentials?: GitHubSyncCredentials,
+): Promise<MobileGitConflictResolutionResult> {
+  const resolvedCredentials = await requireCredentials(credentials)
+  const runtime = await createMobileGitRuntime()
+
+  return resolveJournalContentConflict(
     runtime,
     withMobileAuthorDefaults(config),
     resolvedCredentials,

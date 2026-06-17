@@ -82,6 +82,77 @@ describe('SettingsPage diagnostics', () => {
     expect(screen.queryByText(/30\.67/)).not.toBeInTheDocument()
     expect(screen.queryByText(/104\.07/)).not.toBeInTheDocument()
   })
+
+  it('shows content conflict actions and confirms keeping local content', async () => {
+    type DesktopSaveState = NonNullable<Window['journalSync']>['saveState']
+    type DesktopSaveStateResult = Awaited<ReturnType<DesktopSaveState>>
+
+    let finishSaveState: () => void = () => {
+      throw new Error('saveState was not called.')
+    }
+    const resolveConflict = vi.fn().mockResolvedValue({
+      changed: true,
+      dirtyPaths: [],
+      message: 'Conflict resolved with local content',
+    })
+    const saveState = vi.fn<DesktopSaveState>(() =>
+      new Promise<DesktopSaveStateResult>((resolve) => {
+        finishSaveState = () => resolve(null)
+      }))
+
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    stubNavigator({
+      geolocation: createGeolocationMock(),
+      permissions: { query: vi.fn().mockResolvedValue({ state: 'prompt' }) },
+    })
+    stubDesktopStores({
+      resolveConflict,
+      saveState,
+      syncRemoteUrl: 'https://github.com/example/journal-sync.git',
+      syncSnapshot: {
+        block: {
+          conflicts: [{
+            ours: '本机片段',
+            path: 'entries/2026/06/2026-06-08.md',
+            theirs: '远端片段',
+          }],
+          message: '日记内容存在需要人工处理的合并冲突。',
+          paths: ['entries/2026/06/2026-06-08.md'],
+          reason: 'content-conflict',
+        },
+        lastError: '日记内容存在需要人工处理的合并冲突。',
+        lastSyncedAt: null,
+        pendingReason: null,
+        status: 'blocked',
+      },
+    })
+    const journalSync = window.journalSync!
+
+    renderSettingsPage()
+
+    expect(await screen.findByText('内容有冲突')).toBeInTheDocument()
+    expect(screen.getByText('本机片段')).toBeInTheDocument()
+    expect(screen.getByText('远端片段')).toBeInTheDocument()
+    expect(screen.getByText('entries/2026/06/2026-06-08.md')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '两者都保留' })).toBeInTheDocument()
+    expect(screen.queryByText('日记内容存在需要人工处理的合并冲突。')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '保留本机' }))
+
+    await waitFor(() => {
+      expect(resolveConflict).toHaveBeenCalledWith('keep-local')
+    })
+    await waitFor(() => {
+      expect(saveState).toHaveBeenCalled()
+    })
+    expect(journalSync.loadStatus).toHaveBeenCalledTimes(1)
+
+    finishSaveState()
+
+    await waitFor(() => {
+      expect(journalSync.loadStatus).toHaveBeenCalledTimes(2)
+    })
+  })
 })
 
 function renderSettingsPage() {
@@ -94,13 +165,17 @@ function renderSettingsPage() {
 
 function stubDesktopStores(options: {
   refreshTodayWeather?: NonNullable<Window['journalStore']>['refreshTodayWeather']
+  resolveConflict?: NonNullable<Window['journalSync']>['resolveConflict']
+  saveState?: NonNullable<Window['journalSync']>['saveState']
+  syncRemoteUrl?: string
+  syncSnapshot?: import('@journal/sync').SyncSnapshot | null
 } = {}) {
   vi.stubGlobal('journalSettings', {
     load: vi.fn().mockResolvedValue({
       settingsPath: '/Users/zilin/.journal/settings.json',
       settingsStatus: 'ready',
       syncBranch: 'main',
-      syncRemoteUrl: '',
+      syncRemoteUrl: options.syncRemoteUrl ?? '',
       version: 1,
       weatherLocation: '',
       workingDirectory: '/Users/zilin/.journal',
@@ -144,17 +219,18 @@ function stubDesktopStores(options: {
       branch: 'main',
       credentialStatus: 'missing',
       dirtyPaths: [],
-      hasCredentials: false,
+      hasCredentials: Boolean(options.syncRemoteUrl),
       hasRepository: false,
       recentCommits: [],
-      remoteUrl: '',
-      syncSnapshot: null,
+      remoteUrl: options.syncRemoteUrl ?? '',
+      syncSnapshot: options.syncSnapshot ?? null,
     }),
     pull: vi.fn(),
     push: vi.fn(),
-    saveState: vi.fn(),
+    saveState: options.saveState ?? vi.fn(),
     saveSettings: vi.fn(),
     syncNow: vi.fn(),
+    resolveConflict: options.resolveConflict ?? vi.fn(),
   } satisfies Window['journalSync'])
 }
 

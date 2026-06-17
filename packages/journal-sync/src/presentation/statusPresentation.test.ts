@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { SyncSnapshot } from '../state/scheduler'
-import { getJournalSyncStatusPresentation } from './statusPresentation'
+import {
+  getJournalSyncBlockPresentation,
+  getJournalSyncStatusPresentation,
+} from './statusPresentation'
 
 const syncedSnapshot: SyncSnapshot = {
   block: null,
@@ -155,5 +158,34 @@ describe('getJournalSyncStatusPresentation', () => {
 
     expect(presentation.kind).toBe('blocked')
     expect(presentation.label).toBe(label)
+  })
+})
+
+describe('getJournalSyncBlockPresentation', () => {
+  it('presents content conflicts with paths and a resolution action', () => {
+    const presentation = getJournalSyncBlockPresentation({
+      conflicts: [{
+        ours: '本机内容',
+        path: 'entries/2026/06/2026-06-08.md',
+        theirs: '远端内容',
+      }],
+      message: '日记内容存在需要人工处理的合并冲突。',
+      paths: ['entries/2026/06/2026-06-08.md'],
+      reason: 'content-conflict',
+    })
+
+    expect(presentation).toMatchObject({
+      action: 'resolve-content-conflict',
+      conflicts: [{
+        ours: '本机内容',
+        path: 'entries/2026/06/2026-06-08.md',
+        theirs: '远端内容',
+      }],
+      detail: '本机和远端改到了同一段内容，同步已暂停。',
+      paths: ['entries/2026/06/2026-06-08.md'],
+      suggestion: '选择保留本机、保留远端，或把两段都留下后继续。',
+      title: '内容有冲突',
+      tone: 'danger',
+    })
   })
 })

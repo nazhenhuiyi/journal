@@ -107,6 +107,7 @@ export function useMobileSync({
     ...state,
     handleSyncNow,
     refreshMobileGitStatus: mobileSyncManager.refreshStatus,
+    resolveSyncConflict: mobileSyncManager.resolveConflict,
     saveSyncConfiguration,
     setSyncBranch: mobileSyncManager.setSyncBranch,
     setSyncRemoteUrl: mobileSyncManager.setSyncRemoteUrl,
@@ -114,6 +115,7 @@ export function useMobileSync({
   } satisfies MobileSyncManagerState & {
     handleSyncNow: () => Promise<void>
     refreshMobileGitStatus: typeof mobileSyncManager.refreshStatus
+    resolveSyncConflict: typeof mobileSyncManager.resolveConflict
     saveSyncConfiguration: () => Promise<boolean>
     setSyncBranch: typeof mobileSyncManager.setSyncBranch
     setSyncRemoteUrl: typeof mobileSyncManager.setSyncRemoteUrl

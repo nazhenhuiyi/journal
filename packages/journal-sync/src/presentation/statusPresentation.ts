@@ -1,5 +1,5 @@
 import type { SyncSnapshot } from '../state/scheduler'
-import type { SyncBlock } from '../state/syncBlock'
+import type { SyncBlock, SyncBlockConflictPreview } from '../state/syncBlock'
 
 export type JournalSyncStatusTone =
   | 'idle'
@@ -30,6 +30,22 @@ export type JournalSyncStatusPresentation = {
   detail: string
   kind: JournalSyncStatusKind
   label: string
+  tone: JournalSyncStatusTone
+}
+
+export type JournalSyncBlockPresentationAction =
+  | 'resolve-content-conflict'
+  | 'choose-first-sync-direction'
+  | 'repair-local-repository'
+  | 'manual-review'
+
+export type JournalSyncBlockPresentation = {
+  action: JournalSyncBlockPresentationAction
+  conflicts: SyncBlockConflictPreview[]
+  detail: string
+  paths: string[]
+  suggestion: string
+  title: string
   tone: JournalSyncStatusTone
 }
 
@@ -189,13 +205,84 @@ export function getJournalSyncStatusPresentation(
   }
 }
 
+export function getJournalSyncBlockPresentation(
+  block: SyncBlock | null,
+  fallbackMessage: string | null = null,
+): JournalSyncBlockPresentation {
+  const detail = block?.message ?? fallbackMessage ?? '同步受阻，需要处理后再继续。'
+  const conflicts = block?.conflicts ?? []
+  const paths = block?.paths ?? []
+
+  if (block?.reason === 'content-conflict') {
+    return {
+      action: 'resolve-content-conflict',
+      conflicts,
+      detail: '本机和远端改到了同一段内容，同步已暂停。',
+      paths,
+      suggestion: '选择保留本机、保留远端，或把两段都留下后继续。',
+      title: '内容有冲突',
+      tone: 'danger',
+    }
+  }
+
+  if (block?.reason === 'first-sync-needs-choice') {
+    return {
+      action: 'choose-first-sync-direction',
+      conflicts,
+      detail: '本机和远端都已有内容，需要先选择同步方向。',
+      paths,
+      suggestion: '这版先不自动处理，请确认方向后再继续同步。',
+      title: '首次同步需要选择方向',
+      tone: 'warning',
+    }
+  }
+
+  if (block?.reason === 'unrelated-histories') {
+    return {
+      action: 'manual-review',
+      conflicts,
+      detail: '本机和远端不是同一条同步历史，同步已暂停。',
+      paths,
+      suggestion: '请先确认要保留的内容，再做一次性迁移修复。',
+      title: '同步历史不兼容',
+      tone: 'danger',
+    }
+  }
+
+  if (block?.reason === 'object-store-corrupt') {
+    return {
+      action: 'repair-local-repository',
+      conflicts,
+      detail: block.retryAfterMs
+        ? '本地同步仓库暂时不可读，同步已暂停。'
+        : '本地同步仓库不可读，同步已暂停。',
+      paths,
+      suggestion: block.retryAfterMs
+        ? '稍后可以再次手动同步。'
+        : '可以稍后重试，或导出本地日记后重建同步仓库。',
+      title: '本地同步仓库需要修复',
+      tone: 'danger',
+    }
+  }
+
+  return {
+    action: 'manual-review',
+    detail,
+    conflicts,
+    paths,
+    suggestion: '请先查看同步状态，处理完成后再手动同步。',
+    title: '同步受阻',
+    tone: 'danger',
+  }
+}
+
 function getBlockedStatusPresentation(
   block: SyncBlock | null,
   fallbackMessage: string | null,
 ): JournalSyncStatusPresentation {
   if (block?.reason === 'content-conflict') {
     return {
-      detail: block.message,
+      detail: '本机和远端改到了同一段内容，同步已暂停。',
       kind: 'blocked',
       label: '需要处理冲突',
       tone: 'danger',
@@ -204,7 +291,7 @@ function getBlockedStatusPresentation(
 
   if (block?.reason === 'first-sync-needs-choice') {
     return {
-      detail: block.message,
+      detail: '本机和远端都已有内容，需要选择同步方向。',
       kind: 'blocked',
       label: '需要选择方向',
       tone: 'warning',
@@ -213,7 +300,7 @@ function getBlockedStatusPresentation(
 
   if (block?.reason === 'unrelated-histories') {
     return {
-      detail: block.message,
+      detail: '本机和远端不是同一条同步历史。',
       kind: 'blocked',
       label: '历史不兼容',
       tone: 'danger',
@@ -222,7 +309,7 @@ function getBlockedStatusPresentation(
 
   if (block?.reason === 'object-store-corrupt') {
     return {
-      detail: block.message,
+      detail: '本地同步仓库不可读。',
       kind: 'blocked',
       label: '本地仓库需修复',
       tone: 'danger',

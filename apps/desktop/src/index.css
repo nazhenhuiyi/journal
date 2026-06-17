@@ -510,6 +510,101 @@ body {
   background: var(--journal-danger-background);
 }
 
+.settings-block-card {
+  display: grid;
+  gap: var(--journal-space-2-5);
+  border: 1px solid var(--journal-danger-border);
+  border-radius: var(--journal-radius-card);
+  padding: var(--journal-space-4);
+  background: var(--journal-danger-background);
+}
+
+.settings-block-card h3 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.settings-block-card p {
+  margin: 0;
+  color: var(--journal-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.settings-block-conflicts {
+  display: grid;
+  gap: var(--journal-space-2);
+}
+
+.settings-block-conflict {
+  display: grid;
+  gap: var(--journal-space-2);
+  border-radius: var(--journal-radius-control);
+  padding: var(--journal-space-2-5) var(--journal-space-3);
+  background: color-mix(in srgb, var(--color-card) 72%, transparent);
+}
+
+.settings-block-conflict > code {
+  display: block;
+  overflow: hidden;
+  color: var(--journal-text-secondary);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-block-conflict-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--journal-space-2);
+}
+
+.settings-block-conflict-side {
+  display: grid;
+  gap: var(--journal-space-1);
+  min-width: 0;
+}
+
+.settings-block-conflict-side span {
+  color: var(--journal-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.settings-block-conflict-side pre {
+  min-height: 2.6rem;
+  margin: 0;
+  overflow: hidden;
+  border-radius: calc(var(--journal-radius-control) - 2px);
+  padding: var(--journal-space-2);
+  color: var(--journal-text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  background: color-mix(in srgb, var(--color-card) 88%, transparent);
+}
+
+.settings-block-paths {
+  display: grid;
+  gap: var(--journal-space-1);
+  margin: 0;
+  border-radius: var(--journal-radius-control);
+  padding: var(--journal-space-2-5) var(--journal-space-3);
+  list-style: none;
+  background: color-mix(in srgb, var(--color-card) 72%, transparent);
+}
+
+.settings-block-paths code {
+  display: block;
+  overflow: hidden;
+  color: var(--journal-text-secondary);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-commit-row {
   display: flex;
   min-width: 0;

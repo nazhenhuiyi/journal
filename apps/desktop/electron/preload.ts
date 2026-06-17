@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('journalSync', {
   syncNow(options?: unknown) {
     return ipcRenderer.invoke('journalSync:syncNow', options)
   },
+  resolveConflict(strategy: unknown) {
+    return ipcRenderer.invoke('journalSync:resolveConflict', strategy)
+  },
 })
 
 contextBridge.exposeInMainWorld('journalStore', {

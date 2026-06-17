@@ -9,11 +9,25 @@ import {
 describe('sync blocked errors', () => {
   it('normalizes blocked payloads', () => {
     expect(normalizeSyncBlock({
+      conflicts: [
+        {
+          ours: ' local ',
+          path: ' entries/today.md ',
+          theirs: ' remote ',
+        },
+      ],
       message: '  needs attention  ',
       paths: ['b.md', 'a.md', 'a.md', ''],
       reason: 'content-conflict',
       retryAfterMs: 10.2,
     })).toEqual({
+      conflicts: [
+        {
+          ours: 'local',
+          path: 'entries/today.md',
+          theirs: 'remote',
+        },
+      ],
       message: 'needs attention',
       paths: ['a.md', 'b.md'],
       reason: 'content-conflict',

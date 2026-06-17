@@ -3,6 +3,7 @@ import {
   getDefaultSyncSnapshot,
   getJournalGitAuthenticationErrorMessage,
   JournalSyncCoordinator,
+  type JournalGitConflictResolutionStrategy,
   shouldPersistSyncSnapshot,
   type SyncOperationRequest,
   type SyncOperationResult,
@@ -12,6 +13,7 @@ import {
 import {
   getMobileGitSyncStatus,
   pullMobileJournalUpdatesFromGitHub,
+  resolveMobileJournalSyncConflict,
   syncMobileJournalWithGitHub,
   type MobileGitSyncStatus,
 } from './mobileGitSync'
@@ -463,6 +465,136 @@ class MobileSyncManager {
       if (didPausePulling) {
         await this.startPullingIfConfigured({ immediate: false })
       }
+    }
+  }
+
+  resolveConflict = async (
+    strategy: JournalGitConflictResolutionStrategy,
+  ): Promise<MobileSyncActionResult> => {
+    const remoteUrl = this.state.syncRemoteUrl.trim()
+    const branch = this.state.syncBranch.trim() || 'main'
+    const token = this.state.syncTokenDraft.trim()
+    const binding = this.runtimeBinding
+
+    if (this.state.syncSnapshot.status !== 'blocked' || this.state.syncSnapshot.block?.reason !== 'content-conflict') {
+      return {
+        alertMessage: '当前没有需要选边处理的内容冲突。',
+        alertTitle: '无需处理',
+        ok: false,
+      }
+    }
+
+    if (binding?.getSaveState() === 'dirty' || binding?.getSaveState() === 'saving' || binding?.isInputUnstable()) {
+      return {
+        alertMessage: '请先保存当前日记，再处理同步冲突。',
+        alertTitle: '本地内容尚未稳定',
+        ok: false,
+      }
+    }
+
+    if (!remoteUrl) {
+      return {
+        alertMessage: '请先填写 GitHub 私有仓库地址。',
+        alertTitle: '缺少仓库地址',
+        ok: false,
+      }
+    }
+
+    if (!token && !this.state.hasStoredSyncToken) {
+      return {
+        alertMessage: '请先填写并保存 GitHub token。',
+        alertTitle: '缺少 GitHub token',
+        ok: false,
+      }
+    }
+
+    this.coordinator.stopPulling()
+    this.setState({
+      syncMessage: '',
+      syncSnapshot: {
+        ...this.state.syncSnapshot,
+        status: 'syncing',
+      },
+    })
+
+    try {
+      await saveGitHubSyncSettings({ branch, remoteUrl })
+
+      if (token) {
+        await saveGitHubSyncCredentials({ token })
+      }
+
+      const nextIdentity = createSyncSnapshotPersistenceIdentity({ branch, remoteUrl })
+
+      this.syncSnapshotIdentity = nextIdentity
+      this.setState({
+        hasStoredSyncToken: token ? true : this.state.hasStoredSyncToken,
+        syncBranch: branch,
+        syncCredentialStatus: token ? 'available' : this.state.syncCredentialStatus,
+        syncRemoteUrl: remoteUrl,
+        syncTokenDraft: token ? '' : this.state.syncTokenDraft,
+      })
+
+      const result = await this.traceStep(
+        'mobile.resolveConflict',
+        () => resolveMobileJournalSyncConflict({ branch, remoteUrl }, { strategy }),
+        {
+          branch,
+          remoteHost: getRemoteHost(remoteUrl),
+          strategy,
+        },
+      )
+
+      if (binding && canApplyRemoteUpdates(binding.getSaveState())) {
+        await this.traceStep('mobile.reloadTodayAfterConflictResolution', () => binding.reloadTodayFromDisk(), {
+          strategy,
+        })
+      }
+
+      if (result.updatedWorktree) {
+        binding?.onRemoteUpdatesApplied()
+      }
+
+      const snapshot: SyncSnapshot = {
+        ...initialSyncSnapshot,
+        lastSyncedAt: new Date().toISOString(),
+        status: 'synced',
+      }
+
+      this.coordinator.restoreSnapshot(snapshot, { emit: false })
+      this.setState({
+        syncMessage: getConflictResolutionSuccessMessage(strategy),
+        syncSnapshot: snapshot,
+      })
+      this.persistSnapshot(snapshot)
+      await this.refreshStatus({
+        allowDuringSync: true,
+        branch,
+        includeRecentCommits: false,
+        remoteUrl,
+      })
+
+      return { ok: true }
+    } catch (error) {
+      const authResult = getAuthFailureOperationResult(error)
+      const lastError = authResult?.message ?? getErrorMessage(error)
+
+      this.setState({
+        syncMessage: '冲突处理失败',
+        syncSnapshot: {
+          ...this.state.syncSnapshot,
+          lastError,
+          status: authResult ? 'needs-auth' : 'blocked',
+        },
+      })
+
+      return {
+        alertMessage: lastError,
+        alertTitle: authResult ? '需要重新连接' : '冲突处理失败',
+        ok: false,
+      }
+    } finally {
+      await this.startPullingIfConfigured({ immediate: false })
     }
   }
 
@@ -935,6 +1067,18 @@ export const mobileSyncManager = new MobileSyncManager()
 
 function mergeChangedPaths(first: readonly string[], second: readonly string[]) {
   return [...new Set([...first, ...second])].sort()
+}
+
+function getConflictResolutionSuccessMessage(strategy: JournalGitConflictResolutionStrategy) {
+  if (strategy === 'keep-local') {
+    return '已保留本机内容'
+  }
+
+  if (strategy === 'keep-remote') {
+    return '已保留远端内容'
+  }
+
+  return '已保留两边内容'
 }
 
 function canApplyRemoteUpdates(saveState: MobileSyncSaveState) {

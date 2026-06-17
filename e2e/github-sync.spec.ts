@@ -44,6 +44,7 @@ test('github sync core pushes and clones an isolated e2e branch', async () => {
     const marker = `GitHub sync core E2E ${branch}`
     const entryPath = getEntryPath(sourceDir, '2026-06-09')
 
+    await cloneJournalGitSyncRepository(sourceRuntime, syncConfig, githubConfig.credentials)
     await mkdir(path.dirname(entryPath), { recursive: true })
     await writeFile(entryPath, `---
 date: 2026-06-09

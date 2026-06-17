@@ -4,7 +4,14 @@ export type SyncBlockedReason =
   | 'object-store-corrupt'
   | 'unrelated-histories'
 
+export type SyncBlockConflictPreview = {
+  ours: string
+  path: string
+  theirs: string
+}
+
 export type SyncBlock = {
+  conflicts?: SyncBlockConflictPreview[]
   message: string
   paths?: string[]
   reason: SyncBlockedReason
@@ -64,15 +71,55 @@ export function normalizeSyncBlock(value: unknown): SyncBlock | null {
     return null
   }
 
+  const conflicts = normalizeSyncBlockConflicts(value.conflicts)
   const paths = normalizeSyncBlockPaths(value.paths)
   const retryAfterMs = normalizeRetryAfterMs(value.retryAfterMs)
 
   return {
+    ...(conflicts.length > 0 ? { conflicts } : {}),
     message: value.message.trim(),
     ...(paths.length > 0 ? { paths } : {}),
     reason: value.reason as SyncBlockedReason,
     ...(retryAfterMs === null ? {} : { retryAfterMs }),
   }
+}
+
+function normalizeSyncBlockConflicts(value: unknown): SyncBlockConflictPreview[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const conflicts: SyncBlockConflictPreview[] = []
+  const seen = new Set<string>()
+
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue
+    }
+
+    const path = typeof item.path === 'string' ? item.path.trim() : ''
+    const ours = typeof item.ours === 'string' ? trimConflictPreviewText(item.ours) : ''
+    const theirs = typeof item.theirs === 'string' ? trimConflictPreviewText(item.theirs) : ''
+
+    if (!path || (!ours && !theirs)) {
+      continue
+    }
+
+    const key = `${path}\n${ours}\n${theirs}`
+
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    conflicts.push({ ours, path, theirs })
+
+    if (conflicts.length >= 4) {
+      break
+    }
+  }
+
+  return conflicts
 }
 
 function normalizeSyncBlockPaths(value: unknown) {
@@ -93,6 +140,13 @@ function normalizeRetryAfterMs(value: unknown) {
   }
 
   return Math.ceil(value)
+}
+
+function trimConflictPreviewText(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .slice(0, 1200)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

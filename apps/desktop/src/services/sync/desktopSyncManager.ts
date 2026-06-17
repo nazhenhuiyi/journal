@@ -13,6 +13,7 @@ import {
 } from '@journal/sync/persistedSnapshot'
 import {
   getJournalGitAuthenticationErrorMessage,
+  type JournalGitConflictResolutionStrategy,
 } from '@journal/sync/gitCore'
 
 type JournalSyncStore = NonNullable<Window['journalSync']>
@@ -298,7 +299,7 @@ class DesktopSyncManager {
             status: 'synced',
           },
         })
-        this.persistSnapshot(this.state.snapshot)
+        void this.persistSnapshot(this.state.snapshot)
       }
 
       return this.state.snapshot
@@ -312,6 +313,82 @@ class DesktopSyncManager {
         },
       })
       return this.state.snapshot
+    } finally {
+      this.setState({ isSyncingNow: false })
+      this.startPullingIfConfigured()
+    }
+  }
+
+  resolveConflict = async (strategy: JournalGitConflictResolutionStrategy) => {
+    const journalSync = getJournalSyncStore()
+    const binding = this.runtimeBinding
+
+    if (!journalSync) {
+      this.setUnavailableState()
+      return false
+    }
+
+    if (this.state.snapshot.status !== 'blocked' || this.state.snapshot.block?.reason !== 'content-conflict') {
+      this.setState({ message: '当前没有需要选边处理的内容冲突' })
+      return false
+    }
+
+    if (this.state.isSyncingNow) {
+      this.setState({ message: '同步正在进行，稍后再处理冲突' })
+      return false
+    }
+
+    if (binding?.getIsJournalDirty() || binding?.getIsEditorComposing()) {
+      this.setState({ message: '请先保存当前日记，再处理同步冲突' })
+      return false
+    }
+
+    this.coordinator.stopPulling()
+    this.setState({
+      isSyncingNow: true,
+      message: '',
+    })
+
+    try {
+      const result = await journalSync.resolveConflict(strategy)
+
+      if (binding && !binding.getIsJournalDirty()) {
+        await binding.loadJournalForDate(binding.getCurrentJournalDate(), () => !binding.getIsJournalDirty())
+      }
+
+      const snapshot: SyncSnapshot = {
+        ...initialSyncSnapshot,
+        lastSyncedAt: new Date().toISOString(),
+        status: 'synced',
+      }
+
+      this.coordinator.restoreSnapshot(snapshot, { emit: false })
+      this.setState({
+        message: result.message || '冲突已处理',
+        snapshot,
+      })
+      const didPersistSnapshot = await this.persistSnapshot(snapshot)
+
+      if (didPersistSnapshot) {
+        await this.refreshStatus({ showLoading: false })
+      }
+
+      return true
+    } catch (error) {
+      const authResult = getAuthFailureOperationResult(error)
+      const lastError = authResult?.message ?? getErrorMessage(error)
+      const status = authResult ? 'needs-auth' : this.state.snapshot.status
+
+      this.setState({
+        message: '冲突处理失败',
+        snapshot: {
+          ...this.state.snapshot,
+          lastError,
+          status,
+        },
+      })
+
+      return false
     } finally {
       this.setState({ isSyncingNow: false })
       this.startPullingIfConfigured()
@@ -334,7 +411,7 @@ class DesktopSyncManager {
           message: snapshot.status === 'synced' ? this.state.message : '',
           snapshot,
         })
-        this.persistSnapshot(snapshot)
+        void this.persistSnapshot(snapshot)
       },
       runOperation: (request) => this.runOperation(request),
     })
@@ -533,21 +610,25 @@ class DesktopSyncManager {
     })
   }
 
-  private persistSnapshot(snapshot: SyncSnapshot) {
+  private async persistSnapshot(snapshot: SyncSnapshot) {
     const journalSync = getJournalSyncStore()
     const identity = this.syncSnapshotIdentity
 
     if (!journalSync || !identity || !shouldPersistSyncSnapshot(snapshot)) {
-      return
+      return false
     }
 
-    void Promise.resolve(journalSync.saveState({
-      snapshot,
-      syncBranch: identity.branch,
-      syncRemoteUrl: identity.remoteUrl,
-    })).catch((error) => {
+    try {
+      await journalSync.saveState({
+        snapshot,
+        syncBranch: identity.branch,
+        syncRemoteUrl: identity.remoteUrl,
+      })
+      return true
+    } catch (error) {
       console.error(error)
-    })
+      return false
+    }
   }
 }
 

@@ -9,7 +9,9 @@ import {
   initJournalGitSyncRepository,
   pullJournalUpdates as pullSharedJournalUpdates,
   pushJournalChanges as pushSharedJournalChanges,
+  resolveJournalContentConflict,
   syncJournalNow as syncSharedJournalNow,
+  type JournalGitConflictResolutionStrategy,
   type JournalGitCredentials,
   type JournalGitOperationOptions,
   type JournalGitRecentCommit,
@@ -173,6 +175,38 @@ export async function syncJournalNow(
   }
 }
 
+export async function resolveJournalSyncConflict(
+  journalDirectory: string,
+  strategyPayload: unknown,
+): Promise<JournalGitSyncResult> {
+  const context = await loadDesktopSyncContext(journalDirectory)
+  const strategy = normalizeConflictResolutionStrategy(strategyPayload)
+  const result = await resolveJournalContentConflict(
+    context.runtime,
+    context.config,
+    context.credentials,
+    { strategy },
+  )
+
+  return {
+    changed: Boolean(result.localCommitOid || result.updatedWorktree || result.pushResult),
+    dirtyPaths: [],
+    message: getConflictResolutionMessage(strategy),
+  }
+}
+
+function getConflictResolutionMessage(strategy: JournalGitConflictResolutionStrategy) {
+  if (strategy === 'keep-local') {
+    return 'Conflict resolved with local content'
+  }
+
+  if (strategy === 'keep-remote') {
+    return 'Conflict resolved with remote content'
+  }
+
+  return 'Conflict resolved by keeping both sides'
+}
+
 export async function saveJournalGitSyncSnapshot(
   journalDirectory: string,
   payload: unknown,
@@ -285,6 +319,14 @@ function normalizeGitOperationOptions(payload: unknown): JournalGitOperationOpti
   }
 
   return options
+}
+
+function normalizeConflictResolutionStrategy(payload: unknown): JournalGitConflictResolutionStrategy {
+  if (payload === 'keep-both' || payload === 'keep-local' || payload === 'keep-remote') {
+    return payload
+  }
+
+  throw new Error('Git sync conflict resolution strategy 格式不正确。')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

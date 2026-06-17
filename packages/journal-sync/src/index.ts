@@ -10,7 +10,11 @@ export {
   initJournalGitSyncRepository,
   pullJournalUpdates,
   pushJournalChanges,
+  resolveJournalContentConflict,
   syncJournalNow,
+  type JournalGitConflictResolutionOptions,
+  type JournalGitConflictResolutionResult,
+  type JournalGitConflictResolutionStrategy,
   type JournalGitCredentials,
   type JournalGitHttpClientOptions,
   type JournalGitOperationOptions,
@@ -61,7 +65,10 @@ export {
   type SyncSnapshotPersistenceIdentity,
 } from './state/persistedSnapshot'
 export {
+  getJournalSyncBlockPresentation,
   getJournalSyncStatusPresentation,
+  type JournalSyncBlockPresentation,
+  type JournalSyncBlockPresentationAction,
   type JournalSyncStatusKind,
   type JournalSyncStatusPresentation,
   type JournalSyncStatusPresentationOptions,
@@ -74,6 +81,7 @@ export {
   normalizeSyncBlock,
   type SyncBlock,
   type SyncBlockedReason,
+  type SyncBlockConflictPreview,
 } from './state/syncBlock'
 export {
   createConsoleJournalGitTrace,

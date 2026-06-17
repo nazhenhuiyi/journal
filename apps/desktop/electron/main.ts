@@ -11,6 +11,7 @@ import {
   loadJournalGitSyncStatus,
   pullJournalUpdates,
   pushJournalChanges,
+  resolveJournalSyncConflict,
   saveJournalGitSyncSnapshot,
   saveJournalGitSyncSettings,
   syncJournalNow,
@@ -108,6 +109,9 @@ ipcMain.handle('journalSync:push', (_event, options: unknown) =>
 )
 ipcMain.handle('journalSync:syncNow', (_event, options: unknown) =>
   syncJournalNow(getJournalDirectory(), options),
+)
+ipcMain.handle('journalSync:resolveConflict', (_event, strategy: unknown) =>
+  resolveJournalSyncConflict(getJournalDirectory(), strategy),
 )
 ipcMain.handle('journal:loadToday', () => loadTodayJournal())
 ipcMain.handle('journal:saveToday', (_event, content: unknown) => saveTodayJournal(content))

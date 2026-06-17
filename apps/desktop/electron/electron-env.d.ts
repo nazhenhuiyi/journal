@@ -44,6 +44,8 @@ type JournalGitOperationOptionsPayload = {
   collectDirtyPathsAfterSync?: boolean
 }
 
+type JournalGitConflictResolutionStrategyPayload = 'keep-both' | 'keep-local' | 'keep-remote'
+
 // Used in Renderer process, exposed in `preload.ts`.
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
@@ -138,6 +140,11 @@ interface Window {
       syncRemoteUrl: string
     }): Promise<import('@journal/sync').PersistedSyncSnapshot | null>
     syncNow(options?: JournalGitOperationOptionsPayload): Promise<{
+      changed: boolean
+      dirtyPaths: string[]
+      message: string
+    }>
+    resolveConflict(strategy: JournalGitConflictResolutionStrategyPayload): Promise<{
       changed: boolean
       dirtyPaths: string[]
       message: string
