@@ -195,6 +195,113 @@ test('github sync core merges non-conflicting local and remote changes', async (
   }
 })
 
+test('github sync core preserves the managed file type matrix on GitHub', async () => {
+  const githubConfig = loadGitHubE2eConfig()
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'journal-github-managed-matrix-e2e-'))
+  const seedDir = path.join(rootDir, 'seed')
+  const remoteWriterDir = path.join(rootDir, 'remote-writer')
+  const localWriterDir = path.join(rootDir, 'local-writer')
+  const remoteCloneDir = path.join(rootDir, 'remote-clone')
+  const deletedEntryDate = '2026-06-21'
+  const deletedEntryPath = getEntryRelativePath(deletedEntryDate)
+  const mediaPath = 'media/2026/06/matrix-photo.bin'
+  const manifestPath = 'manifest.json'
+  const reviewPath = 'reviews/2026/06/2026-06-21.json'
+  const annotationPath = 'annotations/2026/06/2026-06-21.json'
+  const localMediaBytes = Uint8Array.from([0x6a, 0x6f, 0x75, 0x72, 0x6e, 0x61, 0x6c])
+  let environment: GitHubE2eBranchEnvironment | null = null
+
+  try {
+    environment = await createGitHubE2eBranchEnvironment(githubConfig, 'managed-matrix')
+
+    await seedGitHubE2eBranch(githubConfig, environment.branch, seedDir, {
+      [annotationPath]: createAnnotationFile('base-annotation', '2026-06-21T10:00:00.000Z'),
+      [deletedEntryPath]: createConflictEntry(deletedEntryDate, '这篇会在矩阵用例里被删除'),
+      [reviewPath]: createReviewFile('base-review', '2026-06-21T10:00:00.000Z'),
+    })
+
+    const remoteWriterRuntime = createNodeGitRuntime(remoteWriterDir)
+    const localWriterRuntime = createNodeGitRuntime(localWriterDir)
+
+    await cloneJournalGitSyncRepository(remoteWriterRuntime, environment.gitConfig, githubConfig.credentials)
+    await cloneJournalGitSyncRepository(localWriterRuntime, environment.gitConfig, githubConfig.credentials)
+
+    await writeRepositoryFile(
+      remoteWriterDir,
+      reviewPath,
+      createReviewFile('remote-older-review', '2026-06-21T11:00:00.000Z'),
+    )
+    await writeRepositoryFile(
+      remoteWriterDir,
+      annotationPath,
+      createAnnotationFile('remote-older-annotation', '2026-06-21T11:00:00.000Z'),
+    )
+    await syncJournalNow(remoteWriterRuntime, environment.gitConfig, githubConfig.credentials, {
+      changedPaths: [annotationPath, reviewPath],
+      collectDirtyPathsAfterSync: true,
+    })
+
+    await rm(path.join(localWriterDir, deletedEntryPath))
+    await writeRepositoryFile(localWriterDir, mediaPath, localMediaBytes)
+    await writeRepositoryFile(
+      localWriterDir,
+      manifestPath,
+      JSON.stringify({
+        e2e: 'managed-matrix',
+        updatedAt: '2026-06-21T12:00:00.000Z',
+      }, null, 2),
+    )
+    await writeRepositoryFile(
+      localWriterDir,
+      reviewPath,
+      createReviewFile('local-newer-review', '2026-06-21T12:00:00.000Z'),
+    )
+    await writeRepositoryFile(
+      localWriterDir,
+      annotationPath,
+      createAnnotationFile('local-newer-annotation', '2026-06-21T12:00:00.000Z'),
+    )
+
+    const result = await syncJournalNow(localWriterRuntime, environment.gitConfig, githubConfig.credentials, {
+      changedPaths: [annotationPath, deletedEntryPath, manifestPath, mediaPath, reviewPath],
+      collectDirtyPathsAfterSync: true,
+    })
+    const localStatus = await getJournalGitSyncStatus(
+      localWriterRuntime,
+      environment.gitConfig,
+      githubConfig.credentials,
+    )
+    const clone = await cloneGitHubE2eBranch(githubConfig, environment.branch, remoteCloneDir)
+    const remoteMediaBytes = await readFile(path.join(remoteCloneDir, mediaPath))
+    const remoteManifest = JSON.parse(await readFile(path.join(remoteCloneDir, manifestPath), 'utf8')) as {
+      e2e?: unknown
+    }
+    const remoteReview = JSON.parse(await readFile(path.join(remoteCloneDir, reviewPath), 'utf8')) as {
+      marker?: unknown
+    }
+    const remoteAnnotations = JSON.parse(await readFile(path.join(remoteCloneDir, annotationPath), 'utf8')) as {
+      annotations?: Array<{ id?: unknown }>
+    }
+
+    expect(result.mergeCommitOid).toBeTruthy()
+    expect(result.dirtyPathsAfterSync).toEqual([])
+    expect(localStatus.dirtyPaths).toEqual([])
+    expect(clone.status.dirtyPaths).toEqual([])
+    expect(await pathExists(path.join(remoteCloneDir, deletedEntryPath))).toBe(false)
+    expect([...remoteMediaBytes]).toEqual([...localMediaBytes])
+    expect(remoteManifest.e2e).toBe('managed-matrix')
+    expect(remoteReview.marker).toBe('local-newer-review')
+    expect(remoteAnnotations.annotations?.[0]?.id).toBe('local-newer-annotation')
+    await expectHeadAttachedToBranch(localWriterDir, environment.branch)
+    await expectHeadAttachedToBranch(remoteCloneDir, environment.branch)
+  } finally {
+    await environment?.dispose().catch((error: unknown) => {
+      console.warn(`Failed to delete GitHub E2E branch ${environment?.branch}: ${getErrorMessage(error)}`)
+    })
+    await rm(rootDir, { force: true, recursive: true })
+  }
+})
+
 test('github sync core blocks true content conflicts without polluting the remote', async () => {
   const githubConfig = loadGitHubE2eConfig()
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'journal-github-conflict-e2e-'))
@@ -546,4 +653,36 @@ date: ${date}
 
 ${body}
 `
+}
+
+async function writeRepositoryFile(worktreeDir: string, filepath: string, contents: string | Uint8Array) {
+  const absolutePath = path.join(worktreeDir, filepath)
+
+  await mkdir(path.dirname(absolutePath), { recursive: true })
+  await writeFile(absolutePath, contents)
+}
+
+function createReviewFile(marker: string, generatedAt: string) {
+  return JSON.stringify({
+    date: '2026-06-21',
+    generatedAt,
+    marker,
+    version: 1,
+  }, null, 2)
+}
+
+function createAnnotationFile(id: string, updatedAt: string) {
+  return JSON.stringify({
+    annotations: [
+      {
+        id,
+        text: id,
+        updatedAt,
+      },
+    ],
+    date: '2026-06-21',
+    source: 'entries/2026/06/2026-06-21.md',
+    sourceHash: 'e2e-matrix',
+    version: 1,
+  }, null, 2)
 }
