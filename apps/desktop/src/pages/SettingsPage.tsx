@@ -76,7 +76,10 @@ function SettingsPage() {
   const blockPaths = blockPresentation
     ? blockPresentation.paths.filter((path) => !blockPresentation.conflicts.some((conflict) => conflict.path === path))
     : []
-  const shouldShowSnapshotError = Boolean(syncSnapshot.lastError && syncSnapshot.status !== 'blocked')
+  const snapshotErrorMessage = syncSnapshot.status !== 'blocked'
+    ? syncSnapshot.lastError ?? undefined
+    : undefined
+  const shouldShowSnapshotError = Boolean(snapshotErrorMessage)
 
   useEffect(() => {
     void desktopSyncManager.refreshStatus()
@@ -388,10 +391,10 @@ function SettingsPage() {
               <span>{tokenHint}</span>
             </p>
 
-            {syncSnapshot.lastError ? (
-              <p className="settings-sync-error" title={syncSnapshot.lastError}>
+            {shouldShowSnapshotError ? (
+              <p className="settings-sync-error" title={snapshotErrorMessage}>
                 <AlertCircle aria-hidden="true" size={15} strokeWidth={2.2} />
-                <span>{syncSnapshot.lastError}</span>
+                <span>{snapshotErrorMessage}</span>
               </p>
             ) : null}
 
