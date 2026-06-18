@@ -19,6 +19,8 @@ export function serializeMurmurBlock(murmur: MurmurBlock) {
     `time: ${sanitizeMetadataValue(murmur.time)}`,
   ]
 
+  appendLocationMetadataLines(lines, murmur.location)
+
   if (themes.length > 0) {
     lines.push(`themes: [${themes.map((theme) => sanitizeMetadataValue(theme)).join(', ')}]`)
   }
@@ -54,21 +56,7 @@ function serializeImageBlock(image: ImageBlock) {
     lines.push(`caption: ${sanitizeMetadataValue(image.caption)}`)
   }
 
-  if (image.location?.name?.trim()) {
-    lines.push(`location: ${sanitizeMetadataValue(image.location.name)}`)
-  }
-
-  if (typeof image.location?.latitude === 'number' && Number.isFinite(image.location.latitude)) {
-    lines.push(`latitude: ${formatCoordinate(image.location.latitude)}`)
-  }
-
-  if (typeof image.location?.longitude === 'number' && Number.isFinite(image.location.longitude)) {
-    lines.push(`longitude: ${formatCoordinate(image.location.longitude)}`)
-  }
-
-  if (image.location?.source) {
-    lines.push(`locationSource: ${sanitizeMetadataValue(image.location.source)}`)
-  }
+  appendLocationMetadataLines(lines, image.location)
 
   if (image.tags.length > 0) {
     lines.push(`tags: [${image.tags.map((tag) => sanitizeMetadataValue(tag)).join(', ')}]`)
@@ -77,6 +65,24 @@ function serializeImageBlock(image: ImageBlock) {
   lines.push('::')
 
   return lines.join('\n')
+}
+
+function appendLocationMetadataLines(lines: string[], location: ImageBlock['location']) {
+  if (location?.name?.trim()) {
+    lines.push(`location: ${sanitizeMetadataValue(location.name)}`)
+  }
+
+  if (typeof location?.latitude === 'number' && Number.isFinite(location.latitude)) {
+    lines.push(`latitude: ${formatCoordinate(location.latitude)}`)
+  }
+
+  if (typeof location?.longitude === 'number' && Number.isFinite(location.longitude)) {
+    lines.push(`longitude: ${formatCoordinate(location.longitude)}`)
+  }
+
+  if (location?.source) {
+    lines.push(`locationSource: ${sanitizeMetadataValue(location.source)}`)
+  }
 }
 
 function sanitizeMetadataValue(value: string) {

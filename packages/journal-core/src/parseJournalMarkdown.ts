@@ -214,13 +214,21 @@ function parseMurmurBlock(
     })
   }
 
-  return {
+  const murmur: MurmurBlock = {
     id: metadata.id ?? '',
     time: metadata.time ?? '',
     themes: normalizeThemeIds(parseTags(metadata.themes)),
     body: extracted.body,
     images: extracted.images,
   }
+
+  const location = parseLocation(metadata)
+
+  if (location) {
+    murmur.location = location
+  }
+
+  return murmur
 }
 
 function extractImages(
@@ -291,7 +299,7 @@ function parseImageBlock(
     caption: metadata.caption,
     tags: parseTags(metadata.tags),
   }
-  const location = parseImageLocation(metadata)
+  const location = parseLocation(metadata)
 
   if (location) {
     image.location = location
@@ -300,11 +308,11 @@ function parseImageBlock(
   return image
 }
 
-function parseImageLocation(metadata: Record<string, string>): ImageLocation | undefined {
+function parseLocation(metadata: Record<string, string>): ImageLocation | undefined {
   const name = metadata.location || metadata.locationName
   const latitude = parseFiniteCoordinate(metadata.latitude)
   const longitude = parseFiniteCoordinate(metadata.longitude)
-  const source = parseImageLocationSource(metadata.locationSource || metadata['location-source'])
+  const source = parseLocationSource(metadata.locationSource || metadata['location-source'])
 
   if (!name && latitude === undefined && longitude === undefined && !source) {
     return undefined
@@ -328,7 +336,7 @@ function parseFiniteCoordinate(value: string | undefined) {
   return Number.isFinite(coordinate) ? coordinate : undefined
 }
 
-function parseImageLocationSource(value: string | undefined) {
+function parseLocationSource(value: string | undefined) {
   return value === 'exif' || value === 'manual' || value === 'system' ? value : undefined
 }
 

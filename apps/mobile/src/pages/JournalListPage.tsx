@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { radiusPixels, spacingPixels } from '@journal/theme'
 import {
   listDailyJournals,
@@ -19,6 +20,7 @@ type JournalListPageProps = {
   murmurCount: number
   onBack: () => void
   onOpenDay: (date: string) => void
+  onOpenPhotoMap: () => void
   onOpenToday: () => void
   today: string
 }
@@ -28,6 +30,7 @@ export function JournalListPage({
   murmurCount,
   onBack,
   onOpenDay,
+  onOpenPhotoMap,
   onOpenToday,
   today,
 }: JournalListPageProps) {
@@ -77,6 +80,30 @@ export function JournalListPage({
     <PageShell onBack={onBack} testID="journal-list-page" title="日记列表">
       <ScrollView contentContainerStyle={{ paddingBottom: spacingPixels['6'] }} showsVerticalScrollIndicator={false}>
         <View className="gap-3">
+          <Pressable
+            accessibilityLabel="打开照片地图"
+            accessibilityRole="button"
+            className="border border-border bg-surface px-4 py-4"
+            onPress={onOpenPhotoMap}
+            style={({ pressed }) => ({
+              borderRadius: radiusPixels.lg,
+              opacity: pressed ? 0.74 : 1,
+            })}
+            testID="photo-map-entry-button"
+          >
+            <View className="flex-row items-center justify-between gap-4">
+              <View className="min-w-0 shrink">
+                <Text className="text-base font-semibold text-foreground">照片地图</Text>
+                <Text className="mt-1 text-sm leading-5 text-text-tertiary">
+                  在地图上翻看带定位的照片
+                </Text>
+              </View>
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted">
+                <Ionicons color="#A36B28" name="map-outline" size={19} />
+              </View>
+            </View>
+          </Pressable>
+
           {isLoading ? (
             <Text className="px-1 text-sm font-medium text-text-tertiary">正在打开日记列表</Text>
           ) : null}

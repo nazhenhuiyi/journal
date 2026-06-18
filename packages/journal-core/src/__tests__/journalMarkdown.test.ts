@@ -68,6 +68,12 @@ customNote: 保留`)
         id: 'm_20260429_213800',
         time: '2026-04-29T21:38:00+08:00',
         themes: ['sky-now', 'light-shadow'],
+        location: {
+          latitude: 39.9926,
+          longitude: 116.2781,
+          name: '青龙湖湿地',
+          source: 'manual',
+        },
         body: '窗外下雨了。',
         images: [
           {
@@ -87,9 +93,17 @@ customNote: 保留`)
     ])
 
     expect(markdown).toContain(':::murmur\nid: m_20260429_213800')
+    expect(markdown).toContain('location: 青龙湖湿地')
+    expect(markdown).toContain('locationSource: manual')
     expect(markdown).toContain('themes: [sky-now, light-shadow]')
     expect(markdown).toContain('::image\nid: img_20260429_213801')
     expect(markdown).toContain('locationSource: exif')
+    expect(parseJournalMarkdown(markdown).murmurs[0].location).toMatchObject({
+      latitude: 39.9926,
+      longitude: 116.2781,
+      name: '青龙湖湿地',
+      source: 'manual',
+    })
     expect(parseJournalMarkdown(markdown).murmurs[0].images[0]).toMatchObject({
       caption: '雨窗',
       location: {

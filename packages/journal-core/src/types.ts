@@ -117,6 +117,7 @@ export type MurmurBlock = {
   id: string
   time: string
   themes: string[]
+  location?: ImageLocation
   body: string
   images: ImageBlock[]
 }

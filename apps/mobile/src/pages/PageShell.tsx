@@ -7,31 +7,36 @@ import { Screen } from '../ui/Screen'
 type PageShellProps = {
   children: ReactNode
   onBack: () => void
+  headerRight?: ReactNode
   testID?: string
   title: string
 }
 
-export function PageShell({ children, onBack, testID, title }: PageShellProps) {
+export function PageShell({ children, headerRight, onBack, testID, title }: PageShellProps) {
   return (
     <Screen>
       <View className="flex-1 pb-5 pt-4">
         <View style={[styles.nav, styles.horizontal]}>
-          <Pressable
-            accessibilityLabel="返回"
-            accessibilityRole="button"
-            onPress={onBack}
-            style={styles.backButton}
-            testID="back-to-today-button"
-          >
-            <Ionicons color={semanticColors['text-tertiary']} name="chevron-back" size={24} />
-          </Pressable>
+          <View style={styles.headerSide}>
+            <Pressable
+              accessibilityLabel="返回"
+              accessibilityRole="button"
+              onPress={onBack}
+              style={styles.backButton}
+              testID="back-to-today-button"
+            >
+              <Ionicons color={semanticColors['text-tertiary']} name="chevron-back" size={24} />
+            </Pressable>
+          </View>
           <Text
             className="text-lg font-semibold text-foreground"
             style={styles.title}
           >
             {title}
           </Text>
-          <View style={styles.navSpacer} />
+          <View style={[styles.headerSide, styles.headerRight]}>
+            {headerRight}
+          </View>
         </View>
         <View style={styles.content} testID={testID}>
           {children}
@@ -54,14 +59,18 @@ const styles = StyleSheet.create({
   horizontal: {
     paddingHorizontal: spacingPixels['5'],
   },
+  headerSide: {
+    justifyContent: 'center',
+    width: 92,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+  },
   nav: {
     alignItems: 'center',
     flexDirection: 'row',
     height: 36,
     marginBottom: spacingPixels['1.5'],
-  },
-  navSpacer: {
-    width: spacingPixels['8'],
   },
   title: {
     flex: 1,
