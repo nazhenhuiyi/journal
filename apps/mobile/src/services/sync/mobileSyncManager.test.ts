@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
   let lastCoordinator: MockJournalSyncCoordinator | null = null
   let coordinatorOptions: {
     onSnapshot?: (snapshot: MockSyncSnapshot) => void
+    pullIntervalMs?: number
     runOperation: (request: {
       changedPaths?: readonly string[]
       operation: 'full' | 'pull' | 'push'
@@ -90,6 +91,7 @@ const mocks = vi.hoisted(() => {
     mockSavePendingMobileSyncPaths: vi.fn(),
     mockSyncMobileJournalWithGitHub: vi.fn(),
     getCoordinator: () => lastCoordinator,
+    getCoordinatorOptions: () => coordinatorOptions,
     runOperation: (request: {
       changedPaths?: readonly string[]
       operation: 'full' | 'pull' | 'push'
@@ -239,6 +241,57 @@ describe('mobile sync manager', () => {
       pushResult: null,
       retriedPush: false,
     })
+  })
+
+  it('configures foreground automatic pulls every 90 seconds', async () => {
+    await import('./mobileSyncManager')
+
+    expect(mocks.getCoordinatorOptions()?.pullIntervalMs).toBe(90_000)
+  })
+
+  it('stops automatic pulls before flushing while leaving the app', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+    const binding = createRuntimeBinding('saved')
+
+    mobileSyncManager.bindJournalRuntime(binding)
+
+    await mobileSyncManager.flushBeforeLeave()
+
+    const coordinator = mocks.getCoordinator()
+
+    if (!coordinator) {
+      throw new Error('Expected coordinator to be created.')
+    }
+
+    expect(coordinator.stopPulling).toHaveBeenCalledTimes(1)
+    expect(coordinator.stopPulling.mock.invocationCallOrder[0]).toBeLessThan(
+      coordinator.flushBeforeLeave.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('restarts automatic pulls and checks foreground updates on resume', async () => {
+    const { mobileSyncManager } = await import('./mobileSyncManager')
+
+    await mobileSyncManager.initialize()
+
+    const coordinator = mocks.getCoordinator()
+
+    if (!coordinator) {
+      throw new Error('Expected coordinator to be created.')
+    }
+
+    coordinator.startPulling.mockClear()
+    coordinator.notifyForeground.mockClear()
+
+    await mobileSyncManager.resume()
+
+    expect(coordinator.startPulling).toHaveBeenCalledWith({
+      immediate: false,
+    })
+    expect(coordinator.notifyForeground).toHaveBeenCalledTimes(1)
+    expect(coordinator.startPulling.mock.invocationCallOrder[0]).toBeLessThan(
+      coordinator.notifyForeground.mock.invocationCallOrder[0],
+    )
   })
 
   it('passes an empty trusted changed path set for clean manual sync', async () => {

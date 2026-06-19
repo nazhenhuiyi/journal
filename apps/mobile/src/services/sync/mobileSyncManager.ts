@@ -89,7 +89,7 @@ export type MobileSyncConflictFixtureInput = {
 
 type MobileTraceDetails = Record<string, boolean | null | number | string>
 
-const mobilePullIntervalMs = 30_000
+const mobilePullIntervalMs = 90_000
 const mobileRecentCommitLimit = 3
 
 const initialSyncSnapshot: SyncSnapshot = getDefaultSyncSnapshot()
@@ -765,11 +765,13 @@ class MobileSyncManager {
       return
     }
 
-    await this.restorePendingPathsForSync()
+    await this.startPullingIfConfigured({ immediate: false })
     await this.coordinator.notifyForeground()
   }
 
   flushBeforeLeave = async () => {
+    this.coordinator.stopPulling()
+
     const binding = this.runtimeBinding
 
     if (binding?.getSaveState() === 'dirty') {
