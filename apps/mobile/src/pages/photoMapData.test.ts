@@ -189,6 +189,30 @@ describe('photoMapData', () => {
     )).toBe('跟随碎碎念 · 22.2819°N · 114.1587°E')
   })
 
+  it('keeps murmur and image map coordinates independent when they differ', () => {
+    const entries = createPhotoMapEntries([], {
+      date: '2026-06-18',
+      murmurs: [
+        createMurmur('posted-later', '2026-06-18T22:00:00+08:00', [
+          createImage('photo-taken-earlier', 30.6576, 104.0633),
+        ], {
+          latitude: 30.6532,
+          longitude: 104.0818,
+          source: 'manual',
+        }),
+      ],
+    }, '30d')
+
+    expect(createMurmurPointFeatureCollection(entries).features[0].geometry.coordinates).toEqual([
+      104.0818,
+      30.6532,
+    ])
+    expect(createImagePointFeatureCollection(entries).features[0].geometry.coordinates).toEqual([
+      104.0633,
+      30.6576,
+    ])
+  })
+
   it('creates a chronological route from murmur locations only', () => {
     const entries = createPhotoMapEntries([], {
       date: '2026-06-18',

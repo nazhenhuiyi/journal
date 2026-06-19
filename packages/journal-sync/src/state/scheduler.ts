@@ -60,6 +60,7 @@ export type SyncTimerApi = {
 }
 
 export type JournalSyncCoordinatorOptions = {
+  automaticPullCooldownMs?: number
   initialSnapshot?: SyncSnapshot
   leaveFlushTimeoutMs?: number
   now?: () => Date
@@ -76,6 +77,7 @@ const defaultPushDebounceMs = 20_000
 const defaultPullIntervalMs = 180_000
 const defaultLeaveFlushTimeoutMs = 5_000
 const defaultRetryDelayMs = 300_000
+const defaultAutomaticPullCooldownMs = 15_000
 
 const defaultTimers: SyncTimerApi = {
   clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
@@ -91,6 +93,7 @@ export class JournalSyncCoordinator {
   private pendingChangedPaths = new Set<string>()
   private pendingPullAfterRun: SyncTrigger | null = null
   private pendingPushAfterRun: SyncTrigger | null = null
+  private lastAutomaticPullStartedAtMs: number | null = null
   private pullIntervalHandle: unknown | null = null
   private pushTimeoutHandle: unknown | null = null
   private queuedRun: Promise<SyncSnapshot> | null = null
@@ -263,6 +266,8 @@ export class JournalSyncCoordinator {
 
       return this.activeRun.then(() => this.queuedRun ?? this.snapshot)
     }
+
+    this.recordAutomaticPullStart(operation, trigger)
 
     if (this.shouldSurfaceSyncing(operation, trigger)) {
       this.updateSnapshot({
@@ -506,11 +511,29 @@ export class JournalSyncCoordinator {
   }
 
   private shouldRunOperation(operation: SyncOperation, trigger: SyncTrigger) {
-    if (this.snapshot.status !== 'blocked') {
+    if (this.snapshot.status === 'blocked') {
+      return operation === 'full' && trigger === 'manual'
+    }
+
+    if (!isCooldownAutomaticPull(operation, trigger)) {
       return true
     }
 
-    return operation === 'full' && trigger === 'manual'
+    if (this.lastAutomaticPullStartedAtMs === null) {
+      return true
+    }
+
+    return this.now().getTime() - this.lastAutomaticPullStartedAtMs >= this.automaticPullCooldownMs
+  }
+
+  private recordAutomaticPullStart(operation: SyncOperation, trigger: SyncTrigger) {
+    if (isCooldownAutomaticPull(operation, trigger)) {
+      this.lastAutomaticPullStartedAtMs = this.now().getTime()
+    }
+  }
+
+  private get automaticPullCooldownMs() {
+    return this.options.automaticPullCooldownMs ?? defaultAutomaticPullCooldownMs
   }
 
   private get leaveFlushTimeoutMs() {
@@ -540,4 +563,8 @@ export class JournalSyncCoordinator {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '同步过程中出现未知错误。'
+}
+
+function isCooldownAutomaticPull(operation: SyncOperation, trigger: SyncTrigger) {
+  return operation === 'pull' && (trigger === 'app-open' || trigger === 'network-online')
 }

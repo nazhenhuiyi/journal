@@ -135,6 +135,34 @@ themes: [sky-now]
     )
   })
 
+  it('can refresh the snapshot without requesting native widget updates', async () => {
+    addDirectory('file:///app/journal-worktree/entries/')
+    addDirectory('file:///app/journal-worktree/entries/2025/')
+    addDirectory('file:///app/journal-worktree/entries/2025/06/')
+    mockFileSystem.files.set(entryPath, `---
+date: 2025-06-10
+---
+
+:::murmur
+id: m_20250610_070000
+time: 2025-06-10T07:00:00+08:00
+themes: [sky-now]
+---
+云有一点发紫。
+:::`)
+
+    const result = await refreshJournalWidgetSnapshot({
+      date: '2026-06-10',
+    }, {
+      updateNativeWidgets: false,
+    })
+
+    expect(result.snapshot.mode).toBe('review-moment')
+    expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
+    expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 1')
+    expect(mockUpdateNativeJournalWidgets).not.toHaveBeenCalled()
+  })
+
   it('uses existing persisted review moments when present', async () => {
     mockFileSystem.files.set(reviewPath, JSON.stringify({
       date: '2026-06-10',

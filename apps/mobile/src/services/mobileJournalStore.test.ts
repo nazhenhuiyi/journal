@@ -170,12 +170,22 @@ describe('mobileJournalStore', () => {
 
   it('creates themed text murmurs', () => {
     const murmur = createMurmur('2026-06-08', '傍晚的云有一点发紫。', {
+      location: {
+        latitude: 30.657,
+        longitude: 104.066,
+        source: 'system',
+      },
       now: new Date(2026, 5, 8, 18, 30, 0),
       themes: ['sky-now', 'sky-now', 'light-shadow'],
     })
 
     expect(murmur).toMatchObject({
       body: '傍晚的云有一点发紫。',
+      location: {
+        latitude: 30.657,
+        longitude: 104.066,
+        source: 'system',
+      },
       themes: ['sky-now', 'light-shadow'],
     })
   })

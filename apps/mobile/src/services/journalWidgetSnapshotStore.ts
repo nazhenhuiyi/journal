@@ -25,12 +25,18 @@ export type RefreshJournalWidgetSnapshotResult = {
   snapshot: JournalWidgetSnapshot
 }
 
+export type RefreshJournalWidgetSnapshotOptions = {
+  updateNativeWidgets?: boolean
+}
+
 const widgetSnapshotFileName = 'journal-widget-snapshot-v1.json'
 
 export async function refreshJournalWidgetSnapshot({
   currentDay,
   date = getLocalDateKey(),
-}: RefreshJournalWidgetSnapshotInput = {}): Promise<RefreshJournalWidgetSnapshotResult> {
+}: RefreshJournalWidgetSnapshotInput = {}, {
+  updateNativeWidgets = true,
+}: RefreshJournalWidgetSnapshotOptions = {}): Promise<RefreshJournalWidgetSnapshotResult> {
   const records = await listDailyJournals()
   const sourceDays = mergeCurrentDay(records, currentDay)
   const reviewResult = await loadOrCreateDailyReview({
@@ -44,7 +50,10 @@ export async function refreshJournalWidgetSnapshot({
   })
 
   await saveJournalWidgetSnapshot(snapshot)
-  await updateNativeJournalWidgetsBestEffort(snapshot)
+
+  if (updateNativeWidgets) {
+    await updateNativeJournalWidgetsBestEffort(snapshot)
+  }
 
   return {
     reviewResult,

@@ -110,15 +110,17 @@ export function getLocalDateKey(date = new Date()) {
 export function createMurmur(
   date: string,
   body: string,
-  options: { now?: Date; themes?: readonly string[] } = {},
+  options: { location?: ImageLocation; now?: Date; themes?: readonly string[] } = {},
 ): MurmurBlock {
   const now = options.now ?? new Date()
   const timestamp = now.toISOString()
+  const location = options.location
 
   return {
     id: createMurmurId(date, now),
     time: timestamp,
     themes: normalizeThemeIds(options.themes),
+    ...(location ? { location } : {}),
     body: body.trim(),
     images: [],
   }

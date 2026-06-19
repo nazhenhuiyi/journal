@@ -34,7 +34,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "允许且留使用当前位置，为今天的日记记录天气。"
+          "locationWhenInUsePermission": "允许且留使用当前位置，为碎碎念记录地点并获取今天的天气。"
         }
       ],
       [
