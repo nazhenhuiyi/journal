@@ -22,5 +22,7 @@
 ## 验收
 
 - [E2E 测试](../e2e/README.md)：unit、integration、桌面 E2E、移动端 Maestro 和真实 GitHub 同步 E2E。
+- [E2E 测试用例清单](../e2e/测试用例清单.md)：每条 Playwright spec 和 Maestro flow 的证明边界。
 - [E2E 覆盖与设计](../e2e/覆盖与设计.md)：当前覆盖、缺口、真实冲突设计和路线图。
 - [Electron 桌面端验收 SOP](<../e2e/Electron 桌面端验收 SOP.md>)：真实 Electron 窗口、隔离数据目录和同步验收流程。
+- [Mobile Maestro 验收 SOP](<../e2e/Mobile Maestro 验收 SOP.md>)：移动端 artifact、真实同步和真实冲突验收流程。

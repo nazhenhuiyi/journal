@@ -11,10 +11,7 @@ import {
   shouldPersistSyncSnapshot,
   type SyncSnapshotPersistenceIdentity,
 } from '@journal/sync/persistedSnapshot'
-import {
-  getJournalGitAuthenticationErrorMessage,
-  type JournalGitConflictResolutionStrategy,
-} from '@journal/sync/gitCore'
+import type { JournalGitConflictResolutionStrategy } from '@journal/sync/gitCore'
 
 type JournalSyncStore = NonNullable<Window['journalSync']>
 type JournalSyncStatus = Awaited<ReturnType<JournalSyncStore['loadStatus']>>
@@ -683,12 +680,45 @@ function getCredentialStatusMessage(status: DesktopSyncCredentialStatus) {
 }
 
 function getAuthFailureOperationResult(error: unknown): SyncOperationResult | null {
-  const message = getJournalGitAuthenticationErrorMessage(error)
+  const message = getDesktopGitAuthenticationErrorMessage(error)
 
   return message ? {
     message,
     needsAuth: true,
   } : null
+}
+
+function getDesktopGitAuthenticationErrorMessage(error: unknown) {
+  const statusCode = getErrorStatusCode(error)
+
+  if (statusCode === 401) {
+    return 'GitHub token 无效或已过期，请重新保存 token。'
+  }
+
+  if (statusCode === 403) {
+    return 'GitHub token 没有访问这个仓库的权限，请检查 token 权限或重新保存。'
+  }
+
+  const message = getErrorMessage(error)
+
+  if (
+    /\b(?:401|403)\b/.test(message) ||
+    /bad credentials|authentication failed|authorization failed|not authorized|unauthorized|forbidden/i.test(message)
+  ) {
+    return 'GitHub token 或仓库权限无效，请重新保存 token 或检查仓库权限。'
+  }
+
+  return null
+}
+
+function getErrorStatusCode(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  const statusCode = 'statusCode' in error ? error.statusCode : 'status' in error ? error.status : null
+
+  return typeof statusCode === 'number' && Number.isFinite(statusCode) ? statusCode : null
 }
 
 function getErrorMessage(error: unknown) {

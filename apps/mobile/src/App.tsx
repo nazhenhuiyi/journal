@@ -5,8 +5,8 @@ import {
   BackHandler,
   Image as NativeImage,
   Linking,
+  Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -43,8 +43,9 @@ import { useMobileWeather } from './hooks/useMobileWeather'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
 import { cn } from './ui/cn'
-import { ImagePreviewModal } from './ui/ImagePreviewModal'
+import { ImagePreviewModal, type ImagePreviewModalItem } from './ui/ImagePreviewModal'
 import { JournalListPage } from './pages/JournalListPage'
+import { PhotoMapPage } from './pages/PhotoMapPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReviewDayPage } from './pages/ReviewDayPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -55,6 +56,7 @@ import {
   importMobileJournalImagesForDate,
   resolveJournalMediaFileUri,
 } from './services/mobileJournalStore'
+import { useJournalImageThumbnailUri } from './services/mobileImageThumbnails'
 import { fetchTodayMobileWeather } from './services/mobileWeather'
 import {
   loadMobileUiSettings,
@@ -80,6 +82,7 @@ type RootStackParamList = {
   Murmurs: undefined
   LongEntry: undefined
   JournalList: undefined
+  PhotoMap: undefined
   Review: undefined
   ReviewDay: { date: string }
   Settings: undefined
@@ -87,9 +90,8 @@ type RootStackParamList = {
 }
 type ImageImportSource = 'camera' | 'library'
 type ImagePreviewState = {
-  accessibilityLabel: string
-  caption: string | null
-  uri: string
+  initialIndex: number
+  items: ImagePreviewModalItem[]
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -107,10 +109,22 @@ type RootStackResetRoute =
   | { name: 'Murmurs' }
   | { name: 'LongEntry' }
   | { name: 'JournalList' }
+  | { name: 'PhotoMap' }
   | { name: 'Review' }
   | { name: 'ReviewDay', params: RootStackParamList['ReviewDay'] }
   | { name: 'Settings' }
   | { name: 'SyncSettings' }
+
+function createImagePreviewItem(image: ImageBlock): ImagePreviewModalItem {
+  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const caption = image.caption?.trim() || null
+
+  return {
+    accessibilityLabel: caption ?? '日记图片预览',
+    caption,
+    uri: imageUri,
+  }
+}
 
 function returnToToday(navigation: ResetNavigation) {
   resetNavigationStack(navigation, [{ name: 'Today' }])
@@ -430,13 +444,22 @@ function JournalApp() {
   }, [])
 
   const openImagePreview = useCallback((image: ImageBlock) => {
-    const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
-    const caption = image.caption?.trim() || null
+    setPreviewImage({
+      initialIndex: 0,
+      items: [createImagePreviewItem(image)],
+    })
+  }, [])
+
+  const openImageGalleryPreview = useCallback((images: readonly ImageBlock[], initialIndex = 0) => {
+    const items = images.map(createImagePreviewItem)
+
+    if (items.length === 0) {
+      return
+    }
 
     setPreviewImage({
-      accessibilityLabel: caption ?? '日记图片预览',
-      caption,
-      uri: imageUri,
+      initialIndex,
+      items,
     })
   }, [])
 
@@ -492,7 +515,9 @@ function JournalApp() {
         return
       }
 
-      const importedImages = await importMobileJournalImagesForDate(today, result.assets)
+      const importedImages = await importMobileJournalImagesForDate(today, result.assets, new Date(), {
+        platform: Platform.OS,
+      })
 
       if (importedImages.length === 0) {
         Alert.alert('没有可用图片', source === 'camera'
@@ -739,7 +764,20 @@ function JournalApp() {
               murmurCount={murmurs.length}
               onBack={() => goBackOrReturnToToday(navigation)}
               onOpenDay={(date) => navigation.navigate('ReviewDay', { date })}
+              onOpenPhotoMap={() => navigation.navigate('PhotoMap')}
               onOpenToday={() => returnToToday(navigation)}
+              today={today}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="PhotoMap">
+          {({ navigation }) => (
+            <PhotoMapPage
+              currentMurmurs={murmurs}
+              onBack={() => goBackOrReturnToToday(navigation)}
+              onOpenDay={(date) => navigation.navigate('ReviewDay', { date })}
+              onPreviewImageGallery={openImageGalleryPreview}
+              onPreviewImage={openImagePreview}
               today={today}
             />
           )}
@@ -812,7 +850,6 @@ function JournalApp() {
         </Stack.Navigator>
       </NavigationContainer>
       <BottomSheet
-        keyboardAvoiding
         height="88%"
         onClose={closeMurmurEditor}
         visible={Boolean(editingMurmur)}
@@ -834,10 +871,9 @@ function JournalApp() {
         ) : null}
       </BottomSheet>
       <ImagePreviewModal
-        accessibilityLabel={previewImage?.accessibilityLabel}
-        caption={previewImage?.caption}
+        initialIndex={previewImage?.initialIndex}
+        items={previewImage?.items ?? []}
         onClose={() => setPreviewImage(null)}
-        uri={previewImage?.uri ?? null}
       />
     </>
   )
@@ -1664,7 +1700,7 @@ function MurmurImageItem({
   image: ImageBlock
   onPreviewImage: (image: ImageBlock) => void
 }) {
-  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (
@@ -1740,11 +1776,13 @@ function MurmurEditPanel({
           完成
         </Button>
       </View>
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        bottomOffset={spacingPixels['8']}
         contentContainerStyle={{ paddingBottom: spacingPixels['6'] }}
+        disableScrollOnKeyboardHide
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
       >
         <View className="gap-5">
           <View
@@ -1834,7 +1872,7 @@ function MurmurEditPanel({
             )}
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   )
 }
@@ -1852,7 +1890,7 @@ function MurmurEditableImageItem({
   onRemove: (murmurId: string, imageId: string) => void
   onUpdateCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
-  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (
@@ -1888,6 +1926,7 @@ function MurmurEditableImageItem({
           placeholder="给这张图留一句说明"
           placeholderTextColor={semanticColors['text-quaternary']}
           style={{ minWidth: 0 }}
+          testID="murmur-edit-image-caption-input"
           value={image.caption ?? ''}
         />
         <Pressable

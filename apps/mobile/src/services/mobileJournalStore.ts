@@ -8,6 +8,7 @@ import {
   createReviewFile,
   createReviewMoments,
   createJournalMarkdownWithFrontMatter,
+  hasUsableImageLocationCoordinates,
   hasMeaningfulJournalChange,
   normalizeReviewFile,
   parseJournalMarkdown,
@@ -22,6 +23,7 @@ import {
   type ReviewSourceDay,
 } from '@journal/core'
 import { getMobileE2eRunId } from './e2eEnvironment'
+import { mobileDiagnosticLog } from './diagnostics/log'
 
 export type MobileJournalRecord = {
   date: string
@@ -81,6 +83,7 @@ const compressedImageQuality = 0.85
 const passthroughImageExtensions = new Set(['.gif'])
 
 export type MobileJournalImageAsset = {
+  assetId?: string | null
   exif?: Record<string, unknown> | null
   fileName?: string | null
   height?: number | null
@@ -88,6 +91,10 @@ export type MobileJournalImageAsset = {
   type?: string | null
   uri?: string | null
   width?: number | null
+}
+
+type MobileJournalImageImportOptions = {
+  platform?: string
 }
 
 export type ImportedMobileJournalImage = {
@@ -110,15 +117,17 @@ export function getLocalDateKey(date = new Date()) {
 export function createMurmur(
   date: string,
   body: string,
-  options: { now?: Date; themes?: readonly string[] } = {},
+  options: { location?: ImageLocation; now?: Date; themes?: readonly string[] } = {},
 ): MurmurBlock {
   const now = options.now ?? new Date()
   const timestamp = now.toISOString()
+  const location = options.location
 
   return {
     id: createMurmurId(date, now),
     time: timestamp,
     themes: normalizeThemeIds(options.themes),
+    ...(location ? { location } : {}),
     body: body.trim(),
     images: [],
   }
@@ -350,6 +359,7 @@ export async function importMobileJournalImagesForDate(
   date: string,
   assets: readonly MobileJournalImageAsset[],
   now = new Date(),
+  options: MobileJournalImageImportOptions = {},
 ): Promise<ImportedMobileJournalImage[]> {
   assertDateKey(date)
 
@@ -370,6 +380,7 @@ export async function importMobileJournalImagesForDate(
   const usedFileNames = new Set<string>()
   const usedImageIds = new Set<string>()
   const importedImages: ImportedMobileJournalImage[] = []
+  const diagnosticPlatform = normalizeDiagnosticPlatform(options.platform)
 
   await FileSystem.makeDirectoryAsync(mediaDirectory, { intermediates: true })
 
@@ -396,7 +407,7 @@ export async function importMobileJournalImagesForDate(
       filePath: importedFile.filePath,
       repositoryPath,
     }
-    const location = parseExifLocation(imageAsset.exif)
+    const location = await resolveImportedImageLocation(imageAsset, diagnosticPlatform)
 
     if (location) {
       importedImage.location = location
@@ -496,6 +507,7 @@ function isDailyJournalFileName(value: string) {
 }
 
 type NormalizedMobileImageAsset = {
+  assetId: string | null
   exif: Record<string, unknown> | null
   extension: string
   height: number | null
@@ -605,6 +617,9 @@ function normalizeImageAsset(asset: MobileJournalImageAsset) {
   }
 
   return {
+    assetId: typeof asset.assetId === 'string' && asset.assetId.trim()
+      ? asset.assetId.trim()
+      : null,
     exif: asset.exif ?? null,
     extension,
     height: normalizeImageDimension(asset.height),
@@ -723,11 +738,146 @@ function parseExifLocation(exif: Record<string, unknown> | null | undefined): Im
     return undefined
   }
 
-  return {
+  const location = {
     latitude: roundCoordinate(latitude),
     longitude: roundCoordinate(longitude),
-    source: 'exif',
+    source: 'exif' as const,
   }
+
+  return hasUsableImageLocationCoordinates(location) ? location : undefined
+}
+
+async function resolveImportedImageLocation(
+  imageAsset: NormalizedMobileImageAsset,
+  diagnosticPlatform: string,
+): Promise<ImageLocation | undefined> {
+  const imagePickerLocation = parseExifLocation(imageAsset.exif)
+  const imagePickerExifStatus = summarizeExifLocationStatus(imageAsset.exif)
+
+  if (imagePickerLocation) {
+    logImageImportLocationResolution({
+      assetIdStatus: imageAsset.assetId ? 'present' : 'missing',
+      imagePickerExifStatus,
+      platform: diagnosticPlatform,
+      result: 'image-picker-exif',
+    })
+
+    return imagePickerLocation
+  }
+
+  if (!imageAsset.assetId) {
+    logImageImportLocationResolution({
+      assetIdStatus: 'missing',
+      imagePickerExifStatus,
+      platform: diagnosticPlatform,
+      result: 'unavailable',
+    })
+
+    return undefined
+  }
+
+  const mediaLibraryLocation = await readMediaLibraryAssetLocation(imageAsset.assetId)
+
+  logImageImportLocationResolution({
+    assetIdStatus: 'present',
+    imagePickerExifStatus,
+    mediaLibraryStatus: mediaLibraryLocation.status,
+    platform: diagnosticPlatform,
+    result: mediaLibraryLocation.location ? 'media-library' : 'unavailable',
+  })
+
+  return mediaLibraryLocation.location
+}
+
+async function readMediaLibraryAssetLocation(assetId: string): Promise<{
+  location?: ImageLocation
+  status: string
+}> {
+  try {
+    const MediaLibrary = await import('expo-media-library/legacy')
+    const permission = await MediaLibrary.requestPermissionsAsync(false, ['photo'])
+
+    if (!permission.granted) {
+      return { status: 'permission-denied' }
+    }
+
+    const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId, {
+      shouldDownloadFromNetwork: true,
+    })
+    const location = parseMediaLibraryAssetInfoLocation(assetInfo)
+
+    return location ? { location, status: 'resolved' } : { status: 'no-usable-location' }
+  } catch {
+    return { status: 'failed' }
+  }
+}
+
+function parseMediaLibraryAssetInfoLocation(assetInfo: unknown): ImageLocation | undefined {
+  const record = asRecord(assetInfo)
+  const location = parseLocationObject(record.location)
+
+  if (location) {
+    return location
+  }
+
+  return parseExifLocation(asRecord(record.exif))
+}
+
+function parseLocationObject(value: unknown): ImageLocation | undefined {
+  const record = asRecord(value)
+  const latitude = numberFromRecord(record, 'latitude')
+  const longitude = numberFromRecord(record, 'longitude')
+
+  if (latitude === undefined || longitude === undefined) {
+    return undefined
+  }
+
+  const location = {
+    latitude: roundCoordinate(latitude),
+    longitude: roundCoordinate(longitude),
+    source: 'exif' as const,
+  }
+
+  return hasUsableImageLocationCoordinates(location) ? location : undefined
+}
+
+function summarizeExifLocationStatus(exif: Record<string, unknown> | null | undefined) {
+  if (!exif) {
+    return 'missing'
+  }
+
+  const latitudeValue = firstExifValue(exif, [
+    'GPSLatitude',
+    'latitude',
+    'Latitude',
+  ])
+  const longitudeValue = firstExifValue(exif, [
+    'GPSLongitude',
+    'longitude',
+    'Longitude',
+  ])
+  const latitude = parseCoordinateValue(latitudeValue)
+  const longitude = parseCoordinateValue(longitudeValue)
+
+  if (latitude === undefined || longitude === undefined) {
+    return latitudeValue === undefined && longitudeValue === undefined
+      ? 'no-gps-keys'
+      : 'unparseable'
+  }
+
+  return hasUsableImageLocationCoordinates({ latitude, longitude })
+    ? 'usable'
+    : 'unusable'
+}
+
+function logImageImportLocationResolution(details: {
+  assetIdStatus: 'missing' | 'present'
+  imagePickerExifStatus: string
+  mediaLibraryStatus?: string
+  platform: string
+  result: 'image-picker-exif' | 'media-library' | 'unavailable'
+}) {
+  mobileDiagnosticLog.info('journal.imageImport', 'Imported image location metadata resolved', details)
 }
 
 function parseExifCoordinate(
@@ -810,6 +960,25 @@ function parseCoordinatePart(value: unknown): number | undefined {
 
 function roundCoordinate(value: number) {
   return Math.round(value * 1_000_000) / 1_000_000
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function numberFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  const numberValue = typeof value === 'number' ? value : Number(value)
+
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function normalizeDiagnosticPlatform(value: string | undefined) {
+  const normalizedValue = value?.trim()
+
+  return normalizedValue || 'unknown'
 }
 
 function normalizeChangedPaths(paths: readonly string[]) {

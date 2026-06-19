@@ -24,6 +24,7 @@ type RefreshInput = {
 
 type RefreshOptions = {
   shouldMarkReviewForSync?: boolean
+  updateNativeWidgets?: boolean
 }
 
 class JournalEffectsCoordinator {
@@ -101,6 +102,9 @@ class JournalEffectsCoordinator {
   }) {
     return this.enqueueRefresh({
       date: input.date,
+    }, {
+      shouldMarkReviewForSync: false,
+      updateNativeWidgets: false,
     })
   }
 
@@ -109,7 +113,9 @@ class JournalEffectsCoordinator {
     options: RefreshOptions = {},
   ) {
     return this.enqueue(async () => {
-      const result = await refreshJournalWidgetSnapshot(input)
+      const result = await refreshJournalWidgetSnapshot(input, {
+        updateNativeWidgets: options.updateNativeWidgets,
+      })
       const shouldMarkReviewForSync = options.shouldMarkReviewForSync ?? true
 
       if (shouldMarkReviewForSync) {

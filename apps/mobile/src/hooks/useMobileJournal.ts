@@ -11,6 +11,7 @@ import {
   journalEffects,
   type JournalSavedReason,
 } from '../services/journalEffects'
+import { resolveCurrentMurmurLocation } from '../services/mobileMurmurLocation'
 import {
   createMurmur,
   getLocalDateKey,
@@ -304,7 +305,9 @@ export function useMobileJournal() {
     }
 
     const previousMurmurs = murmurs
+    const location = await resolveCurrentMurmurLocation()
     const nextMurmurs = [...previousMurmurs, createMurmur(today, body, {
+      location,
       themes: normalizeThemeIds(themes),
     })]
 
@@ -343,6 +346,7 @@ export function useMobileJournal() {
     const existingMurmur = murmurId
       ? previousMurmurs.find((murmur) => murmur.id === murmurId)
       : null
+    const location = existingMurmur ? undefined : await resolveCurrentMurmurLocation()
     const nextMurmurs = existingMurmur
       ? previousMurmurs.map((murmur) => (
           murmur.id === existingMurmur.id
@@ -353,6 +357,7 @@ export function useMobileJournal() {
           ...previousMurmurs,
           {
             ...createMurmur(today, body, {
+              location,
               themes: normalizeThemeIds(themes),
             }),
             images: imageBlocks,

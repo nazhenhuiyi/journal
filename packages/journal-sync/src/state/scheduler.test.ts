@@ -182,6 +182,78 @@ describe('JournalSyncCoordinator', () => {
     })
   })
 
+  it('deduplicates automatic app-open pulls during the cooldown window', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      automaticPullCooldownMs: 15_000,
+      runOperation,
+    })
+
+    coordinator.startPulling()
+    await vi.advanceTimersByTimeAsync(1)
+    await coordinator.notifyForeground()
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'pull',
+      trigger: 'app-open',
+    })
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    await coordinator.notifyForeground()
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'pull',
+      trigger: 'app-open',
+    })
+  })
+
+  it('deduplicates automatic foreground pulls while one is active', async () => {
+    let resolvePull: () => void = () => undefined
+    const runOperation = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolvePull = resolve
+      })
+
+      return {}
+    })
+    const coordinator = new JournalSyncCoordinator({
+      automaticPullCooldownMs: 15_000,
+      runOperation,
+    })
+
+    const firstPull = coordinator.pullNow('app-open')
+    await vi.advanceTimersByTimeAsync(1)
+    const secondPull = coordinator.notifyForeground()
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    resolvePull()
+    await vi.advanceTimersByTimeAsync(1)
+    await firstPull
+    await secondPull
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not apply the automatic pull cooldown to manual pulls', async () => {
+    const runOperation = vi.fn(async () => ({}))
+    const coordinator = new JournalSyncCoordinator({
+      automaticPullCooldownMs: 15_000,
+      runOperation,
+    })
+
+    await coordinator.pullNow('app-open')
+    await coordinator.pullNow('manual')
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      operation: 'pull',
+      trigger: 'manual',
+    })
+  })
+
   it('drops pull interval ticks that fire during an active sync', async () => {
     let resolveSync: () => void = () => undefined
     const requests: SyncOperationRequest[] = []

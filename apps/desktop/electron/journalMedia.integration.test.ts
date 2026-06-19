@@ -96,6 +96,25 @@ describe('journal media import', () => {
     })
   })
 
+  it('ignores dirty zero-zero GPS coordinates from JPEG EXIF while importing', async () => {
+    const directory = await createTemporaryDirectory()
+    const sourceImage = path.join(directory, 'source.jpg')
+
+    await writeFile(sourceImage, createGpsExifJpeg({
+      latitude: [[0, 1], [0, 1], [0, 1]],
+      longitude: [[0, 1], [0, 1], [0, 1]],
+    }))
+
+    const importedImages = await importJournalImagesForDate(
+      '2026-04-29',
+      directory,
+      [sourceImage],
+      new Date(2026, 3, 29, 21, 38, 0),
+    )
+
+    expect(importedImages[0].location).toBeUndefined()
+  })
+
   it('skips unsupported files and avoids existing file names', async () => {
     const directory = await createTemporaryDirectory()
     const mediaDirectory = path.join(directory, 'media', '2026', '04')
@@ -163,8 +182,15 @@ function createTinyPng() {
   )
 }
 
-function createGpsExifJpeg() {
-  const tiff = createGpsTiff()
+type GpsExifOptions = {
+  latitude?: [number, number][]
+  latitudeRef?: string
+  longitude?: [number, number][]
+  longitudeRef?: string
+}
+
+function createGpsExifJpeg(options: GpsExifOptions = {}) {
+  const tiff = createGpsTiff(options)
   const exif = Buffer.concat([Buffer.from('Exif\0\0', 'binary'), tiff])
   const segmentLength = Buffer.alloc(2)
 
@@ -178,7 +204,20 @@ function createGpsExifJpeg() {
   ])
 }
 
-function createGpsTiff() {
+function createGpsTiff({
+  latitude = [
+    [39, 1],
+    [59, 1],
+    [312, 10],
+  ],
+  latitudeRef = 'N',
+  longitude = [
+    [116, 1],
+    [16, 1],
+    [372, 10],
+  ],
+  longitudeRef = 'E',
+}: GpsExifOptions = {}) {
   const headerLength = 8
   const ifd0Offset = headerLength
   const ifd0Length = 2 + 12 + 4
@@ -197,22 +236,14 @@ function createGpsTiff() {
   buffer.writeUInt32LE(0, ifd0Offset + 14)
 
   buffer.writeUInt16LE(gpsEntryCount, gpsIfdOffset)
-  writeAsciiIfdEntry(buffer, gpsIfdOffset + 2, 0x0001, 'N')
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 2, 0x0001, latitudeRef)
   writeIfdEntry(buffer, gpsIfdOffset + 14, 0x0002, 5, 3, latitudeOffset)
-  writeAsciiIfdEntry(buffer, gpsIfdOffset + 26, 0x0003, 'E')
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 26, 0x0003, longitudeRef)
   writeIfdEntry(buffer, gpsIfdOffset + 38, 0x0004, 5, 3, longitudeOffset)
   buffer.writeUInt32LE(0, gpsIfdOffset + 50)
 
-  writeRationalTriplet(buffer, latitudeOffset, [
-    [39, 1],
-    [59, 1],
-    [312, 10],
-  ])
-  writeRationalTriplet(buffer, longitudeOffset, [
-    [116, 1],
-    [16, 1],
-    [372, 10],
-  ])
+  writeRationalTriplet(buffer, latitudeOffset, latitude)
+  writeRationalTriplet(buffer, longitudeOffset, longitude)
 
   return buffer
 }

@@ -12,6 +12,20 @@ def ccache_enabled?(podfile_properties)
   podfile_properties['apple.ccacheEnabled'] == 'true'
 end
 
+def remove_dev_launcher_packager_interceptor(installer)
+  installer.pods_project.targets.each do |target|
+    next unless target.name == 'expo-dev-launcher'
+
+    target.source_build_phase.files.dup.each do |build_file|
+      file_ref = build_file.file_ref
+      next unless file_ref&.path&.include?('RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m')
+
+      Pod::UI.puts '[Journal] Removing expo-dev-launcher RCTPackagerConnection interceptor for prebuilt RNCore compatibility'
+      target.source_build_phase.remove_build_file(build_file)
+    end
+  end
+end
+
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
 ENV['RCT_USE_RN_DEP'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
 ENV['RCT_USE_PREBUILT_RNCORE'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
@@ -54,6 +68,10 @@ target 'Journal' do
   )
 
   post_install do |installer|
+    # @generated begin @maplibre/maplibre-react-native:post-install - expo prebuild (DO NOT MODIFY)
+    $MLRN.post_install(installer)
+    # @generated end @maplibre/maplibre-react-native:post-install
+
     expo_widgets_post_install(installer)
 
     react_native_post_install(
@@ -62,6 +80,8 @@ target 'Journal' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    remove_dev_launcher_packager_interceptor(installer)
   end
 
 end

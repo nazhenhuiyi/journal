@@ -16,8 +16,10 @@ import { Link } from 'react-router'
 import { parseJournalMarkdown, type DayFrontMatter } from '@journal/core'
 import {
   getJournalSyncBlockPresentation,
-  type JournalGitConflictResolutionStrategy,
-} from '@journal/sync'
+} from '@journal/sync/statusPresentation'
+import type {
+  JournalGitConflictResolutionStrategy,
+} from '@journal/sync/gitCore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

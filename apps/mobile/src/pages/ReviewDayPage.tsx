@@ -15,9 +15,9 @@ import {
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import {
   loadDailyJournal,
-  resolveJournalMediaFileUri,
   type MobileJournalRecord,
 } from '../services/mobileJournalStore'
+import { useJournalImageThumbnailUri } from '../services/mobileImageThumbnails'
 import { PageShell } from './PageShell'
 
 type ReviewDayPageProps = {
@@ -143,39 +143,53 @@ function ReadonlyMurmurCard({
       ) : null}
       {murmur.images.length > 0 ? (
         <View className="gap-3" style={{ marginTop: murmur.body.trim() || murmur.themes.length > 0 ? spacingPixels['3.5'] : 0 }}>
-          {murmur.images.map((image) => {
-            const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
-            const imageLabel = image.caption?.trim() || '碎碎念图片'
-
-            return (
-              <View className="gap-2" key={image.id}>
-                <Pressable
-                  accessibilityLabel={`查看大图：${imageLabel}`}
-                  accessibilityRole="button"
-                  onPress={() => onPreviewImage(image)}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.82 : 1,
-                  })}
-                >
-                  <NativeImage
-                    accessibilityLabel={imageLabel}
-                    resizeMode="cover"
-                    source={{ uri: imageUri }}
-                    style={{
-                      aspectRatio: 4 / 3,
-                      backgroundColor: semanticColors['surface-muted'],
-                      borderRadius: radiusPixels.xl,
-                      width: '100%',
-                    }}
-                  />
-                </Pressable>
-                {image.caption?.trim() ? (
-                  <Text className="text-sm leading-5 text-text-tertiary">{image.caption.trim()}</Text>
-                ) : null}
-              </View>
-            )
-          })}
+          {murmur.images.map((image) => (
+            <ReadonlyMurmurImage
+              image={image}
+              key={image.id}
+              onPreviewImage={onPreviewImage}
+            />
+          ))}
         </View>
+      ) : null}
+    </View>
+  )
+}
+
+function ReadonlyMurmurImage({
+  image,
+  onPreviewImage,
+}: {
+  image: ImageBlock
+  onPreviewImage: (image: ImageBlock) => void
+}) {
+  const imageUri = useJournalImageThumbnailUri(image.src)
+  const imageLabel = image.caption?.trim() || '碎碎念图片'
+
+  return (
+    <View className="gap-2">
+      <Pressable
+        accessibilityLabel={`查看大图：${imageLabel}`}
+        accessibilityRole="button"
+        onPress={() => onPreviewImage(image)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.82 : 1,
+        })}
+      >
+        <NativeImage
+          accessibilityLabel={imageLabel}
+          resizeMode="cover"
+          source={{ uri: imageUri }}
+          style={{
+            aspectRatio: 4 / 3,
+            backgroundColor: semanticColors['surface-muted'],
+            borderRadius: radiusPixels.xl,
+            width: '100%',
+          }}
+        />
+      </Pressable>
+      {image.caption?.trim() ? (
+        <Text className="text-sm leading-5 text-text-tertiary">{image.caption.trim()}</Text>
       ) : null}
     </View>
   )

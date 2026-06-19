@@ -31,9 +31,20 @@ const mockImageManipulator = vi.hoisted(() => ({
     WEBP: 'webp',
   },
 }))
+const mockMediaLibrary = vi.hoisted(() => ({
+  getAssetInfoAsync: vi.fn(),
+  requestPermissionsAsync: vi.fn(),
+}))
+const mockDiagnosticLog = vi.hoisted(() => ({
+  info: vi.fn(),
+}))
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
 vi.mock('expo-image-manipulator', () => mockImageManipulator)
+vi.mock('expo-media-library/legacy', () => mockMediaLibrary)
+vi.mock('./diagnostics/log', () => ({
+  mobileDiagnosticLog: mockDiagnosticLog,
+}))
 
 const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
 const reviewPath = 'file:///app/journal-worktree/reviews/2026/06/2026-06-10.json'
@@ -120,6 +131,8 @@ describe('mobileJournalStore', () => {
         width: 1200,
       }
     })
+    mockMediaLibrary.requestPermissionsAsync.mockResolvedValue({ granted: true })
+    mockMediaLibrary.getAssetInfoAsync.mockResolvedValue({})
   })
 
   afterEach(() => {
@@ -170,12 +183,22 @@ describe('mobileJournalStore', () => {
 
   it('creates themed text murmurs', () => {
     const murmur = createMurmur('2026-06-08', '傍晚的云有一点发紫。', {
+      location: {
+        latitude: 30.657,
+        longitude: 104.066,
+        source: 'system',
+      },
       now: new Date(2026, 5, 8, 18, 30, 0),
       themes: ['sky-now', 'sky-now', 'light-shadow'],
     })
 
     expect(murmur).toMatchObject({
       body: '傍晚的云有一点发紫。',
+      location: {
+        latitude: 30.657,
+        longitude: 104.066,
+        source: 'system',
+      },
       themes: ['sky-now', 'light-shadow'],
     })
   })
@@ -230,6 +253,125 @@ describe('mobileJournalStore', () => {
     )
     expect(mockFileSystem.files.get('file:///app/journal-worktree/media/2026/06/img_20260608_213800.webp'))
       .toBe('webp:image-bytes')
+  })
+
+  it('recovers Android gallery GPS from MediaLibrary when ImagePicker returns zero-zero', async () => {
+    mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
+    mockMediaLibrary.getAssetInfoAsync.mockResolvedValueOnce({
+      location: {
+        latitude: 30.6576,
+        longitude: 104.0633,
+      },
+    })
+
+    const importedImages = await importMobileJournalImagesForDate(
+      '2026-06-08',
+      [
+        {
+          assetId: 'asset-1',
+          exif: {
+            GPSLatitude: 0,
+            GPSLongitude: 0,
+          },
+          fileName: 'source.JPG',
+          mimeType: 'image/jpeg',
+          type: 'image',
+          uri: 'file:///picker/source.jpg',
+        },
+      ],
+      new Date(2026, 5, 8, 21, 38, 0),
+    )
+
+    expect(importedImages[0].location).toEqual({
+      latitude: 30.6576,
+      longitude: 104.0633,
+      source: 'exif',
+    })
+    expect(mockMediaLibrary.requestPermissionsAsync).toHaveBeenCalledWith(false, ['photo'])
+    expect(mockMediaLibrary.getAssetInfoAsync).toHaveBeenCalledWith('asset-1', {
+      shouldDownloadFromNetwork: true,
+    })
+    expect(mockDiagnosticLog.info).toHaveBeenCalledWith(
+      'journal.imageImport',
+      'Imported image location metadata resolved',
+      expect.objectContaining({
+        assetIdStatus: 'present',
+        imagePickerExifStatus: 'unusable',
+        mediaLibraryStatus: 'resolved',
+        result: 'media-library',
+      }),
+    )
+    expect(JSON.stringify(mockDiagnosticLog.info.mock.calls)).not.toContain('GPSLatitude')
+  })
+
+  it('does not write image location when ImagePicker GPS is unusable and assetId is missing', async () => {
+    mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
+
+    const importedImages = await importMobileJournalImagesForDate(
+      '2026-06-08',
+      [
+        {
+          exif: {
+            GPSLatitude: 0,
+            GPSLongitude: 0,
+          },
+          fileName: 'source.JPG',
+          mimeType: 'image/jpeg',
+          type: 'image',
+          uri: 'file:///picker/source.jpg',
+        },
+      ],
+      new Date(2026, 5, 8, 21, 38, 0),
+    )
+
+    expect(importedImages[0].location).toBeUndefined()
+    expect(mockMediaLibrary.getAssetInfoAsync).not.toHaveBeenCalled()
+    expect(mockDiagnosticLog.info).toHaveBeenCalledWith(
+      'journal.imageImport',
+      'Imported image location metadata resolved',
+      expect.objectContaining({
+        assetIdStatus: 'missing',
+        imagePickerExifStatus: 'unusable',
+        result: 'unavailable',
+      }),
+    )
+  })
+
+  it('does not write image location when MediaLibrary fallback has no usable GPS', async () => {
+    mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
+    mockMediaLibrary.getAssetInfoAsync.mockResolvedValueOnce({
+      location: {
+        latitude: 0,
+        longitude: 0,
+      },
+    })
+
+    const importedImages = await importMobileJournalImagesForDate(
+      '2026-06-08',
+      [
+        {
+          assetId: 'asset-1',
+          exif: null,
+          fileName: 'source.JPG',
+          mimeType: 'image/jpeg',
+          type: 'image',
+          uri: 'file:///picker/source.jpg',
+        },
+      ],
+      new Date(2026, 5, 8, 21, 38, 0),
+    )
+
+    expect(importedImages[0].location).toBeUndefined()
+    expect(mockDiagnosticLog.info).toHaveBeenCalledWith(
+      'journal.imageImport',
+      'Imported image location metadata resolved',
+      expect.objectContaining({
+        assetIdStatus: 'present',
+        imagePickerExifStatus: 'missing',
+        mediaLibraryStatus: 'no-usable-location',
+        result: 'unavailable',
+      }),
+    )
   })
 
   it('falls back to copying the original image when mobile WebP compression fails', async () => {
