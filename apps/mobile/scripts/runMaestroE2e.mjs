@@ -60,7 +60,14 @@ const shouldStartExpo = e2eMode === 'dev-client' && process.env.JOURNAL_MOBILE_E
 const syncConflictFlowPath = 'e2e/sync-conflict-flow.yaml'
 const syncConflictFixtureFlowPath = 'e2e/sync-conflict-fixture-flow.yaml'
 const debugSyncBlockedFlowPath = 'e2e/sync-blocked-flow.yaml'
+const murmurEditKeyboardFlowPath = 'e2e/murmur-edit-keyboard-flow.yaml'
 const mobileE2eRuntimeConfigFileName = 'journal-mobile-e2e-config.json'
+const murmurEditKeyboardFixtureMurmurId = 'm_mobile_e2e_keyboard_fixture'
+const murmurEditKeyboardFixtureImageId = 'img_mobile_e2e_keyboard_fixture'
+const murmurEditKeyboardFixtureBody = 'Mobile E2E keyboard fixture body'
+const murmurEditKeyboardFixtureCaption = 'Mobile E2E keyboard image caption'
+const murmurEditKeyboardFixtureImageSrc =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 const reviewBackLoopFlowPath = targetPlatform === 'ios'
   ? 'e2e/review-back-loop-ios-flow.yaml'
   : 'e2e/review-back-loop-flow.yaml'
@@ -75,6 +82,7 @@ const flowPaths = flowArgs.length > 0
       'e2e/long-entry-flow.yaml',
       'e2e/today-writing-flow.yaml',
       'e2e/murmur-edit-flow.yaml',
+      murmurEditKeyboardFlowPath,
       reviewBackLoopFlowPath,
       ...(shouldEnableDebugFixtures ? [debugSyncBlockedFlowPath] : []),
       'e2e/settings-sync-validation.yaml',
@@ -213,7 +221,7 @@ try {
   let maestroStatus = 0
 
   if (regularMaestroFlowPaths.length > 0) {
-    maestroStatus = runMaestroFlows(regularMaestroFlowPaths)
+    maestroStatus = await runMaestroFlows(regularMaestroFlowPaths)
   }
 
   if (maestroStatus === 0 && shouldRunSyncConflictFlow && githubRemote) {
@@ -568,6 +576,15 @@ function installNativeArtifact() {
   })
 }
 
+function terminateMobileApp() {
+  if (targetPlatform === 'ios') {
+    runOptionalCommand('xcrun', ['simctl', 'terminate', deviceId, appId])
+    return
+  }
+
+  runOptionalCommand('adb', ['-s', deviceId, 'shell', 'am', 'force-stop', appId])
+}
+
 function runOptionalCommand(command, args) {
   spawnSync(command, args, {
     encoding: 'utf8',
@@ -593,14 +610,34 @@ function runRequiredCommand(command, args, options) {
   ].filter(Boolean).join('\n'))
 }
 
-function runMaestroFlows(flowPathsToRun) {
+async function runMaestroFlows(flowPathsToRun) {
   if (flowPathsToRun.length === 0) {
     return 0
   }
 
-  if (shouldUseMobileE2eRuntimeConfig) {
+  const shouldRunIndividually = shouldUseMobileE2eRuntimeConfig ||
+    flowPathsToRun.some(isMurmurEditKeyboardFlowPath)
+
+  if (shouldRunIndividually) {
     for (const flowPath of flowPathsToRun) {
-      writeMobileE2eRuntimeConfig()
+      const shouldSeedMurmurEditKeyboardFixture = isMurmurEditKeyboardFlowPath(flowPath)
+
+      if (shouldSeedMurmurEditKeyboardFixture) {
+        terminateMobileApp()
+      }
+
+      if (shouldUseMobileE2eRuntimeConfig) {
+        writeMobileE2eRuntimeConfig()
+      }
+
+      if (shouldSeedMurmurEditKeyboardFixture) {
+        writeMurmurEditKeyboardFixture()
+
+        if (e2eMode === 'dev-client') {
+          openDevelopmentClient()
+          await delay(getAppLaunchWaitMs())
+        }
+      }
 
       const status = runMaestroCommand([flowPath])
 
@@ -653,7 +690,101 @@ function writeMobileE2eRuntimeConfig() {
   writeAndroidMobileE2eRuntimeConfig(contents)
 }
 
+function writeMurmurEditKeyboardFixture() {
+  const date = getLocalDateKey()
+  const entryPath = getEntryRepositoryPath(date)
+  const contents = createMurmurEditKeyboardFixtureEntry(date)
+
+  console.info(`Seeding murmur keyboard fixture in ${entryPath}.`)
+
+  if (targetPlatform === 'ios') {
+    writeIosMurmurEditKeyboardFixture(entryPath, contents)
+    return
+  }
+
+  writeAndroidMurmurEditKeyboardFixture(entryPath, contents)
+}
+
+function createMurmurEditKeyboardFixtureEntry(date) {
+  const timestamp = new Date().toISOString()
+
+  return `---
+date: ${date}
+createdAt: ${timestamp}
+updatedAt: ${timestamp}
+---
+
+:::murmur
+id: ${murmurEditKeyboardFixtureMurmurId}
+time: ${timestamp}
+---
+${murmurEditKeyboardFixtureBody}
+
+::image
+id: ${murmurEditKeyboardFixtureImageId}
+src: ${murmurEditKeyboardFixtureImageSrc}
+caption: ${murmurEditKeyboardFixtureCaption}
+::
+:::
+`
+}
+
+function writeIosMurmurEditKeyboardFixture(entryRepositoryPath, contents) {
+  const entryPath = path.join(
+    getIosAppDataContainer(),
+    'Documents',
+    getMobileJournalWorktreeDirectoryName(),
+    ...entryRepositoryPath.split('/'),
+  )
+
+  mkdirSync(path.dirname(entryPath), { recursive: true })
+  writeFileSync(entryPath, contents)
+}
+
+function writeAndroidMurmurEditKeyboardFixture(entryRepositoryPath, contents) {
+  const entryPath = path.posix.join(
+    'files',
+    getMobileJournalWorktreeDirectoryName(),
+    ...entryRepositoryPath.split('/'),
+  )
+  const entryDirectory = path.posix.dirname(entryPath)
+  const result = spawnSync(
+    'adb',
+    [
+      '-s',
+      deviceId,
+      'shell',
+      'run-as',
+      appId,
+      'sh',
+      '-c',
+      `mkdir -p ${quoteShellArgument(entryDirectory)} && cat > ${quoteShellArgument(entryPath)}`,
+    ],
+    {
+      encoding: 'utf8',
+      env: toolEnv,
+      input: contents,
+    },
+  )
+
+  if (result.status === 0) {
+    return
+  }
+
+  throw new Error([
+    `Could not write Android murmur keyboard fixture for ${appId}.`,
+    (result.stderr || result.stdout || '').trim(),
+  ].filter(Boolean).join(' '))
+}
+
 function writeIosMobileE2eRuntimeConfig(contents) {
+  const documentsDirectory = path.join(getIosAppDataContainer(), 'Documents')
+
+  mkdirSync(documentsDirectory, { recursive: true })
+  writeFileSync(path.join(documentsDirectory, mobileE2eRuntimeConfigFileName), contents)
+}
+
+function getIosAppDataContainer() {
   const result = spawnSync('xcrun', ['simctl', 'get_app_container', deviceId, appId, 'data'], {
     encoding: 'utf8',
     env: toolEnv,
@@ -667,10 +798,21 @@ function writeIosMobileE2eRuntimeConfig(contents) {
     ].filter(Boolean).join(' '))
   }
 
-  const documentsDirectory = path.join(dataContainer, 'Documents')
+  return dataContainer
+}
 
-  mkdirSync(documentsDirectory, { recursive: true })
-  writeFileSync(path.join(documentsDirectory, mobileE2eRuntimeConfigFileName), contents)
+function getMobileJournalWorktreeDirectoryName() {
+  const runId = shouldAppUseMobileE2eRunId() ? getMobileAppE2eRunId() : ''
+
+  return runId ? `journal-e2e-worktree-${runId}` : 'journal-worktree'
+}
+
+function shouldAppUseMobileE2eRunId() {
+  return e2eMode === 'dev-client' || shouldUseMobileE2eRuntimeConfig
+}
+
+function quoteShellArgument(value) {
+  return `'${value.replace(/'/g, "'\\''")}'`
 }
 
 function writeAndroidMobileE2eRuntimeConfig(contents) {
@@ -704,7 +846,7 @@ function writeAndroidMobileE2eRuntimeConfig(contents) {
 }
 
 async function runMobileSyncConflictScenario(remote) {
-  const fixtureStatus = runMaestroFlows([syncConflictFixtureMaestroFlowPath])
+  const fixtureStatus = await runMaestroFlows([syncConflictFixtureMaestroFlowPath])
 
   if (fixtureStatus !== 0) {
     return fixtureStatus
@@ -714,7 +856,7 @@ async function runMobileSyncConflictScenario(remote) {
   console.info(`Advancing GitHub branch ${syncBranch} with remote conflict content.`)
   await commitMobileSyncConflictRemote(remote, syncBranch, syncToken, syncConflictScenario, localEntryContent)
 
-  const conflictStatus = runMaestroFlows([syncConflictMaestroFlowPath])
+  const conflictStatus = await runMaestroFlows([syncConflictMaestroFlowPath])
 
   if (conflictStatus !== 0) {
     return conflictStatus
@@ -743,6 +885,10 @@ function isSyncConflictFlowPath(flowPath) {
 
 function isDebugSyncBlockedFlowPath(flowPath) {
   return /(^|[/\\])sync-blocked-flow\.ya?ml$/.test(flowPath)
+}
+
+function isMurmurEditKeyboardFlowPath(flowPath) {
+  return /(^|[/\\])murmur-edit-keyboard-flow\.ya?ml$/.test(flowPath)
 }
 
 function createDevelopmentClientUrl(port) {

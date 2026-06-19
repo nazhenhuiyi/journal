@@ -6,7 +6,6 @@ import {
   Image as NativeImage,
   Linking,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -847,7 +846,6 @@ function JournalApp() {
         </Stack.Navigator>
       </NavigationContainer>
       <BottomSheet
-        keyboardAvoiding
         height="88%"
         onClose={closeMurmurEditor}
         visible={Boolean(editingMurmur)}
@@ -1774,11 +1772,13 @@ function MurmurEditPanel({
           完成
         </Button>
       </View>
-      <ScrollView
-        className="flex-1"
+      <KeyboardAwareScrollView
+        bottomOffset={spacingPixels['8']}
         contentContainerStyle={{ paddingBottom: spacingPixels['6'] }}
+        disableScrollOnKeyboardHide
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
       >
         <View className="gap-5">
           <View
@@ -1868,7 +1868,7 @@ function MurmurEditPanel({
             )}
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   )
 }
@@ -1922,6 +1922,7 @@ function MurmurEditableImageItem({
           placeholder="给这张图留一句说明"
           placeholderTextColor={semanticColors['text-quaternary']}
           style={{ minWidth: 0 }}
+          testID="murmur-edit-image-caption-input"
           value={image.caption ?? ''}
         />
         <Pressable

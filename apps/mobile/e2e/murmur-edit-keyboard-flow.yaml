@@ -1,0 +1,41 @@
+appId: ${APP_ID}
+---
+- runFlow: _launch-app-preserve-state.yaml
+- runFlow:
+    when:
+      visible:
+        id: murmur-count-button
+    commands:
+      - tapOn:
+          id: murmur-count-button
+      - extendedWaitUntil:
+          visible:
+            id: murmur-edit-button
+          timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: murmur-edit-button
+    timeout: 10000
+- tapOn:
+    id: murmur-edit-button
+- extendedWaitUntil:
+    visible:
+      id: murmur-edit-body-input
+    timeout: 10000
+- tapOn:
+    id: murmur-edit-body-input
+- assertVisible: Mobile E2E keyboard fixture body
+- takeScreenshot: murmur-edit-body-keyboard
+- scrollUntilVisible:
+    element:
+      id: murmur-edit-image-caption-input
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: murmur-edit-image-caption-input
+- assertVisible:
+    id: murmur-edit-image-caption-input
+- takeScreenshot: murmur-edit-image-caption-keyboard
+- tapOn:
+    id: murmur-edit-done-button
+- assertVisible: Mobile E2E keyboard fixture body
