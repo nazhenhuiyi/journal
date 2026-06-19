@@ -29,6 +29,10 @@ export {
   orderMurmursByNewest,
 } from './murmurs'
 export {
+  hasUsableImageLocationCoordinates,
+  isUsableImageCoordinatePair,
+} from './imageLocation'
+export {
   BUILT_IN_THEMES,
   getBuiltInThemeById,
   getThemeLabel,

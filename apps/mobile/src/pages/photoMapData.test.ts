@@ -290,7 +290,7 @@ describe('photoMapData', () => {
     ])
   })
 
-  it('returns a single-point camera or padded bounds for mappable entries', () => {
+  it('positions the initial camera on the first valid murmur or its first valid image', () => {
     const oneEntry = createPhotoMapEntries([], {
       date: '2026-06-18',
       murmurs: [createMurmur('one', '2026-06-18T09:00:00.000Z', [
@@ -314,8 +314,45 @@ describe('photoMapData', () => {
       zoom: 12,
     })
     expect(getPhotoMapInitialCamera(manyEntries)).toMatchObject({
-      bounds: [116.4, 31.2, 121.5, 39.9],
+      center: [116.4, 39.9],
+      zoom: 12,
     })
+  })
+
+  it('ignores dirty or impossible coordinates on points, routes, labels, and initial camera', () => {
+    const entries = createPhotoMapEntries([], {
+      date: '2026-06-18',
+      murmurs: [
+        createMurmur('dirty-zero', '2026-06-18T12:00:00.000Z', [
+          createImage('dirty-image', 0, 0),
+        ], {
+          latitude: 0,
+          longitude: 0,
+          source: 'manual',
+        }),
+        createMurmur('invalid-bounds', '2026-06-18T11:00:00.000Z', [
+          createImage('invalid-image', 91, 116.4),
+        ]),
+        createMurmur('valid', '2026-06-18T10:00:00.000Z', [
+          createImage('valid-image', 31.2, 121.5),
+        ]),
+      ],
+    }, '30d')
+
+    expect(createMurmurPointFeatureCollection(entries).features).toEqual([])
+    expect(createImagePointFeatureCollection(entries).features.map((feature) => feature.properties.imageId)).toEqual([
+      'valid-image',
+    ])
+    expect(createMurmurRouteFeatureCollection(entries).features).toEqual([])
+    expect(getPhotoMapInitialCamera(entries)).toMatchObject({
+      center: [121.5, 31.2],
+      zoom: 12,
+    })
+    expect(formatCoordinateLabel({
+      latitude: 0,
+      longitude: 0,
+      source: 'exif',
+    })).toBe('未定位')
   })
 
   it('formats coordinates for map cards', () => {

@@ -16,7 +16,10 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import ImagePreviewDialog, { type ImagePreviewItem } from '../../components/ImagePreviewDialog'
-import { resolveJournalMediaSrc } from '../../domain/journalMedia'
+import {
+  resolveJournalMediaSrc,
+  resolveJournalMediaThumbnailSrc,
+} from '../../domain/journalMedia'
 
 type ImportedJournalImage = {
   id: string
@@ -363,7 +366,7 @@ function MurmurImageTile({
         <img
           alt={alt}
           className="journal-murmur-image-preview"
-          src={resolveJournalMediaSrc(image.src)}
+          src={resolveJournalMediaThumbnailSrc(image.src)}
         />
       </Button>
       {onDelete ? (

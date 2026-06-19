@@ -28,9 +28,9 @@ import type { ImageBlock, MurmurBlock } from '@journal/core'
 import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
 import {
   listDailyJournals,
-  resolveJournalMediaFileUri,
   type MobileJournalRecord,
 } from '../services/mobileJournalStore'
+import { useJournalImageThumbnailUri } from '../services/mobileImageThumbnails'
 import { PageShell } from './PageShell'
 import {
   createMurmurPointFeatureCollection,
@@ -742,7 +742,7 @@ function PhotoMapGroupImageMarker({
   onSelect: (entry: PhotoMapEntry) => void
 }) {
   const title = getPhotoMapPreviewTitle(entry)
-  const imageUri = resolveJournalMediaFileUri(entry.markerImage.src) ?? entry.markerImage.src
+  const imageUri = useJournalImageThumbnailUri(entry.markerImage.src)
 
   if (!imageUri) {
     return null
@@ -842,7 +842,7 @@ function PhotoPreviewButton({
   onPreviewImage: (image: ImageBlock) => void
   title: string
 }) {
-  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageUri = useJournalImageThumbnailUri(image.src)
 
   return (
     <Pressable
@@ -1250,21 +1250,21 @@ const styles = StyleSheet.create({
     borderColor: semanticColors.border,
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
-    elevation: 2,
+    elevation: 1,
     height: specimenCardHeight,
     overflow: 'hidden',
     shadowColor: semanticColors.foreground,
     shadowOffset: {
-      height: 6,
+      height: 2,
       width: 0,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowOpacity: 0.035,
+    shadowRadius: 5,
     width: '100%',
   },
   specimenCardSelected: {
-    borderColor: semanticColors.border,
-    shadowOpacity: 0.12,
+    borderColor: semanticColors.primary,
+    shadowOpacity: 0.05,
   },
   specimenCardInner: {
     alignItems: 'center',
@@ -1321,6 +1321,7 @@ const styles = StyleSheet.create({
   },
   specimenTray: {
     bottom: spacingPixels['4'],
+    elevation: 0,
     left: 0,
     overflow: 'visible',
     position: 'absolute',

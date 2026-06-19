@@ -5,6 +5,7 @@ import {
   BackHandler,
   Image as NativeImage,
   Linking,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -55,6 +56,7 @@ import {
   importMobileJournalImagesForDate,
   resolveJournalMediaFileUri,
 } from './services/mobileJournalStore'
+import { useJournalImageThumbnailUri } from './services/mobileImageThumbnails'
 import { fetchTodayMobileWeather } from './services/mobileWeather'
 import {
   loadMobileUiSettings,
@@ -513,7 +515,9 @@ function JournalApp() {
         return
       }
 
-      const importedImages = await importMobileJournalImagesForDate(today, result.assets)
+      const importedImages = await importMobileJournalImagesForDate(today, result.assets, new Date(), {
+        platform: Platform.OS,
+      })
 
       if (importedImages.length === 0) {
         Alert.alert('没有可用图片', source === 'camera'
@@ -1696,7 +1700,7 @@ function MurmurImageItem({
   image: ImageBlock
   onPreviewImage: (image: ImageBlock) => void
 }) {
-  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (
@@ -1886,7 +1890,7 @@ function MurmurEditableImageItem({
   onRemove: (murmurId: string, imageId: string) => void
   onUpdateCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
-  const imageUri = resolveJournalMediaFileUri(image.src) ?? image.src
+  const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
 
   return (

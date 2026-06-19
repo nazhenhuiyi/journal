@@ -32,6 +32,17 @@
         }
       ],
       [
+        "expo-media-library",
+        {
+          "granularPermissions": [
+            "photo"
+          ],
+          "isAccessMediaLocationEnabled": true,
+          "photosPermission": "允许且留读取所选照片的信息，用来保存照片拍摄地点。",
+          "savePhotosPermission": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "允许且留使用当前位置，为碎碎念记录地点并获取今天的天气。"

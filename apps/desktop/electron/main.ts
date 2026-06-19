@@ -6,6 +6,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promi
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import sharp from 'sharp'
 import { loadJournalSettings, saveJournalSettings } from './journalSettings'
 import {
   loadJournalGitSyncStatus,
@@ -50,6 +51,9 @@ const JOURNAL_MEDIA_PROTOCOL = 'journal-media'
 const JOURNAL_DIR_OVERRIDE = process.env['JOURNAL_DIR']?.trim()
 const JOURNAL_USER_DATA_DIR = process.env['JOURNAL_USER_DATA_DIR']?.trim()
 const SHOULD_DISABLE_WEATHER = process.env['JOURNAL_DISABLE_WEATHER'] === '1'
+const imageThumbnailCacheDirectoryName = 'image-thumbnail-cache'
+const defaultImageThumbnailSize = 512
+const maxImageThumbnailSize = 1024
 const execFileAsync = promisify(execFile)
 
 if (JOURNAL_USER_DATA_DIR) {
@@ -461,6 +465,12 @@ function registerJournalMediaProtocol() {
       return new Response('Not found', { status: 404 })
     }
 
+    const thumbnailResponse = await createThumbnailResponse(request.url, filePath).catch(() => null)
+
+    if (thumbnailResponse) {
+      return thumbnailResponse
+    }
+
     if (isHeicImagePath(filePath)) {
       const displayableImage = await createDisplayableHeicResponse(filePath)
 
@@ -471,6 +481,48 @@ function registerJournalMediaProtocol() {
 
     return net.fetch(pathToFileURL(filePath).toString())
   })
+}
+
+async function createThumbnailResponse(requestUrl: string, filePath: string) {
+  const url = new URL(requestUrl)
+
+  if (url.searchParams.get('variant') !== 'thumbnail') {
+    return null
+  }
+
+  const size = normalizeThumbnailSize(url.searchParams.get('size'))
+  const fileStat = await stat(filePath)
+  const cacheDirectory = path.join(app.getPath('userData'), imageThumbnailCacheDirectoryName)
+  const cacheKey = hashText(`${filePath}:${fileStat.size}:${fileStat.mtimeMs}:${size}`)
+  const cacheFilePath = path.join(cacheDirectory, `${cacheKey}.webp`)
+  const cachedImage = await readFile(cacheFilePath).catch((error: unknown) => {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  })
+
+  if (cachedImage) {
+    return createWebpResponse(cachedImage)
+  }
+
+  await mkdir(cacheDirectory, { recursive: true })
+  await sharp(filePath)
+    .rotate()
+    .resize({
+      fit: 'inside',
+      height: size,
+      width: size,
+      withoutEnlargement: true,
+    })
+    .webp({
+      effort: 3,
+      quality: 74,
+    })
+    .toFile(cacheFilePath)
+
+  return createWebpResponse(await readFile(cacheFilePath))
 }
 
 async function createDisplayableHeicResponse(filePath: string) {
@@ -539,6 +591,25 @@ function createJpegResponse(jpegBuffer: Buffer) {
       'Content-Type': 'image/jpeg',
     },
   })
+}
+
+function createWebpResponse(webpBuffer: Buffer) {
+  return new Response(new Uint8Array(webpBuffer), {
+    headers: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Type': 'image/webp',
+    },
+  })
+}
+
+function normalizeThumbnailSize(value: string | null) {
+  const parsedSize = value ? Number(value) : defaultImageThumbnailSize
+
+  if (!Number.isFinite(parsedSize)) {
+    return defaultImageThumbnailSize
+  }
+
+  return Math.min(Math.max(Math.round(parsedSize), 64), maxImageThumbnailSize)
 }
 
 function resolveJournalMediaRequestPath(requestUrl: string) {

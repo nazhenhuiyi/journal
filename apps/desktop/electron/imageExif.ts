@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { ImageLocation } from '@journal/core'
+import sharp from 'sharp'
+import {
+  hasUsableImageLocationCoordinates,
+  type ImageLocation,
+} from '@journal/core'
 
 const jpegStartOfImage = 0xffd8
 const jpegStartOfScan = 0xda
@@ -31,16 +35,23 @@ type IfdEntry = {
 export async function readImageExifLocation(filePath: string): Promise<ImageLocation | undefined> {
   const extension = path.extname(filePath).toLowerCase()
 
-  if (!['.jpg', '.jpeg', '.tif', '.tiff'].includes(extension)) {
-    return undefined
+  if (['.jpg', '.jpeg', '.tif', '.tiff'].includes(extension)) {
+    const buffer = await readFile(filePath)
+    const location = parseExifLocationFromBuffer(buffer)
+
+    if (location) {
+      return location
+    }
   }
 
-  const buffer = await readFile(filePath)
-
-  return parseExifLocationFromBuffer(buffer)
+  return readSharpExifLocation(filePath)
 }
 
 export function parseExifLocationFromBuffer(buffer: Buffer): ImageLocation | undefined {
+  if (buffer.subarray(0, exifHeader.length).equals(exifHeader)) {
+    return parseTiffLocation(buffer, exifHeader.length, buffer.length)
+  }
+
   const tiffRange = findExifTiffRange(buffer)
 
   if (!tiffRange) {
@@ -127,11 +138,24 @@ function parseTiffLocation(buffer: Buffer, tiffStart: number, tiffEnd: number): 
     return undefined
   }
 
-  return {
+  const location = {
     latitude: roundCoordinate(latitude),
     longitude: roundCoordinate(longitude),
-    source: 'exif',
+    source: 'exif' as const,
   }
+
+  return hasUsableImageLocationCoordinates(location) ? location : undefined
+}
+
+async function readSharpExifLocation(filePath: string): Promise<ImageLocation | undefined> {
+  const metadata = await sharp(filePath).metadata()
+  const exifBuffer = metadata.exif
+
+  if (!exifBuffer) {
+    return undefined
+  }
+
+  return parseExifLocationFromBuffer(exifBuffer)
 }
 
 function createTiffReader(buffer: Buffer, tiffStart: number): TiffReader | null {

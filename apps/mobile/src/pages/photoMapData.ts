@@ -1,5 +1,10 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
-import type { ImageBlock, ImageLocation, MurmurBlock } from '@journal/core'
+import {
+  hasUsableImageLocationCoordinates,
+  type ImageBlock,
+  type ImageLocation,
+  type MurmurBlock,
+} from '@journal/core'
 
 export type PhotoMapRange = '7d' | '14d' | '30d' | 'all'
 
@@ -251,43 +256,15 @@ export function createImagePointFeatureCollection(
 }
 
 export function getPhotoMapInitialCamera(entries: readonly PhotoMapEntry[]): PhotoMapInitialCamera {
-  const coordinates = getMappablePhotoMapEntries(entries)
-    .map((entry) => getPhotoMapEntryMapCoordinates(entry))
-    .filter((coordinate): coordinate is [number, number] => coordinate !== null)
+  const coordinates = getInitialPhotoMapCameraCoordinates(entries)
 
-  if (coordinates.length === 0) {
+  if (!coordinates) {
     return defaultCamera
   }
 
-  if (coordinates.length === 1) {
-    return {
-      center: coordinates[0],
-      zoom: 12,
-    }
-  }
-
-  const longitudes = coordinates.map(([longitude]) => longitude)
-  const latitudes = coordinates.map(([, latitude]) => latitude)
-  const west = Math.min(...longitudes)
-  const east = Math.max(...longitudes)
-  const south = Math.min(...latitudes)
-  const north = Math.max(...latitudes)
-
-  if (west === east && south === north) {
-    return {
-      center: coordinates[0],
-      zoom: 12,
-    }
-  }
-
   return {
-    bounds: [west, south, east, north],
-    padding: {
-      bottom: 230,
-      left: 56,
-      right: 56,
-      top: 132,
-    },
+    center: coordinates,
+    zoom: 12,
   }
 }
 
@@ -302,7 +279,7 @@ export function getPhotoMapEntryMapCoordinates(entry: PhotoMapEntry) {
 export function getPhotoMapEntryCameraCoordinates(entry: PhotoMapEntry) {
   return entry.kind === 'image'
     ? entry.coordinates ?? entry.murmurCoordinates
-    : entry.coordinates
+    : entry.coordinates ?? entry.imageEntries.find((imageEntry) => imageEntry.coordinates)?.coordinates ?? null
 }
 
 export function formatCompactDate(dateKey: string) {
@@ -357,16 +334,26 @@ export function getPhotoMapEntryExcerpt(entry: PhotoMapEntry) {
 }
 
 function getLocationCoordinates(location: ImageLocation | undefined): [number, number] | null {
-  if (
-    typeof location?.latitude !== 'number' ||
-    !Number.isFinite(location.latitude) ||
-    typeof location.longitude !== 'number' ||
-    !Number.isFinite(location.longitude)
-  ) {
+  if (!hasUsableImageLocationCoordinates(location)) {
     return null
   }
 
   return [location.longitude, location.latitude]
+}
+
+function getInitialPhotoMapCameraCoordinates(entries: readonly PhotoMapEntry[]) {
+  const firstMurmurCoordinates = entries
+    .filter((entry): entry is PhotoMapMurmurEntry => entry.kind === 'murmur')
+    .map((entry) => getPhotoMapEntryCameraCoordinates(entry))
+    .find((coordinates): coordinates is [number, number] => coordinates !== null)
+
+  if (firstMurmurCoordinates) {
+    return firstMurmurCoordinates
+  }
+
+  return entries
+    .map((entry) => getPhotoMapEntryCameraCoordinates(entry))
+    .find((coordinates): coordinates is [number, number] => coordinates !== null) ?? null
 }
 
 function comparePhotoMapEntriesByNewest(left: PhotoMapEntry, right: PhotoMapEntry) {
