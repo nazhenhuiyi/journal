@@ -12,6 +12,7 @@ const config = getDefaultConfig(projectRoot)
 const nativeWindInput = path.resolve(projectRoot, 'global.css')
 const nativeWindTailwindConfig = path.resolve(projectRoot, 'tailwind.config.js')
 const e2eHmrShimPath = path.resolve(projectRoot, 'src/shims/expoHmrE2e.ts')
+const emptyNodeModuleShimPath = path.resolve(projectRoot, 'src/shims/emptyNodeModule.js')
 const expoPackageRoot = resolvePackageRoot('expo')
 const expoSetupHmrPath = path.resolve(expoPackageRoot, 'src/async-require/setupHMR.ts')
 const expoNativeHmrPath = path.resolve(expoPackageRoot, 'src/async-require/hmr.native.ts')
@@ -20,6 +21,7 @@ const isMobileE2e = Boolean(
   process.env.EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID,
 )
 const packageEntries = {}
+const emptyNodeModuleNames = new Set(['fs', 'http', 'https'])
 const webidlConversionsEntry = resolveOptionalModule('webidl-conversions/lib/index.js')
 
 if (webidlConversionsEntry) {
@@ -69,6 +71,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
 
   const packageEntry = packageEntries[moduleName]
+
+  if (emptyNodeModuleNames.has(moduleName)) {
+    return {
+      type: 'sourceFile',
+      filePath: emptyNodeModuleShimPath,
+    }
+  }
 
   if (packageEntry) {
     return {
