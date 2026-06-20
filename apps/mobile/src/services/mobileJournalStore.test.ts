@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createMurmur,
@@ -16,7 +17,11 @@ const mockFileSystem = vi.hoisted(() => ({
   copyAsync: vi.fn(),
   directories: new Set<string>(),
   documentDirectory: 'file:///app/',
-  files: new Map<string, string>(),
+  EncodingType: {
+    Base64: 'base64',
+    UTF8: 'utf8',
+  },
+  files: new Map<string, string | Uint8Array>(),
   getInfoAsync: vi.fn(),
   makeDirectoryAsync: vi.fn(),
   readAsStringAsync: vi.fn(),
@@ -80,14 +85,29 @@ describe('mobileJournalStore', () => {
     mockFileSystem.makeDirectoryAsync.mockImplementation(async (path: string) => {
       mockFileSystem.directories.add(normalizeDirectoryPath(path))
     })
-    mockFileSystem.readAsStringAsync.mockImplementation(async (path: string) => {
+    mockFileSystem.readAsStringAsync.mockImplementation(async (
+      path: string,
+      options?: { encoding?: string; length?: number; position?: number },
+    ) => {
       const content = mockFileSystem.files.get(path)
 
       if (content === undefined) {
         throw new Error(`Missing test file: ${path}`)
       }
 
-      return content
+      if (options?.encoding === mockFileSystem.EncodingType.Base64) {
+        const buffer = typeof content === 'string'
+          ? Buffer.from(content, 'utf8')
+          : Buffer.from(content)
+        const position = options.position ?? 0
+        const end = options.length === undefined ? undefined : position + options.length
+
+        return Buffer.from(buffer.subarray(position, end)).toString('base64')
+      }
+
+      return typeof content === 'string'
+        ? content
+        : Buffer.from(content).toString('utf8')
     })
     mockFileSystem.readDirectoryAsync.mockImplementation(async (path: string) => {
       const directoryPath = normalizeDirectoryPath(path)
@@ -174,7 +194,9 @@ describe('mobileJournalStore', () => {
     })
 
     expect(savedRecord.longEntryMarkdown).toBe('第一段。')
-    expect(mockFileSystem.files.get(entryPath)?.endsWith('第一段。')).toBe(true)
+    const normalizedMarkdown = mockFileSystem.files.get(entryPath)
+
+    expect(typeof normalizedMarkdown === 'string' && normalizedMarkdown.endsWith('第一段。')).toBe(true)
   })
 
   it('reports the mobile journal file URI for diagnostics', () => {
@@ -253,6 +275,50 @@ describe('mobileJournalStore', () => {
     )
     expect(mockFileSystem.files.get('file:///app/journal-worktree/media/2026/06/img_20260608_213800.webp'))
       .toBe('webp:image-bytes')
+  })
+
+  it('reads GPS from the source JPEG when ImagePicker omits EXIF location fields', async () => {
+    mockFileSystem.files.set('file:///picker/source.jpg', createGpsExifJpeg())
+
+    const importedImages = await importMobileJournalImagesForDate(
+      '2026-06-08',
+      [
+        {
+          assetId: null,
+          exif: {},
+          fileName: 'source.JPG',
+          height: 3024,
+          mimeType: 'image/jpeg',
+          type: 'image',
+          uri: 'file:///picker/source.jpg',
+          width: 4032,
+        },
+      ],
+      new Date(2026, 5, 8, 21, 38, 0),
+    )
+
+    expect(importedImages[0].location).toEqual({
+      latitude: 39.992,
+      longitude: 116.277,
+      source: 'exif',
+    })
+    expect(mockFileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///picker/source.jpg', {
+      encoding: 'base64',
+      length: 524288,
+      position: 0,
+    })
+    expect(mockMediaLibrary.getAssetInfoAsync).not.toHaveBeenCalled()
+    expect(mockDiagnosticLog.info).toHaveBeenCalledWith(
+      'journal.imageImport',
+      'Imported image location metadata resolved',
+      expect.objectContaining({
+        assetIdStatus: 'missing',
+        imagePickerExifStatus: 'no-gps-keys',
+        result: 'source-file-exif',
+        sourceFileExifStatus: 'usable',
+      }),
+    )
+    expect(JSON.stringify(mockDiagnosticLog.info.mock.calls)).not.toContain('GPSLatitude')
   })
 
   it('recovers Android gallery GPS from MediaLibrary when ImagePicker returns zero-zero', async () => {
@@ -838,6 +904,101 @@ function addDirectory(path: string) {
 
 function normalizeDirectoryPath(path: string) {
   return path.endsWith('/') ? path : `${path}/`
+}
+
+type GpsExifOptions = {
+  latitude?: [number, number][]
+  latitudeRef?: string
+  longitude?: [number, number][]
+  longitudeRef?: string
+}
+
+function createGpsExifJpeg(options: GpsExifOptions = {}) {
+  const tiff = createGpsTiff(options)
+  const exif = Buffer.concat([Buffer.from('Exif\0\0', 'binary'), tiff])
+  const segmentLength = Buffer.alloc(2)
+
+  segmentLength.writeUInt16BE(exif.length + 2, 0)
+
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
+    segmentLength,
+    exif,
+    Buffer.from([0xff, 0xd9]),
+  ])
+}
+
+function createGpsTiff({
+  latitude = [
+    [39, 1],
+    [59, 1],
+    [312, 10],
+  ],
+  latitudeRef = 'N',
+  longitude = [
+    [116, 1],
+    [16, 1],
+    [372, 10],
+  ],
+  longitudeRef = 'E',
+}: GpsExifOptions = {}) {
+  const headerLength = 8
+  const ifd0Offset = headerLength
+  const ifd0Length = 2 + 12 + 4
+  const gpsIfdOffset = ifd0Offset + ifd0Length
+  const gpsEntryCount = 4
+  const gpsIfdLength = 2 + gpsEntryCount * 12 + 4
+  const latitudeOffset = gpsIfdOffset + gpsIfdLength
+  const longitudeOffset = latitudeOffset + 24
+  const buffer = Buffer.alloc(longitudeOffset + 24)
+
+  buffer.write('II', 0, 2, 'ascii')
+  buffer.writeUInt16LE(42, 2)
+  buffer.writeUInt32LE(ifd0Offset, 4)
+  buffer.writeUInt16LE(1, ifd0Offset)
+  writeIfdEntry(buffer, ifd0Offset + 2, 0x8825, 4, 1, gpsIfdOffset)
+  buffer.writeUInt32LE(0, ifd0Offset + 14)
+
+  buffer.writeUInt16LE(gpsEntryCount, gpsIfdOffset)
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 2, 0x0001, latitudeRef)
+  writeIfdEntry(buffer, gpsIfdOffset + 14, 0x0002, 5, 3, latitudeOffset)
+  writeAsciiIfdEntry(buffer, gpsIfdOffset + 26, 0x0003, longitudeRef)
+  writeIfdEntry(buffer, gpsIfdOffset + 38, 0x0004, 5, 3, longitudeOffset)
+  buffer.writeUInt32LE(0, gpsIfdOffset + 50)
+
+  writeRationalTriplet(buffer, latitudeOffset, latitude)
+  writeRationalTriplet(buffer, longitudeOffset, longitude)
+
+  return buffer
+}
+
+function writeIfdEntry(
+  buffer: Buffer,
+  offset: number,
+  tag: number,
+  fieldType: number,
+  count: number,
+  value: number,
+) {
+  buffer.writeUInt16LE(tag, offset)
+  buffer.writeUInt16LE(fieldType, offset + 2)
+  buffer.writeUInt32LE(count, offset + 4)
+  buffer.writeUInt32LE(value, offset + 8)
+}
+
+function writeAsciiIfdEntry(buffer: Buffer, offset: number, tag: number, value: string) {
+  buffer.writeUInt16LE(tag, offset)
+  buffer.writeUInt16LE(2, offset + 2)
+  buffer.writeUInt32LE(2, offset + 4)
+  buffer.write(value, offset + 8, 1, 'ascii')
+  buffer.writeUInt8(0, offset + 9)
+}
+
+function writeRationalTriplet(buffer: Buffer, offset: number, values: [number, number][]) {
+  values.forEach(([numerator, denominator], index) => {
+    buffer.writeUInt32LE(numerator, offset + index * 8)
+    buffer.writeUInt32LE(denominator, offset + index * 8 + 4)
+  })
 }
 
 function getDirectChildName(parentPath: string, childPath: string) {
