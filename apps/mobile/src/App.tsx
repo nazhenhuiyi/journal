@@ -506,6 +506,8 @@ function JournalApp() {
         : await ImagePicker.launchImageLibraryAsync({
             allowsMultipleSelection: true,
             exif: true,
+            // Android Photo Picker can redact GPS EXIF on some OEM builds.
+            legacy: Platform.OS === 'android',
             mediaTypes: ['images'],
             preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
             quality: 1,
