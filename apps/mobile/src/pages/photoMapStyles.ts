@@ -170,6 +170,9 @@ export const photoMapStyles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
+  photoMapShellContent: {
+    paddingHorizontal: 0,
+  },
   mapImageMarker: {
     alignItems: 'center',
     height: 40,

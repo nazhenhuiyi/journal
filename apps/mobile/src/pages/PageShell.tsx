@@ -1,18 +1,19 @@
 import { type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { semanticColors, spacingPixels } from '@journal/theme'
 import { Screen } from '../ui/Screen'
 
 type PageShellProps = {
   children: ReactNode
+  contentStyle?: StyleProp<ViewStyle>
   onBack: () => void
   headerRight?: ReactNode
   testID?: string
   title: string
 }
 
-export function PageShell({ children, headerRight, onBack, testID, title }: PageShellProps) {
+export function PageShell({ children, contentStyle, headerRight, onBack, testID, title }: PageShellProps) {
   return (
     <Screen>
       <View className="flex-1 pb-5 pt-4">
@@ -38,7 +39,7 @@ export function PageShell({ children, headerRight, onBack, testID, title }: Page
             {headerRight}
           </View>
         </View>
-        <View style={styles.content} testID={testID}>
+        <View style={[styles.content, contentStyle]} testID={testID}>
           {children}
         </View>
       </View>

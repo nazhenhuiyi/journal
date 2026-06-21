@@ -265,6 +265,7 @@ export function PhotoMapPage({
 
   return (
     <PageShell
+      contentStyle={styles.photoMapShellContent}
       headerRight={(
         <PhotoMapRangeButton
           isOpen={isRangeMenuOpen}
