@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { spacingPixels } from '@journal/theme'
 
-const closeHitAreaHeight = 220
 const previewHeaderTopPadding = spacingPixels['12'] + spacingPixels['4']
 
 export type ImagePreviewModalItem = {
@@ -78,24 +77,25 @@ export function ImagePreviewModal({
       visible={items.length > 0}
     >
       <SafeAreaView style={styles.container}>
-        <Pressable
-          accessibilityLabel="关闭图片预览"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.header,
-            { opacity: pressed ? 0.72 : 1 },
-          ]}
-        >
+        <View style={styles.header}>
           {items.length > 1 ? (
             <Text style={styles.counter}>{activeIndex + 1} / {items.length}</Text>
           ) : (
             <View style={styles.counterPlaceholder} />
           )}
-          <View style={styles.closeButton}>
+          <Pressable
+            accessibilityLabel="关闭图片预览"
+            accessibilityRole="button"
+            hitSlop={16}
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.closeButton,
+              pressed ? styles.closeButtonPressed : null,
+            ]}
+          >
             <Ionicons color="#fff" name="close" size={24} />
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
         <FlatList
           data={items}
           getItemLayout={(_, index) => ({
@@ -136,12 +136,6 @@ export function ImagePreviewModal({
             {captionText || ' '}
           </Text>
         </View>
-        <Pressable
-          accessibilityLabel="关闭图片预览"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={styles.closeHitArea}
-        />
       </SafeAreaView>
     </Modal>
   )
@@ -170,13 +164,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 56,
   },
-  closeHitArea: {
-    height: closeHitAreaHeight,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 30,
+  closeButtonPressed: {
+    opacity: 0.72,
   },
   container: {
     backgroundColor: '#050505',

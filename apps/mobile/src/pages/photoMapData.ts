@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
+import type { Feature, FeatureCollection, LineString } from 'geojson'
 import {
   hasUsableImageLocationCoordinates,
   type ImageBlock,
@@ -13,57 +13,69 @@ export type PhotoMapSourceDay = {
   murmurs: readonly MurmurBlock[]
 }
 
-export type PhotoMapMurmurEntry = {
+export type PhotoMapMurmurSlice = {
   body: string
   coordinates: [longitude: number, latitude: number] | null
   date: string
   id: string
-  imageEntries: PhotoMapImageEntry[]
-  images: readonly ImageBlock[]
   kind: 'murmur'
-  location?: ImageLocation
   murmur: MurmurBlock
   murmurId: string
   time: string
 }
 
-export type PhotoMapImageEntry = {
+export type PhotoMapImageCoordinateSource = 'image' | 'murmur'
+
+export type PhotoMapImageObservation = {
   body: string
-  coordinates: [longitude: number, latitude: number] | null
+  coordinateSource: PhotoMapImageCoordinateSource
+  coordinates: [longitude: number, latitude: number]
   date: string
   id: string
   image: ImageBlock
-  kind: 'image'
-  location?: ImageLocation
-  murmurCoordinates: [longitude: number, latitude: number] | null
+  kind: 'image-observation'
+  murmur: MurmurBlock
   murmurId: string
-  murmurLocation?: ImageLocation
   time: string
 }
 
-export type PhotoMapEntry = PhotoMapMurmurEntry | PhotoMapImageEntry
-
-export type PhotoMapMurmurPointProperties = {
+export type PhotoMapTextObservation = {
+  body: string
+  coordinates: [longitude: number, latitude: number]
   date: string
-  entryId: string
-  imageCount: number
-  kind: 'murmur'
+  id: string
+  kind: 'text-observation'
+  murmur: MurmurBlock
   murmurId: string
-  title: string
   time: string
 }
 
-export type PhotoMapImagePointProperties = {
-  date: string
-  entryId: string
-  imageId: string
-  kind: 'image'
-  murmurId: string
-  title: string
-  time: string
+export type PhotoMapImageCluster = {
+  coordinates: [longitude: number, latitude: number]
+  id: string
+  items: PhotoMapImageObservation[]
+  kind: 'image-cluster'
+  representativeItem: PhotoMapImageObservation
 }
 
-export type PhotoMapPointProperties = PhotoMapMurmurPointProperties | PhotoMapImagePointProperties
+export type PhotoMapTextCluster = {
+  coordinates: [longitude: number, latitude: number]
+  id: string
+  items: PhotoMapTextObservation[]
+  kind: 'text-cluster'
+  representativeItem: PhotoMapTextObservation
+}
+
+type PhotoMapMutableObservationCluster<
+  Observation extends PhotoMapImageObservation | PhotoMapTextObservation,
+  ClusterKind extends PhotoMapImageCluster['kind'] | PhotoMapTextCluster['kind'],
+> = {
+  coordinates: [longitude: number, latitude: number]
+  id: string
+  items: Observation[]
+  kind: ClusterKind
+  representativeItem: Observation
+}
 
 export type PhotoMapMurmurRouteProperties = {
   kind: 'murmur-route'
@@ -90,116 +102,69 @@ const defaultCamera: PhotoMapInitialCamera = {
   center: [104.1954, 35.8617],
   zoom: 3,
 }
+export const defaultPhotoMapNearbyGroupRadiusMeters = 150
 const rangeDays: Record<Exclude<PhotoMapRange, 'all'>, number> = {
   '14d': 14,
   '30d': 30,
   '7d': 7,
 }
 
-export function createPhotoMapEntries(
+export function createPhotoMapMurmurSlices(
   records: readonly PhotoMapSourceDay[],
   currentDay: PhotoMapSourceDay,
   range: PhotoMapRange = defaultPhotoMapRange,
-): PhotoMapEntry[] {
+): PhotoMapMurmurSlice[] {
   const mergedRecords = [
     currentDay,
     ...records.filter((record) => record.date !== currentDay.date),
   ]
-  const entries: PhotoMapEntry[] = []
+  const murmurSlices: PhotoMapMurmurSlice[] = []
 
   for (const record of mergedRecords) {
     for (const murmur of record.murmurs) {
       const murmurCoordinates = getLocationCoordinates(murmur.location)
-      const imageEntries = murmur.images.map((image) => ({
-        body: murmur.body,
-        coordinates: getLocationCoordinates(image.location),
-        date: record.date,
-        id: `${record.date}:${murmur.id}:${image.id}`,
-        image,
-        kind: 'image' as const,
-        location: image.location,
-        murmurCoordinates,
-        murmurId: murmur.id,
-        murmurLocation: murmur.location,
-        time: murmur.time,
-      }))
-      const murmurEntry: PhotoMapMurmurEntry = {
+      const murmurSlice: PhotoMapMurmurSlice = {
         body: murmur.body,
         coordinates: murmurCoordinates,
         date: record.date,
         id: `${record.date}:${murmur.id}`,
-        imageEntries,
-        images: murmur.images,
         kind: 'murmur',
-        location: murmur.location,
         murmur,
         murmurId: murmur.id,
         time: murmur.time,
       }
 
-      entries.push(murmurEntry, ...imageEntries)
+      murmurSlices.push(murmurSlice)
     }
   }
 
-  return filterPhotoMapEntriesByRange(entries, range, currentDay.date)
+  return filterPhotoMapMurmurSlicesByRange(murmurSlices, range, currentDay.date)
 }
 
-export function filterPhotoMapEntriesByRange(
-  entries: readonly PhotoMapEntry[],
+export function filterPhotoMapMurmurSlicesByRange(
+  murmurSlices: readonly PhotoMapMurmurSlice[],
   range: PhotoMapRange,
   today: string,
 ) {
-  const sortedEntries = [...entries].sort(comparePhotoMapEntriesByNewest)
+  const sortedSlices = [...murmurSlices].sort(comparePhotoMapMurmurSlicesByNewest)
 
   if (range === 'all') {
-    return sortedEntries
+    return sortedSlices
   }
 
   const startDate = addDateKeyDays(today, -(rangeDays[range] - 1))
 
-  return sortedEntries.filter((entry) => {
-    return entry.date >= startDate && entry.date <= today
+  return sortedSlices.filter((murmurSlice) => {
+    return murmurSlice.date >= startDate && murmurSlice.date <= today
   })
 }
 
-export function createMurmurPointFeatureCollection(
-  entries: readonly PhotoMapEntry[],
-): FeatureCollection<Point, PhotoMapMurmurPointProperties> {
-  return {
-    features: entries.flatMap((entry) => {
-      if (entry.kind !== 'murmur' || !entry.coordinates) {
-        return []
-      }
-
-      return [{
-        geometry: {
-          coordinates: entry.coordinates,
-          type: 'Point',
-        },
-        id: entry.id,
-        properties: {
-          date: entry.date,
-          entryId: entry.id,
-          imageCount: entry.images.length,
-          kind: 'murmur',
-          murmurId: entry.murmurId,
-          time: entry.time,
-          title: getPhotoMapEntryTitle(entry),
-        },
-        type: 'Feature',
-      } satisfies Feature<Point, PhotoMapMurmurPointProperties>]
-    }),
-    type: 'FeatureCollection',
-  }
-}
-
 export function createMurmurRouteFeatureCollection(
-  entries: readonly PhotoMapEntry[],
+  murmurSlices: readonly PhotoMapMurmurSlice[],
 ): FeatureCollection<LineString, PhotoMapMurmurRouteProperties> {
-  const coordinates = entries
-    .filter((entry): entry is PhotoMapMurmurEntry => entry.kind === 'murmur')
-    .sort(comparePhotoMapEntriesByOldest)
-    .flatMap((entry) => entry.coordinates ? [entry.coordinates] : [])
+  const coordinates = [...murmurSlices]
+    .sort(comparePhotoMapMurmurSlicesByOldest)
+    .flatMap((murmurSlice) => murmurSlice.coordinates ? [murmurSlice.coordinates] : [])
 
   if (coordinates.length < 2) {
     return {
@@ -224,39 +189,84 @@ export function createMurmurRouteFeatureCollection(
   }
 }
 
-export function createImagePointFeatureCollection(
-  entries: readonly PhotoMapEntry[],
-): FeatureCollection<Point, PhotoMapImagePointProperties> {
-  return {
-    features: entries.flatMap((entry) => {
-      if (entry.kind !== 'image' || !entry.coordinates) {
+export function createPhotoMapImageObservations(
+  murmurSlices: readonly PhotoMapMurmurSlice[],
+): PhotoMapImageObservation[] {
+  return murmurSlices.flatMap((murmurSlice) => {
+    return murmurSlice.murmur.images.flatMap((image) => {
+      const imageCoordinates = getLocationCoordinates(image.location)
+      const coordinates = imageCoordinates ?? murmurSlice.coordinates
+
+      if (!coordinates) {
         return []
       }
 
       return [{
-        geometry: {
-          coordinates: entry.coordinates,
-          type: 'Point',
-        },
-        id: entry.id,
-        properties: {
-          date: entry.date,
-          entryId: entry.id,
-          imageId: entry.image.id,
-          kind: 'image',
-          murmurId: entry.murmurId,
-          time: entry.time,
-          title: getPhotoMapEntryTitle(entry),
-        },
-        type: 'Feature',
-      } satisfies Feature<Point, PhotoMapImagePointProperties>]
-    }),
-    type: 'FeatureCollection',
-  }
+        body: murmurSlice.body,
+        coordinateSource: imageCoordinates ? 'image' : 'murmur',
+        coordinates,
+        date: murmurSlice.date,
+        id: `${murmurSlice.date}:${murmurSlice.murmurId}:${image.id}`,
+        image,
+        kind: 'image-observation' as const,
+        murmur: murmurSlice.murmur,
+        murmurId: murmurSlice.murmurId,
+        time: murmurSlice.time,
+      }]
+    })
+  })
 }
 
-export function getPhotoMapInitialCamera(entries: readonly PhotoMapEntry[]): PhotoMapInitialCamera {
-  const coordinates = getInitialPhotoMapCameraCoordinates(entries)
+export function createPhotoMapTextObservations(
+  murmurSlices: readonly PhotoMapMurmurSlice[],
+): PhotoMapTextObservation[] {
+  return murmurSlices.flatMap((murmurSlice) => {
+    const body = murmurSlice.body.trim()
+    const coordinates = murmurSlice.coordinates
+
+    if (!body || !coordinates) {
+      return []
+    }
+
+    return [{
+      body,
+      coordinates,
+      date: murmurSlice.date,
+      id: murmurSlice.id,
+      kind: 'text-observation' as const,
+      murmur: murmurSlice.murmur,
+      murmurId: murmurSlice.murmurId,
+      time: murmurSlice.time,
+    }]
+  })
+}
+
+export function createPhotoMapImageClusters(
+  observations: readonly PhotoMapImageObservation[],
+  radiusMeters = defaultPhotoMapNearbyGroupRadiusMeters,
+): PhotoMapImageCluster[] {
+  return createPhotoMapObservationClusters(
+    observations,
+    radiusMeters,
+    'image-cluster',
+    getPhotoMapImageClusterId,
+  )
+}
+
+export function createPhotoMapTextClusters(
+  observations: readonly PhotoMapTextObservation[],
+  radiusMeters = defaultPhotoMapNearbyGroupRadiusMeters,
+): PhotoMapTextCluster[] {
+  return createPhotoMapObservationClusters(
+    observations,
+    radiusMeters,
+    'text-cluster',
+    getPhotoMapTextClusterId,
+  )
+}
+
+export function getPhotoMapInitialCamera(murmurSlices: readonly PhotoMapMurmurSlice[]): PhotoMapInitialCamera {
+  const coordinates = getInitialPhotoMapCameraCoordinates(murmurSlices)
 
   if (!coordinates) {
     return defaultCamera
@@ -266,20 +276,6 @@ export function getPhotoMapInitialCamera(entries: readonly PhotoMapEntry[]): Pho
     center: coordinates,
     zoom: 12,
   }
-}
-
-export function getMappablePhotoMapEntries(entries: readonly PhotoMapEntry[]) {
-  return entries.filter((entry) => getPhotoMapEntryMapCoordinates(entry))
-}
-
-export function getPhotoMapEntryMapCoordinates(entry: PhotoMapEntry) {
-  return entry.coordinates
-}
-
-export function getPhotoMapEntryCameraCoordinates(entry: PhotoMapEntry) {
-  return entry.kind === 'image'
-    ? entry.coordinates ?? entry.murmurCoordinates
-    : entry.coordinates ?? entry.imageEntries.find((imageEntry) => imageEntry.coordinates)?.coordinates ?? null
 }
 
 export function formatCompactDate(dateKey: string) {
@@ -292,47 +288,6 @@ export function formatCompactDate(dateKey: string) {
   return `${Number(month)}月${Number(day)}日`
 }
 
-export function formatCoordinateLabel(location: ImageLocation | undefined) {
-  const coordinates = getLocationCoordinates(location)
-
-  if (!coordinates) {
-    return '未定位'
-  }
-
-  const [longitude, latitude] = coordinates
-
-  return [
-    formatCoordinate(latitude, 'N', 'S'),
-    formatCoordinate(longitude, 'E', 'W'),
-  ].join(' · ')
-}
-
-export function getPhotoMapEntryCoordinateLabel(entry: PhotoMapEntry) {
-  if (entry.kind === 'image' && !entry.location && entry.murmurLocation) {
-    return `跟随碎碎念 · ${formatCoordinateLabel(entry.murmurLocation)}`
-  }
-
-  return formatCoordinateLabel(entry.location)
-}
-
-export function getPhotoMapEntryTitle(entry: PhotoMapEntry) {
-  if (entry.kind === 'image') {
-    return entry.image.caption?.trim() || entry.body.trim() || formatCompactDate(entry.date)
-  }
-
-  return entry.body.trim() || (entry.images.length > 0 ? `${entry.images.length} 张照片` : formatCompactDate(entry.date))
-}
-
-export function getPhotoMapEntryExcerpt(entry: PhotoMapEntry) {
-  const text = entry.body.trim()
-
-  if (!text) {
-    return ''
-  }
-
-  return text.length > 76 ? `${text.slice(0, 76).trimEnd()}...` : text
-}
-
 function getLocationCoordinates(location: ImageLocation | undefined): [number, number] | null {
   if (!hasUsableImageLocationCoordinates(location)) {
     return null
@@ -341,47 +296,138 @@ function getLocationCoordinates(location: ImageLocation | undefined): [number, n
   return [location.longitude, location.latitude]
 }
 
-function getInitialPhotoMapCameraCoordinates(entries: readonly PhotoMapEntry[]) {
-  const firstMurmurCoordinates = entries
-    .filter((entry): entry is PhotoMapMurmurEntry => entry.kind === 'murmur')
-    .map((entry) => getPhotoMapEntryCameraCoordinates(entry))
+function createPhotoMapObservationClusters<
+  Observation extends PhotoMapImageObservation | PhotoMapTextObservation,
+  ClusterKind extends PhotoMapImageCluster['kind'] | PhotoMapTextCluster['kind'],
+>(
+  observations: readonly Observation[],
+  radiusMeters: number,
+  kind: ClusterKind,
+  getClusterId: (items: readonly Observation[]) => string,
+): Array<ClusterKind extends 'image-cluster' ? PhotoMapImageCluster : PhotoMapTextCluster> {
+  const clusters: Array<PhotoMapMutableObservationCluster<Observation, ClusterKind>> = []
+
+  for (const observation of observations) {
+    const nearbyClusters = clusters.filter((cluster) => (
+      isPhotoMapObservationNearCluster(observation, cluster, radiusMeters)
+    ))
+
+    if (nearbyClusters.length === 0) {
+      clusters.push({
+        coordinates: observation.coordinates,
+        id: getClusterId([observation]),
+        items: [observation],
+        kind,
+        representativeItem: observation,
+      })
+      continue
+    }
+
+    const [nearbyCluster, ...clustersToMerge] = nearbyClusters
+    const mergedClusterSet = new Set(clustersToMerge)
+
+    nearbyCluster.items = [
+      ...nearbyCluster.items,
+      ...clustersToMerge.flatMap((cluster) => cluster.items),
+      observation,
+    ]
+    nearbyCluster.coordinates = getAverageCoordinates(nearbyCluster.items)
+    nearbyCluster.id = getClusterId(nearbyCluster.items)
+
+    if (mergedClusterSet.size > 0) {
+      for (let index = clusters.length - 1; index >= 0; index -= 1) {
+        if (mergedClusterSet.has(clusters[index])) {
+          clusters.splice(index, 1)
+        }
+      }
+    }
+  }
+
+  return clusters as unknown as Array<ClusterKind extends 'image-cluster' ? PhotoMapImageCluster : PhotoMapTextCluster>
+}
+
+function isPhotoMapObservationNearCluster<
+  Observation extends PhotoMapImageObservation | PhotoMapTextObservation,
+  ClusterKind extends PhotoMapImageCluster['kind'] | PhotoMapTextCluster['kind'],
+>(
+  observation: Observation,
+  cluster: PhotoMapMutableObservationCluster<Observation, ClusterKind>,
+  radiusMeters: number,
+) {
+  return cluster.items.some((item) => (
+    getDistanceMeters(item.coordinates, observation.coordinates) <= radiusMeters
+  ))
+}
+
+function getPhotoMapImageClusterId(items: readonly PhotoMapImageObservation[]) {
+  return `image-cluster:${items.map((item) => item.id).join('|')}`
+}
+
+function getPhotoMapTextClusterId(items: readonly PhotoMapTextObservation[]) {
+  return `text-cluster:${items.map((item) => item.id).join('|')}`
+}
+
+function getAverageCoordinates(
+  items: ReadonlyArray<{ coordinates: [longitude: number, latitude: number] }>,
+): [longitude: number, latitude: number] {
+  const [longitudeSum, latitudeSum] = items.reduce<[number, number]>((sums, item) => [
+    sums[0] + item.coordinates[0],
+    sums[1] + item.coordinates[1],
+  ], [0, 0])
+
+  return [longitudeSum / items.length, latitudeSum / items.length]
+}
+
+function getDistanceMeters(
+  left: [longitude: number, latitude: number],
+  right: [longitude: number, latitude: number],
+) {
+  const earthRadiusMeters = 6371008.8
+  const leftLatitude = degreesToRadians(left[1])
+  const rightLatitude = degreesToRadians(right[1])
+  const latitudeDelta = degreesToRadians(right[1] - left[1])
+  const longitudeDelta = degreesToRadians(right[0] - left[0])
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
+
+function degreesToRadians(degrees: number) {
+  return degrees * Math.PI / 180
+}
+
+function getInitialPhotoMapCameraCoordinates(murmurSlices: readonly PhotoMapMurmurSlice[]) {
+  const firstMurmurCoordinates = murmurSlices
+    .map((murmurSlice) => murmurSlice.coordinates)
     .find((coordinates): coordinates is [number, number] => coordinates !== null)
 
   if (firstMurmurCoordinates) {
     return firstMurmurCoordinates
   }
 
-  return entries
-    .map((entry) => getPhotoMapEntryCameraCoordinates(entry))
+  return murmurSlices
+    .map((murmurSlice) => getPhotoMapMurmurSliceImageCameraCoordinates(murmurSlice))
     .find((coordinates): coordinates is [number, number] => coordinates !== null) ?? null
 }
 
-function comparePhotoMapEntriesByNewest(left: PhotoMapEntry, right: PhotoMapEntry) {
+function getPhotoMapMurmurSliceImageCameraCoordinates(murmurSlice: PhotoMapMurmurSlice) {
+  return murmurSlice.murmur.images
+    .map((image) => getLocationCoordinates(image.location))
+    .find((coordinates): coordinates is [number, number] => coordinates !== null) ?? null
+}
+
+function comparePhotoMapMurmurSlicesByNewest(left: PhotoMapMurmurSlice, right: PhotoMapMurmurSlice) {
   const timeCompare = right.time.localeCompare(left.time)
 
-  if (timeCompare !== 0) {
-    return timeCompare
-  }
-
-  const kindCompare = getEntryKindSortRank(left) - getEntryKindSortRank(right)
-
-  return kindCompare === 0 ? left.id.localeCompare(right.id) : kindCompare
+  return timeCompare === 0 ? left.id.localeCompare(right.id) : timeCompare
 }
 
-function comparePhotoMapEntriesByOldest(left: PhotoMapEntry, right: PhotoMapEntry) {
+function comparePhotoMapMurmurSlicesByOldest(left: PhotoMapMurmurSlice, right: PhotoMapMurmurSlice) {
   const timeCompare = left.time.localeCompare(right.time)
 
-  if (timeCompare !== 0) {
-    return timeCompare
-  }
-
-  const kindCompare = getEntryKindSortRank(left) - getEntryKindSortRank(right)
-
-  return kindCompare === 0 ? left.id.localeCompare(right.id) : kindCompare
-}
-
-function getEntryKindSortRank(entry: PhotoMapEntry) {
-  return entry.kind === 'murmur' ? 0 : 1
+  return timeCompare === 0 ? left.id.localeCompare(right.id) : timeCompare
 }
 
 function getDateStart(dateKey: string) {
@@ -404,10 +450,4 @@ function formatDateKey(date: Date) {
   const day = `${date.getDate()}`.padStart(2, '0')
 
   return `${year}-${month}-${day}`
-}
-
-function formatCoordinate(value: number, positive: string, negative: string) {
-  const suffix = value >= 0 ? positive : negative
-
-  return `${Math.abs(value).toFixed(4)}°${suffix}`
 }

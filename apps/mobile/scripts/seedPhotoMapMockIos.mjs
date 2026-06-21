@@ -261,7 +261,7 @@ function createMockDays(todayKey) {
             images: [],
             location: createLocation(point, 'manual'),
             themes: [city.theme, 'text-only', 'quiet-looking'],
-            time: `${date}T${['11:35:00', '16:45:00'][index] ?? '20:20:00'}${city.tz}`,
+            time: `${date}T${['11:35:00', '16:45:00', '17:05:00', '17:25:00', '17:45:00'][index] ?? '20:20:00'}${city.tz}`,
           })
           textOnlyMurmurIndex += 1
         }
@@ -488,6 +488,23 @@ function getChengduTextOnlyMurmurPoints(dayIndex) {
     point('九眼桥河边', 30.6421, 104.0866),
   ]
   const start = dayIndex * 2
+
+  if (dayIndex === 0) {
+    return [
+      points[0],
+      points[1],
+      points[1],
+      points[1],
+      points[1],
+    ]
+  }
+
+  if (dayIndex === 1) {
+    return [
+      points[1],
+      points[1],
+    ]
+  }
 
   return [
     points[start % points.length],

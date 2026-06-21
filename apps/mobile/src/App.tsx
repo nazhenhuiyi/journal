@@ -89,9 +89,13 @@ type RootStackParamList = {
   SyncSettings: undefined
 }
 type ImageImportSource = 'camera' | 'library'
+type ImagePreviewOptions = {
+  onBeforeClose?: () => void
+}
 type ImagePreviewState = {
   initialIndex: number
   items: ImagePreviewModalItem[]
+  onBeforeClose?: () => void
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -450,7 +454,11 @@ function JournalApp() {
     })
   }, [])
 
-  const openImageGalleryPreview = useCallback((images: readonly ImageBlock[], initialIndex = 0) => {
+  const openImageGalleryPreview = useCallback((
+    images: readonly ImageBlock[],
+    initialIndex = 0,
+    options?: ImagePreviewOptions,
+  ) => {
     const items = images.map(createImagePreviewItem)
 
     if (items.length === 0) {
@@ -460,6 +468,7 @@ function JournalApp() {
     setPreviewImage({
       initialIndex,
       items,
+      onBeforeClose: options?.onBeforeClose,
     })
   }, [])
 
@@ -875,7 +884,10 @@ function JournalApp() {
       <ImagePreviewModal
         initialIndex={previewImage?.initialIndex}
         items={previewImage?.items ?? []}
-        onClose={() => setPreviewImage(null)}
+        onClose={() => {
+          previewImage?.onBeforeClose?.()
+          setPreviewImage(null)
+        }}
       />
     </>
   )
