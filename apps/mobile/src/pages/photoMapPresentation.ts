@@ -31,6 +31,7 @@ export const textCardHeight = 112
 export const textCardHorizontalPadding = spacingPixels['5']
 export const textCardVerticalPadding = spacingPixels['3']
 export const textCardImageSize = 72
+export const textCardContentGap = spacingPixels['3.5']
 export const textCarouselSideInset = spacingPixels['4']
 export const textCarouselPeekWidth = spacingPixels['3']
 export const textCarouselItemGap = spacingPixels['2']

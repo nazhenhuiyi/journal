@@ -390,53 +390,58 @@ export function PhotoMapTextCard({
             onPreviewImage={onPreviewImage}
           />
         </View>
-        <Pressable
-          accessibilityLabel={`打开${formatCompactDate(observation.date)}的日记`}
-          accessibilityRole="button"
-          onPress={openDayIfTap}
-          onPressIn={handleCardPressIn}
-          onTouchMove={handleCardTouchMove}
-          style={({ pressed }) => [
-            styles.textCardTextColumn,
-            { opacity: pressed ? 0.82 : 1 },
-          ]}
-        >
-          <View style={styles.cardMetaRow}>
-            <View style={styles.cardDateContent}>
-              <Ionicons color={semanticColors['text-tertiary']} name="calendar-outline" size={13} />
-              <Text className="text-xs font-semibold text-text-tertiary" numberOfLines={1} style={styles.cardMetaDate}>
-                {cardDate}
-              </Text>
-            </View>
-            {nearbyCluster && nearbyTextCount > 1 ? (
-              <Pressable
-                accessibilityLabel={`打开附近 ${nearbyTextCount} 条碎碎念`}
-                accessibilityRole="button"
-                onPress={(event) => {
-                  event.stopPropagation()
-                  onOpenNearbyCluster(nearbyCluster, observation)
-                }}
-                onPressIn={(event) => {
-                  event.stopPropagation()
-                }}
-                onTouchStart={(event) => {
-                  event.stopPropagation()
-                }}
-                style={({ pressed }) => [
-                  styles.cardNearbyBadge,
-                  { opacity: pressed ? 0.78 : 1 },
-                ]}
-              >
-                <Text numberOfLines={1} style={styles.cardNearbyBadgeText}>
-                  附近 {nearbyTextCount} 条
+        <View style={styles.textCardTextColumn}>
+          <Pressable
+            accessibilityLabel={`打开${formatCompactDate(observation.date)}的日记`}
+            accessibilityRole="button"
+            onPress={openDayIfTap}
+            onPressIn={handleCardPressIn}
+            onTouchMove={handleCardTouchMove}
+            style={styles.textCardPressLayer}
+          />
+          <View pointerEvents="box-none" style={styles.textCardTextContent}>
+            <View pointerEvents="box-none" style={styles.cardMetaRow}>
+              <View pointerEvents="none" style={styles.cardDateContent}>
+                <Ionicons color={semanticColors['text-tertiary']} name="calendar-outline" size={13} />
+                <Text className="text-xs font-semibold text-text-tertiary" numberOfLines={1} style={styles.cardMetaDate}>
+                  {cardDate}
                 </Text>
-              </Pressable>
-            ) : null}
+              </View>
+              {nearbyCluster && nearbyTextCount > 1 ? (
+                <Pressable
+                  accessibilityLabel={`打开附近 ${nearbyTextCount} 条碎碎念`}
+                  accessibilityRole="button"
+                  onPress={(event) => {
+                    event.stopPropagation()
+                    onOpenNearbyCluster(nearbyCluster, observation)
+                  }}
+                  onPressIn={(event) => {
+                    event.stopPropagation()
+                  }}
+                  onTouchStart={(event) => {
+                    event.stopPropagation()
+                  }}
+                  style={({ pressed }) => [
+                    styles.cardNearbyBadge,
+                    { opacity: pressed ? 0.78 : 1 },
+                  ]}
+                >
+                  <Text numberOfLines={1} style={styles.cardNearbyBadgeText}>
+                    附近 {nearbyTextCount} 条
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text
+              ellipsizeMode="tail"
+              numberOfLines={2}
+              pointerEvents="none"
+              style={styles.textCardMurmurText}
+            >
+              {murmurText}
+            </Text>
           </View>
-          <Text numberOfLines={2} style={styles.textCardMurmurText}>
-            {murmurText}
-          </Text>
-        </Pressable>
+        </View>
       </View>
     </View>
   )
@@ -530,6 +535,12 @@ function PhotoPreviewButton({
         }
 
         onPreviewImage(image)
+      }}
+      onPressIn={(event) => {
+        event.stopPropagation()
+      }}
+      onTouchStart={(event) => {
+        event.stopPropagation()
       }}
       style={({ pressed }) => ({
         opacity: pressed ? 0.82 : 1,
