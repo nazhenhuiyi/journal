@@ -1,5 +1,10 @@
+import type { PhotoMapRange } from './photoMapData'
+
 export type PhotoMapFocusMotion = 'enter' | 'restore'
 
+// Photo map keeps one transient layer active at a time:
+// browse -> image/text cluster when opening a group, and cluster -> browse on map blank/range changes.
+// Image clusters can restore without replaying the enter animation after full-screen preview closes.
 export type PhotoMapInteractionState =
   | {
       kind: 'browse'
@@ -16,6 +21,12 @@ export type PhotoMapInteractionState =
       motion: 'enter'
       revision: number
     }
+
+export type PhotoMapSessionSnapshot = {
+  interaction: PhotoMapInteractionState
+  range: PhotoMapRange
+  selectedTextId: string | null
+}
 
 export const browsePhotoMapInteraction: PhotoMapInteractionState = { kind: 'browse' }
 

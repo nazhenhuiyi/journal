@@ -46,6 +46,7 @@ import { cn } from './ui/cn'
 import { ImagePreviewModal, type ImagePreviewModalItem } from './ui/ImagePreviewModal'
 import { JournalListPage } from './pages/JournalListPage'
 import { PhotoMapPage } from './pages/PhotoMapPage'
+import type { PhotoMapSessionSnapshot } from './pages/photoMapInteraction'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReviewDayPage } from './pages/ReviewDayPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -87,6 +88,12 @@ type RootStackParamList = {
   ReviewDay: { date: string }
   Settings: undefined
   SyncSettings: undefined
+}
+type NavigationRouteTree = {
+  index?: number
+  name?: string
+  routes?: readonly NavigationRouteTree[]
+  state?: NavigationRouteTree
 }
 type ImageImportSource = 'camera' | 'library'
 type ImagePreviewOptions = {
@@ -153,6 +160,43 @@ function goBackOrReturnToToday(navigation: BackNavigation) {
   returnToToday(navigation)
 }
 
+function hasNavigationRoute(
+  state: NavigationRouteTree | undefined,
+  routeName: keyof RootStackParamList,
+): boolean {
+  if (!state?.routes) {
+    return false
+  }
+
+  return state.routes.some((route) => (
+    route.name === routeName || hasNavigationRoute(route.state, routeName)
+  ))
+}
+
+function getFocusedNavigationRouteName(state: NavigationRouteTree | undefined): string | undefined {
+  const routes = state?.routes
+
+  if (!state || !routes?.length) {
+    return state?.name
+  }
+
+  const focusedIndex = typeof state.index === 'number' ? state.index : routes.length - 1
+  const focusedRoute = routes[focusedIndex] ?? routes[routes.length - 1]
+
+  return getFocusedNavigationRouteName(focusedRoute?.state) ?? focusedRoute?.name
+}
+
+function shouldKeepPhotoMapSessionSnapshot(state: NavigationRouteTree | undefined): boolean {
+  const focusedRouteName = getFocusedNavigationRouteName(state)
+
+  if (focusedRouteName === 'PhotoMap') {
+    return true
+  }
+
+  // Keep the map scene only while reading a day opened from the map; other exits start fresh.
+  return focusedRouteName === 'ReviewDay' && hasNavigationRoute(state, 'PhotoMap')
+}
+
 export default function App() {
   const [hasLoadedE2eRuntimeConfig, setHasLoadedE2eRuntimeConfig] = useState(false)
 
@@ -193,6 +237,7 @@ function JournalApp() {
   const [selectedMurmurThemeIds, setSelectedMurmurThemeIds] = useState<string[]>([])
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null)
+  const [photoMapSessionSnapshot, setPhotoMapSessionSnapshot] = useState<PhotoMapSessionSnapshot | null>(null)
   const [homeMode, setHomeModeState] = useState<MobileHomeMode>('long-entry')
   const [hasLoadedUiSettings, setHasLoadedUiSettings] = useState(false)
   const [editingMurmurId, setEditingMurmurId] = useState<string | null>(null)
@@ -654,6 +699,11 @@ function JournalApp() {
         onReady={() => {
           flushPendingDeepLink()
         }}
+        onStateChange={(state) => {
+          if (!shouldKeepPhotoMapSessionSnapshot(state)) {
+            setPhotoMapSessionSnapshot(null)
+          }
+        }}
         ref={navigationRef}
       >
       <Stack.Navigator
@@ -789,6 +839,8 @@ function JournalApp() {
               onOpenDay={(date) => navigation.navigate('ReviewDay', { date })}
               onPreviewImageGallery={openImageGalleryPreview}
               onPreviewImage={openImagePreview}
+              onSessionSnapshotChange={setPhotoMapSessionSnapshot}
+              sessionSnapshot={photoMapSessionSnapshot}
               today={today}
             />
           )}

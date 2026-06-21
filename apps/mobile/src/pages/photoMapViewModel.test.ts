@@ -7,8 +7,9 @@ import type {
 } from './photoMapData'
 import {
   createPhotoMapTextClusterLookup,
-  getExpandedPhotoMapMarkerCoordinates,
   getExpandedPhotoMapMarkerOffset,
+  getPhotoMapInitialCameraIdentity,
+  getPhotoMapInitialCameraKey,
   getUnlocatedPhotoMapContentCount,
   isPhotoMapTextClusterSelected,
   limitVisiblePhotoMapClusters,
@@ -101,18 +102,90 @@ describe('photoMapViewModel', () => {
     ])).toBe(2)
   })
 
-  it('fans expanded marker coordinates around the cluster center', () => {
-    const center: [longitude: number, latitude: number] = [104.06331, 30.65761]
-
-    expect(getExpandedPhotoMapMarkerCoordinates(center, 0, 1, 62)).toEqual(center)
-    expect(getExpandedPhotoMapMarkerCoordinates(center, 0, 4, 62)[1]).toBeLessThan(center[1])
-    expect(getExpandedPhotoMapMarkerCoordinates(center, 1, 4, 62)[0]).toBeGreaterThan(center[0])
-  })
-
   it('fans expanded marker offsets around the cluster center in screen pixels', () => {
     expect(getExpandedPhotoMapMarkerOffset(0, 1, 62)).toEqual([0, 0])
     expect(getExpandedPhotoMapMarkerOffset(0, 4, 62)).toEqual([0, -62])
     expect(getExpandedPhotoMapMarkerOffset(1, 4, 62)).toEqual([62, 0])
+  })
+
+  it('identifies initial cameras by coordinates, zoom, bounds, and padding', () => {
+    const centerCamera = {
+      center: [104.06331, 30.65761] as [longitude: number, latitude: number],
+      zoom: 12.2,
+    }
+    const sameCenterCamera = {
+      center: [104.06331, 30.65761] as [longitude: number, latitude: number],
+      zoom: 12.2,
+    }
+
+    expect(getPhotoMapInitialCameraIdentity(centerCamera)).toBe(getPhotoMapInitialCameraIdentity(sameCenterCamera))
+    expect(getPhotoMapInitialCameraIdentity({
+      center: [104.06331, 30.65761],
+      zoom: 12.2,
+    })).not.toBe(getPhotoMapInitialCameraIdentity({
+      center: [104.16331, 30.65761],
+      zoom: 12.2,
+    }))
+    expect(getPhotoMapInitialCameraIdentity({
+      center: [104.06331, 30.65761],
+      zoom: 12.2,
+    })).not.toBe(getPhotoMapInitialCameraIdentity({
+      center: [104.06331, 30.65761],
+      zoom: 13,
+    }))
+    expect(getPhotoMapInitialCameraIdentity({
+      bounds: [104.02, 30.62, 104.08, 30.68],
+      padding: {
+        bottom: 120,
+        left: 24,
+        right: 24,
+        top: 96,
+      },
+    })).not.toBe(getPhotoMapInitialCameraIdentity({
+      bounds: [104.02, 30.62, 104.08, 30.68],
+      padding: {
+        bottom: 160,
+        left: 24,
+        right: 24,
+        top: 96,
+      },
+    }))
+  })
+
+  it('changes initial camera keys when camera identity changes even if observation counts stay stable', () => {
+    const baseline = getPhotoMapInitialCameraKey({
+      imageObservationCount: 3,
+      initialCamera: {
+        center: [104.06331, 30.65761],
+        zoom: 12.2,
+      },
+      mapReadyGeneration: 1,
+      range: '7d',
+      textObservationCount: 4,
+    })
+    const movedSameCounts = getPhotoMapInitialCameraKey({
+      imageObservationCount: 3,
+      initialCamera: {
+        center: [104.16331, 30.75761],
+        zoom: 12.2,
+      },
+      mapReadyGeneration: 1,
+      range: '7d',
+      textObservationCount: 4,
+    })
+    const sameCamera = getPhotoMapInitialCameraKey({
+      imageObservationCount: 3,
+      initialCamera: {
+        center: [104.06331, 30.65761],
+        zoom: 12.2,
+      },
+      mapReadyGeneration: 1,
+      range: '7d',
+      textObservationCount: 4,
+    })
+
+    expect(movedSameCounts).not.toBe(baseline)
+    expect(sameCamera).toBe(baseline)
   })
 })
 

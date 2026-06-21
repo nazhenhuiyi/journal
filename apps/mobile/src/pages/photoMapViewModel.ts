@@ -1,7 +1,9 @@
 import { hasUsableImageLocationCoordinates } from '@journal/core'
 import type {
-  PhotoMapMurmurSlice,
+  PhotoMapInitialCamera,
   PhotoMapImageCluster,
+  PhotoMapMurmurSlice,
+  PhotoMapRange,
   PhotoMapTextCluster,
 } from './photoMapData'
 
@@ -80,29 +82,6 @@ export function getPhotoMapClusterBounds(
   ]
 }
 
-export function getExpandedPhotoMapMarkerCoordinates(
-  center: [longitude: number, latitude: number],
-  index: number,
-  count: number,
-  radiusMeters: number,
-): [longitude: number, latitude: number] {
-  if (count <= 1) {
-    return center
-  }
-
-  const angle = -Math.PI / 2 + (2 * Math.PI * index) / count
-  const latitudeMeters = 111320
-  const longitudeMeters = Math.max(
-    1,
-    111320 * Math.cos(center[1] * Math.PI / 180),
-  )
-
-  return [
-    center[0] + Math.cos(angle) * radiusMeters / longitudeMeters,
-    center[1] + Math.sin(angle) * radiusMeters / latitudeMeters,
-  ]
-}
-
 export function getExpandedPhotoMapMarkerOffset(
   index: number,
   count: number,
@@ -118,6 +97,41 @@ export function getExpandedPhotoMapMarkerOffset(
     Math.round(Math.cos(angle) * radiusPixels),
     Math.round(Math.sin(angle) * radiusPixels),
   ]
+}
+
+export function getPhotoMapInitialCameraIdentity(camera: PhotoMapInitialCamera) {
+  if ('center' in camera) {
+    return `center:${camera.center[0]},${camera.center[1]}:${camera.zoom}`
+  }
+
+  const padding = camera.padding
+
+  return [
+    `bounds:${camera.bounds.join(',')}`,
+    `padding:${padding.top},${padding.right},${padding.bottom},${padding.left}`,
+  ].join(':')
+}
+
+export function getPhotoMapInitialCameraKey({
+  imageObservationCount,
+  initialCamera,
+  mapReadyGeneration,
+  range,
+  textObservationCount,
+}: {
+  imageObservationCount: number
+  initialCamera: PhotoMapInitialCamera
+  mapReadyGeneration: number
+  range: PhotoMapRange
+  textObservationCount: number
+}) {
+  return [
+    mapReadyGeneration,
+    range,
+    imageObservationCount,
+    textObservationCount,
+    getPhotoMapInitialCameraIdentity(initialCamera),
+  ].join(':')
 }
 
 function isPhotoMapClusterImportant(
