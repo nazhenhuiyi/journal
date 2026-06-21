@@ -118,7 +118,6 @@ export function PhotoMapPage({
     textClusterIds,
     textObservations,
     totalImageCount,
-    unlocatedCount,
     visibleImageClusters,
     visibleTextClusters,
   } = usePhotoMapRuntime({
@@ -342,8 +341,8 @@ export function PhotoMapPage({
                   id="photo-map-murmur-route-shadow"
                   paint={{
                     'line-color': semanticColors.surface,
-                    'line-opacity': 0.72,
-                    'line-width': 4,
+                    'line-opacity': 0.48,
+                    'line-width': 3,
                   }}
                   type="line"
                 />
@@ -351,8 +350,8 @@ export function PhotoMapPage({
                   id="photo-map-murmur-route"
                   paint={{
                     'line-color': semanticColors.primary,
-                    'line-opacity': 0.42,
-                    'line-width': 2,
+                    'line-opacity': 0.16,
+                    'line-width': 1.5,
                   }}
                   type="line"
                 />
@@ -400,7 +399,6 @@ export function PhotoMapPage({
                 murmurCount={murmurCount}
                 onRecenter={recenterToInitialMapContent}
                 range={range}
-                unlocatedCount={unlocatedCount}
               />
             </View>
 

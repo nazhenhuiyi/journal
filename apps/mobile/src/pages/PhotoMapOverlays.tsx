@@ -29,6 +29,7 @@ import {
   getPhotoMapTextPreviewTitle,
   getRangeLabel,
   getRangeShortLabel,
+  getRangeSummaryTitle,
   rangeOptions,
   textCardTapMaxDurationMs,
   usePhotoMapEnterProgress,
@@ -40,33 +41,24 @@ export function PhotoMapSummaryCard({
   murmurCount,
   onRecenter,
   range,
-  unlocatedCount,
 }: {
   imageCount: number
   murmurCount: number
   onRecenter: () => void
   range: PhotoMapRange
-  unlocatedCount: number
 }) {
   return (
     <View style={styles.mapSummary}>
       <View style={styles.mapSummaryMain}>
-        <Text className="text-xs font-semibold text-primary">{getRangeLabel(range)}</Text>
+        <Text numberOfLines={1} style={styles.mapSummaryTitle}>
+          {getRangeSummaryTitle(range)}
+        </Text>
         <View style={styles.mapSummaryMetricRow}>
           <Text className="text-xl font-semibold text-foreground">{murmurCount}</Text>
           <Text className="text-xs font-semibold text-text-tertiary">条碎碎念</Text>
           <Text className="text-xl font-semibold text-foreground">{imageCount}</Text>
           <Text className="text-xs font-semibold text-text-tertiary">张照片</Text>
         </View>
-        {unlocatedCount > 0 ? (
-          <Text className="text-xs font-medium text-text-tertiary">
-            {unlocatedCount} 条内容未定位
-          </Text>
-        ) : (
-          <Text className="text-xs font-medium text-text-tertiary">
-            全部内容已定位
-          </Text>
-        )}
       </View>
       <Pressable
         accessibilityLabel="回到第一条定位"
@@ -78,7 +70,7 @@ export function PhotoMapSummaryCard({
         ]}
         testID="photo-map-recenter-button"
       >
-        <Ionicons color={semanticColors.primary} name="navigate-outline" size={18} />
+        <Ionicons color={semanticColors['text-tertiary']} name="navigate-outline" size={18} />
       </Pressable>
     </View>
   )
@@ -400,7 +392,7 @@ export function PhotoMapTextCard({
             style={styles.textCardPressLayer}
           />
           <View pointerEvents="box-none" style={styles.textCardTextContent}>
-            <View pointerEvents="box-none" style={styles.cardMetaRow}>
+            <View pointerEvents="box-none" style={[styles.cardMetaRow, styles.cardMetaRowSpread]}>
               <View pointerEvents="none" style={styles.cardDateContent}>
                 <Ionicons color={semanticColors['text-tertiary']} name="calendar-outline" size={13} />
                 <Text className="text-xs font-semibold text-text-tertiary" numberOfLines={1} style={styles.cardMetaDate}>

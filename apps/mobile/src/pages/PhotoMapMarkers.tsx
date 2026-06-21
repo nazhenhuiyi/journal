@@ -62,11 +62,15 @@ export function PhotoMapTextClusterMarker({
           styles.mapTextMarker,
           isCluster ? styles.mapTextClusterMarker : null,
           isExpanded ? styles.mapTextMarkerExpanded : null,
+          isCluster && (isExpanded || isSelected) ? styles.mapTextClusterMarkerSelected : null,
           !isCluster && isSelected ? styles.mapTextMarkerSelected : null,
         ]}
       >
         {isCluster ? (
-          <Text style={styles.mapTextClusterMarkerText}>
+          <Text style={[
+            styles.mapTextClusterMarkerText,
+            isExpanded || isSelected ? styles.mapTextClusterMarkerTextSelected : null,
+          ]}>
             {markerText}
           </Text>
         ) : null}

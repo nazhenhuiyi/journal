@@ -188,6 +188,19 @@ export function getRangeLabel(range: PhotoMapRange) {
   }
 }
 
+export function getRangeSummaryTitle(range: PhotoMapRange) {
+  switch (range) {
+    case '7d':
+      return '近一周'
+    case '14d':
+      return '近两周'
+    case '30d':
+      return '近一月'
+    case 'all':
+      return '全部'
+  }
+}
+
 export function getRangeShortLabel(range: PhotoMapRange) {
   switch (range) {
     case '7d':
