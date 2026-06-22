@@ -11,6 +11,7 @@ const builtInThemeIds = new Set([
   "sky-now",
   "quick-photo",
   "small-thing",
+  "today-three-lines",
   "food-today",
   "funny-today",
   "thought-maybe",

@@ -84,6 +84,7 @@ description: 从任意 Codex 工作区访问已配置的 journal data git 仓库
 | `sky-now` | 天空、云、天气状态、抬头看到的天色 |
 | `quick-photo` | 随手拍、无明显其他主题的图片记录 |
 | `small-thing` | 日常小事、短事件、轻量生活片段 |
+| `today-three-lines` | 三行短诗、汉俳、用很短的诗性文字凝练一个片刻 |
 | `food-today` | 饭、饮料、零食、餐厅、做饭 |
 | `funny-today` | 好笑的事、荒诞瞬间、轻松吐槽 |
 | `thought-maybe` | 想法、判断、灵感、还没定论的念头 |

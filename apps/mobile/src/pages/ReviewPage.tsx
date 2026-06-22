@@ -27,7 +27,7 @@ type ReviewPageProps = {
   today: string
 }
 
-const visibleThemeEntries = BUILT_IN_THEMES.slice(0, 6)
+const visibleThemeEntries = BUILT_IN_THEMES.slice(0, 7)
 
 export function ReviewPage({
   currentFrontMatter,

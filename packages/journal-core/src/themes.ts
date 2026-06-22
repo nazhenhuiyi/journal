@@ -20,6 +20,12 @@ export const BUILT_IN_THEMES: BuiltInTheme[] = [
     inputMode: 'text',
   },
   {
+    id: 'today-three-lines',
+    label: '三行里的今天',
+    entrySubtitle: '把一个片刻写成小诗',
+    inputMode: 'text',
+  },
+  {
     id: 'food-today',
     label: '今天吃什么',
     entrySubtitle: '这一口也算今天',
