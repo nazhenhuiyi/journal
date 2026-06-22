@@ -23,12 +23,12 @@ describe('mobile UI settings', () => {
     vi.unstubAllEnvs()
   })
 
-  it('defaults to long-entry mode when no local preference is stored', async () => {
+  it('defaults to murmur mode when no local preference is stored', async () => {
     mockSecureStore.getItemAsync.mockResolvedValueOnce(null)
 
     await expect(loadMobileUiSettings()).resolves.toEqual({
       appearance: 'system',
-      homeMode: 'long-entry',
+      homeMode: 'murmur',
     })
   })
 
@@ -109,7 +109,7 @@ describe('mobile UI settings', () => {
 
     await expect(loadMobileUiSettings()).resolves.toEqual({
       appearance: 'system',
-      homeMode: 'long-entry',
+      homeMode: 'murmur',
     })
     await expect(loadMobileUiSettings()).resolves.toEqual({
       appearance: 'system',

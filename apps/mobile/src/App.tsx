@@ -61,6 +61,7 @@ import {
 import { useJournalImageThumbnailUri } from './services/mobileImageThumbnails'
 import { fetchTodayMobileWeather } from './services/mobileWeather'
 import {
+  defaultMobileHomeMode,
   loadMobileUiSettings,
   saveMobileUiSettings,
   type MobileHomeMode,
@@ -236,7 +237,7 @@ function JournalApp() {
   const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
   const hasRequestedInitialUrlRef = useRef(false)
   const initialActiveEventDateRef = useRef<string | null>(null)
-  const homeModeRef = useRef<MobileHomeMode>('long-entry')
+  const homeModeRef = useRef<MobileHomeMode>(defaultMobileHomeMode)
   const homeModeSaveRequestRef = useRef(0)
   const [murmurDraft, setMurmurDraft] = useState('')
   const [murmurDraftInputHeight, setMurmurDraftInputHeight] = useState(murmurDraftInputMinHeight)
@@ -244,7 +245,7 @@ function JournalApp() {
   const [activeImageImport, setActiveImageImport] = useState<ImageImportSource | null>(null)
   const [previewImage, setPreviewImage] = useState<ImagePreviewState | null>(null)
   const [photoMapSessionSnapshot, setPhotoMapSessionSnapshot] = useState<PhotoMapSessionSnapshot | null>(null)
-  const [homeMode, setHomeModeState] = useState<MobileHomeMode>('long-entry')
+  const [homeMode, setHomeModeState] = useState<MobileHomeMode>(defaultMobileHomeMode)
   const [hasLoadedUiSettings, setHasLoadedUiSettings] = useState(false)
   const [editingMurmurId, setEditingMurmurId] = useState<string | null>(null)
   const {
@@ -746,6 +747,7 @@ function JournalApp() {
                   onEditMurmur={setEditingMurmurId}
                   onOpenJournalList={() => navigation.navigate('JournalList')}
                   onOpenLongEntry={() => navigation.navigate('LongEntry')}
+                  onOpenPhotoMap={() => navigation.navigate('PhotoMap')}
                   onOpenReview={() => navigation.navigate('Review')}
                   onOpenSettings={() => navigation.navigate('Settings')}
                   onOpenSyncSettings={() => navigation.navigate('SyncSettings')}
@@ -765,6 +767,7 @@ function JournalApp() {
                     <TodayTopBar
                       headerStatus={headerStatus}
                       onOpenJournalList={() => navigation.navigate('JournalList')}
+                      onOpenPhotoMap={() => navigation.navigate('PhotoMap')}
                       onOpenReview={() => navigation.navigate('Review')}
                       onOpenSettings={() => navigation.navigate('Settings')}
                       onOpenSyncSettings={() => navigation.navigate('SyncSettings')}
@@ -831,7 +834,6 @@ function JournalApp() {
               murmurCount={murmurs.length}
               onBack={() => goBackOrReturnToToday(navigation)}
               onOpenDay={(date) => navigation.navigate('ReviewDay', { date })}
-              onOpenPhotoMap={() => navigation.navigate('PhotoMap')}
               onOpenToday={() => returnToToday(navigation)}
               today={today}
             />
@@ -1008,12 +1010,14 @@ function LongEntryStatusButton({
 function TodayTopBar({
   headerStatus,
   onOpenJournalList,
+  onOpenPhotoMap,
   onOpenReview,
   onOpenSettings,
   onOpenSyncSettings,
 }: {
   headerStatus: HeaderStatus
   onOpenJournalList: () => void
+  onOpenPhotoMap: () => void
   onOpenReview: () => void
   onOpenSettings: () => void
   onOpenSyncSettings: () => void
@@ -1026,6 +1030,12 @@ function TodayTopBar({
           label="日记列表"
           onPress={onOpenJournalList}
           testID="journal-list-button"
+        />
+        <TopNavButton
+          icon="map-outline"
+          label="轨迹"
+          onPress={onOpenPhotoMap}
+          testID="trajectory-button"
         />
         <TopNavButton
           icon="sparkles-outline"
@@ -1302,6 +1312,7 @@ function TodayMurmurMode({
   onImportImages,
   onOpenJournalList,
   onOpenLongEntry,
+  onOpenPhotoMap,
   onOpenReview,
   onOpenSettings,
   onOpenSyncSettings,
@@ -1326,6 +1337,7 @@ function TodayMurmurMode({
   onImportImages: (source: ImageImportSource) => void
   onOpenJournalList: () => void
   onOpenLongEntry: () => void
+  onOpenPhotoMap: () => void
   onOpenReview: () => void
   onOpenSettings: () => void
   onOpenSyncSettings: () => void
@@ -1348,6 +1360,7 @@ function TodayMurmurMode({
         <TodayTopBar
           headerStatus={headerStatus}
           onOpenJournalList={onOpenJournalList}
+          onOpenPhotoMap={onOpenPhotoMap}
           onOpenReview={onOpenReview}
           onOpenSettings={onOpenSettings}
           onOpenSyncSettings={onOpenSyncSettings}

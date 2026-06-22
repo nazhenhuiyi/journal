@@ -10,9 +10,10 @@ export type MobileUiSettings = {
 }
 
 const uiSettingsKey = 'journal.mobileUiSettings.v1'
+export const defaultMobileHomeMode: MobileHomeMode = 'murmur'
 const defaultMobileUiSettings: MobileUiSettings = {
   appearance: 'system',
-  homeMode: 'long-entry',
+  homeMode: defaultMobileHomeMode,
 }
 let saveQueue: Promise<unknown> = Promise.resolve()
 
@@ -67,12 +68,16 @@ function normalizeMobileUiSettings(value: unknown): MobileUiSettings {
 
   return {
     appearance: normalizeAppearance(value.appearance),
-    homeMode: value.homeMode === 'murmur' ? 'murmur' : 'long-entry',
+    homeMode: normalizeHomeMode(value.homeMode),
   }
 }
 
 function normalizeAppearance(value: unknown): MobileAppearance {
   return value === 'dark' || value === 'light' || value === 'system' ? value : 'system'
+}
+
+function normalizeHomeMode(value: unknown): MobileHomeMode {
+  return value === 'long-entry' || value === 'murmur' ? value : defaultMobileHomeMode
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

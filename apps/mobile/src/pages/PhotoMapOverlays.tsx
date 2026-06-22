@@ -94,7 +94,7 @@ export function PhotoMapRangeButton({
 
   return (
     <Pressable
-      accessibilityLabel={`筛选照片地图时间范围，当前${getRangeLabel(range)}`}
+      accessibilityLabel={`筛选轨迹时间范围，当前${getRangeLabel(range)}`}
       accessibilityRole="button"
       accessibilityState={{ expanded: isOpen }}
       onPress={onPress}
@@ -125,7 +125,7 @@ export function PhotoMapRangeMenu({
 
   return (
     <View
-      accessibilityLabel="照片地图时间范围"
+      accessibilityLabel="轨迹时间范围"
       accessibilityRole="tablist"
       style={styles.rangeMenu}
     >

@@ -283,7 +283,7 @@ export function PhotoMapPage({
         )}
         onBack={handleBack}
         testID="photo-map-page"
-        title="照片地图"
+        title="轨迹"
       >
         <View className="flex-1">
           {isRangeMenuOpen ? (
@@ -295,7 +295,7 @@ export function PhotoMapPage({
           {isLoading ? (
             <PhotoMapStatus
               icon="map-outline"
-              message="正在铺开照片地图"
+              message="正在铺开轨迹"
               title="读取日记里的照片"
               variant="loading"
             />
@@ -305,7 +305,7 @@ export function PhotoMapPage({
             <PhotoMapStatus
               icon="warning-outline"
               message="日记读取失败，稍后再试一次。"
-              title="照片地图没有打开"
+              title="轨迹没有打开"
             />
           ) : null}
 
