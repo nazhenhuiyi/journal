@@ -13,8 +13,9 @@ import {
   View,
   type ViewStyle,
 } from 'react-native'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels, type ResolvedSemanticColors } from '@journal/theme'
 import { cn } from './cn'
+import { useJournalTheme } from './JournalTheme'
 
 type BottomSheetProps = {
   children: ReactNode
@@ -39,10 +40,12 @@ export function BottomSheet({
   title,
   visible,
 }: BottomSheetProps) {
+  const { colors } = useJournalTheme()
   const { height: windowHeight } = useWindowDimensions()
   const [isMounted, setIsMounted] = useState(visible)
   const [translateY] = useState(() => new Animated.Value(windowHeight))
   const isClosingRef = useRef(false)
+  const styles = useMemo(() => createBottomSheetStyles(colors), [colors])
 
   const animateOpen = useCallback(() => {
     isClosingRef.current = false
@@ -184,7 +187,8 @@ export function BottomSheet({
   )
 }
 
-const styles = StyleSheet.create({
+function createBottomSheetStyles(colors: ResolvedSemanticColors) {
+  return StyleSheet.create({
   content: {
     flex: 1,
     paddingBottom: spacingPixels['8'] + spacingPixels['1'],
@@ -192,7 +196,7 @@ const styles = StyleSheet.create({
     paddingTop: spacingPixels['2'],
   },
   handle: {
-    backgroundColor: semanticColors.border,
+    backgroundColor: colors.border,
     borderRadius: radiusPixels.full,
     height: spacingPixels['1.5'],
     width: spacingPixels['12'],
@@ -203,11 +207,12 @@ const styles = StyleSheet.create({
     paddingTop: spacingPixels['5'],
   },
   title: {
-    color: semanticColors.foreground,
+    color: colors.foreground,
     fontSize: 24,
     fontWeight: '600',
   },
   titleArea: {
     paddingBottom: spacingPixels['8'],
   },
-})
+  })
+}

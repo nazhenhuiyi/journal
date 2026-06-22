@@ -73,6 +73,7 @@ interface Window {
   }
   journalSettings?: {
     load(): Promise<{
+      appearance: 'dark' | 'light' | 'system'
       settingsMessage?: string
       syncBranch: string
       syncRemoteUrl: string
@@ -83,10 +84,12 @@ interface Window {
       settingsPath: string
     }>
     save(payload: {
+      appearance?: 'dark' | 'light' | 'system'
       syncBranch?: string
       syncRemoteUrl?: string
-      weatherLocation: string
+      weatherLocation?: string
     }): Promise<{
+      appearance: 'dark' | 'light' | 'system'
       syncBranch: string
       syncRemoteUrl: string
       version: 1

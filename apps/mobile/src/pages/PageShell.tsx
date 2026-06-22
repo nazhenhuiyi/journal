@@ -1,8 +1,9 @@
 import { type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { semanticColors, spacingPixels } from '@journal/theme'
+import { spacingPixels } from '@journal/theme'
 import { Screen } from '../ui/Screen'
+import { useJournalTheme } from '../ui/JournalTheme'
 
 type PageShellProps = {
   children: ReactNode
@@ -14,6 +15,8 @@ type PageShellProps = {
 }
 
 export function PageShell({ children, contentStyle, headerRight, onBack, testID, title }: PageShellProps) {
+  const { colors } = useJournalTheme()
+
   return (
     <Screen>
       <View className="flex-1 pb-5 pt-4">
@@ -23,10 +26,10 @@ export function PageShell({ children, contentStyle, headerRight, onBack, testID,
               accessibilityLabel="返回"
               accessibilityRole="button"
               onPress={onBack}
-              style={styles.backButton}
-              testID="back-to-today-button"
-            >
-              <Ionicons color={semanticColors['text-tertiary']} name="chevron-back" size={24} />
+            style={styles.backButton}
+            testID="back-to-today-button"
+          >
+              <Ionicons color={colors['text-tertiary']} name="chevron-back" size={24} />
             </Pressable>
           </View>
           <Text

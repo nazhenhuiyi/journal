@@ -2,15 +2,19 @@ import * as SecureStore from 'expo-secure-store'
 import { appendMobileE2eSuffix } from './e2eEnvironment'
 
 export type MobileHomeMode = 'long-entry' | 'murmur'
+export type MobileAppearance = 'dark' | 'light' | 'system'
 
 export type MobileUiSettings = {
+  appearance: MobileAppearance
   homeMode: MobileHomeMode
 }
 
 const uiSettingsKey = 'journal.mobileUiSettings.v1'
 const defaultMobileUiSettings: MobileUiSettings = {
+  appearance: 'system',
   homeMode: 'long-entry',
 }
+let saveQueue: Promise<unknown> = Promise.resolve()
 
 export async function loadMobileUiSettings(): Promise<MobileUiSettings> {
   const rawSettings = await SecureStore.getItemAsync(getMobileUiSettingsKey())
@@ -22,12 +26,22 @@ export async function loadMobileUiSettings(): Promise<MobileUiSettings> {
   return normalizeMobileUiSettings(rawSettings)
 }
 
-export async function saveMobileUiSettings(settings: MobileUiSettings) {
-  const normalizedSettings = normalizeMobileUiSettings(settings)
+export async function saveMobileUiSettings(settings: Partial<MobileUiSettings>) {
+  const saveOperation = saveQueue.then(async () => {
+    const currentSettings = await loadMobileUiSettings()
+    const normalizedSettings = normalizeMobileUiSettings({
+      ...currentSettings,
+      ...settings,
+    })
 
-  await SecureStore.setItemAsync(getMobileUiSettingsKey(), JSON.stringify(normalizedSettings))
+    await SecureStore.setItemAsync(getMobileUiSettingsKey(), JSON.stringify(normalizedSettings))
 
-  return normalizedSettings
+    return normalizedSettings
+  })
+
+  saveQueue = saveOperation.catch(() => undefined)
+
+  return saveOperation
 }
 
 export function getMobileUiSettingsStorageLabel() {
@@ -52,8 +66,13 @@ function normalizeMobileUiSettings(value: unknown): MobileUiSettings {
   }
 
   return {
+    appearance: normalizeAppearance(value.appearance),
     homeMode: value.homeMode === 'murmur' ? 'murmur' : 'long-entry',
   }
+}
+
+function normalizeAppearance(value: unknown): MobileAppearance {
+  return value === 'dark' || value === 'light' || value === 'system' ? value : 'system'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

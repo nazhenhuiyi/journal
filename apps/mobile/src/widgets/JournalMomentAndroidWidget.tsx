@@ -5,6 +5,7 @@ import {
   type WidgetInfo,
 } from 'react-native-android-widget'
 import type { JournalWidgetSnapshot } from '@journal/core'
+import { getSemanticColors, type SemanticColorScheme } from '@journal/theme'
 import { buildJournalWidgetDeepLink } from './journalWidgetLinks'
 
 export const androidJournalWidgetName = 'JournalMoment'
@@ -14,6 +15,7 @@ export const androidJournalWidgetNames = [
   androidJournalCompactWidgetName,
 ]
 const journalWidgetFontFamily = 'Xiaolai'
+type AndroidWidgetColor = `#${string}` | `rgba(${number}, ${number}, ${number}, ${number})`
 
 const fallbackSnapshot: JournalWidgetSnapshot = {
   action: {
@@ -29,24 +31,65 @@ const fallbackSnapshot: JournalWidgetSnapshot = {
   version: 1,
 }
 
+function getWidgetPalette(scheme: SemanticColorScheme, mode: JournalWidgetSnapshot['mode']) {
+  const colors = getSemanticColors(scheme)
+  const accent = mode === 'review-moment'
+    ? scheme === 'dark' ? '#b7a0d8' : '#8F7AAE'
+    : toAndroidWidgetColor(colors.primary)
+
+  if (scheme === 'dark') {
+    return {
+      accent,
+      background: toAndroidWidgetColor(colors.surface),
+      border: toAndroidWidgetColor(colors.border),
+      subtitle: toAndroidWidgetColor(colors['text-tertiary']),
+      title: toAndroidWidgetColor(colors.foreground),
+    } as const
+  }
+
+  return {
+    accent,
+    background: '#F8F2E9',
+    border: '#EFE6DA',
+    subtitle: '#7B7167',
+    title: '#201B16',
+  } as const
+}
+
+function toAndroidWidgetColor(value: string) {
+  return value as AndroidWidgetColor
+}
+
 export function renderJournalMomentAndroidWidget(
   snapshot: JournalWidgetSnapshot | null,
   widgetInfo?: WidgetInfo,
 ) {
-  return JournalMomentAndroidWidget({
-    snapshot: snapshot ?? fallbackSnapshot,
-    widgetInfo,
-  })
+  const resolvedSnapshot = snapshot ?? fallbackSnapshot
+
+  return {
+    light: JournalMomentAndroidWidget({
+      scheme: 'light',
+      snapshot: resolvedSnapshot,
+      widgetInfo,
+    }),
+    dark: JournalMomentAndroidWidget({
+      scheme: 'dark',
+      snapshot: resolvedSnapshot,
+      widgetInfo,
+    }),
+  }
 }
 
 function JournalMomentAndroidWidget({
+  scheme,
   snapshot,
   widgetInfo,
 }: {
+  scheme: SemanticColorScheme
   snapshot: JournalWidgetSnapshot
   widgetInfo?: WidgetInfo
 }) {
-  const accentColor = snapshot.mode === 'review-moment' ? '#8F7AAE' : '#4C8B7D'
+  const palette = getWidgetPalette(scheme, snapshot.mode)
   const isCompact = isCompactAndroidWidget(widgetInfo)
 
   return (
@@ -56,8 +99,8 @@ function JournalMomentAndroidWidget({
       clickActionData={{ uri: buildJournalWidgetDeepLink(snapshot.action) }}
       style={{
         alignItems: 'center',
-        backgroundColor: '#F8F2E9',
-        borderColor: '#EFE6DA',
+        backgroundColor: palette.background,
+        borderColor: palette.border,
         borderWidth: 1,
         borderRadius: isCompact ? 18 : 24,
         flexDirection: 'column',
@@ -86,7 +129,7 @@ function JournalMomentAndroidWidget({
       >
         <FlexWidget
           style={{
-            backgroundColor: accentColor,
+            backgroundColor: palette.accent,
             borderRadius: 3,
             height: isCompact ? 30 : 44,
             marginTop: isCompact ? 3 : 6,
@@ -107,7 +150,7 @@ function JournalMomentAndroidWidget({
             text={snapshot.title}
             truncate="END"
             style={{
-              color: '#201B16',
+              color: palette.title,
               fontFamily: journalWidgetFontFamily,
               fontSize: isCompact ? 22 : 31,
               fontWeight: '400',
@@ -120,7 +163,7 @@ function JournalMomentAndroidWidget({
               text={snapshot.subtitle}
               truncate="END"
               style={{
-                color: '#7B7167',
+                color: palette.subtitle,
                 fontFamily: journalWidgetFontFamily,
                 fontSize: isCompact ? 13 : 17,
                 fontWeight: '400',

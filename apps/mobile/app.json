@@ -8,7 +8,7 @@
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "backgroundColor": "#F8F2E9",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "app.zilin.journal",
       "supportsTablet": true
@@ -137,7 +137,10 @@
         {
           "image": "./assets/brand/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F8F2E9"
+          "backgroundColor": "#F8F2E9",
+          "dark": {
+            "backgroundColor": "#0c0a09"
+          }
         }
       ]
     ],

@@ -11,7 +11,6 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { ImageBlock } from '@journal/core'
-import { semanticColors } from '@journal/theme'
 import { useJournalImageThumbnailUri } from '../services/mobileImageThumbnails'
 import {
   formatCompactDate,
@@ -34,7 +33,11 @@ import {
   textCardTapMaxDurationMs,
   usePhotoMapEnterProgress,
 } from './photoMapPresentation'
-import { photoMapStyles as styles } from './photoMapStyles'
+import { usePhotoMapTheme } from './photoMapStyles'
+
+function usePhotoMapOverlayTheme() {
+  return usePhotoMapTheme()
+}
 
 export function PhotoMapSummaryCard({
   imageCount,
@@ -47,6 +50,8 @@ export function PhotoMapSummaryCard({
   onRecenter: () => void
   range: PhotoMapRange
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
+
   return (
     <View style={styles.mapSummary}>
       <View style={styles.mapSummaryMain}>
@@ -70,7 +75,7 @@ export function PhotoMapSummaryCard({
         ]}
         testID="photo-map-recenter-button"
       >
-        <Ionicons color={semanticColors['text-tertiary']} name="navigate-outline" size={18} />
+        <Ionicons color={colors['text-tertiary']} name="navigate-outline" size={18} />
       </Pressable>
     </View>
   )
@@ -85,6 +90,8 @@ export function PhotoMapRangeButton({
   onPress: () => void
   range: PhotoMapRange
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
+
   return (
     <Pressable
       accessibilityLabel={`筛选照片地图时间范围，当前${getRangeLabel(range)}`}
@@ -98,7 +105,7 @@ export function PhotoMapRangeButton({
         <Text
           className="text-xs font-semibold"
           numberOfLines={1}
-          style={{ color: semanticColors.primary }}
+          style={{ color: colors.primary }}
         >
           {getRangeShortLabel(range)}
         </Text>
@@ -114,6 +121,8 @@ export function PhotoMapRangeMenu({
   onChange: (range: PhotoMapRange) => void
   range: PhotoMapRange
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
+
   return (
     <View
       accessibilityLabel="照片地图时间范围"
@@ -138,7 +147,7 @@ export function PhotoMapRangeMenu({
           >
             <Text
               className="text-xs font-semibold"
-              style={{ color: isSelected ? semanticColors.primary : semanticColors['text-tertiary'] }}
+              style={{ color: isSelected ? colors.primary : colors['text-tertiary'] }}
             >
               {option.label}
             </Text>
@@ -166,6 +175,7 @@ export function PhotoMapImageClusterTray({
     initialIndex?: number,
   ) => void
 }) {
+  const { styles } = usePhotoMapOverlayTheme()
   const images = cluster.items.map((item) => item.image)
   const progress = usePhotoMapEnterProgress(activationKey, motion, {
     duration: 220,
@@ -213,6 +223,7 @@ function PhotoMapTrayImageButton({
   onPress: () => void
   title: string
 }) {
+  const { styles } = usePhotoMapOverlayTheme()
   const imageUri = useJournalImageThumbnailUri(image.src)
 
   if (!imageUri) {
@@ -251,6 +262,7 @@ export function PhotoMapTextClusterSheet({
   onGuardMapPress: () => void
   onPressDayItem: (event: GestureResponderEvent, date: string) => void
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
   const progress = usePhotoMapEnterProgress(activationKey, motion, {
     duration: 220,
   })
@@ -289,7 +301,7 @@ export function PhotoMapTextClusterSheet({
             ]}
           >
             <View style={styles.cardMetaRow}>
-              <Ionicons color={semanticColors['text-tertiary']} name="calendar-outline" size={13} />
+              <Ionicons color={colors['text-tertiary']} name="calendar-outline" size={13} />
               <Text className="text-xs font-semibold text-text-tertiary" numberOfLines={1}>
                 {formatTextCardDate(item.date)}
               </Text>
@@ -322,6 +334,7 @@ export function PhotoMapTextCard({
   onPreviewImageGallery: (images: readonly ImageBlock[], initialIndex?: number) => void
   onPreviewImage: (image: ImageBlock) => void
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
   const murmurText = getPhotoMapCardMurmurText(observation)
   const cardDate = formatTextCardDate(observation.date)
   const nearbyTextCount = nearbyCluster?.items.length ?? 1
@@ -394,7 +407,7 @@ export function PhotoMapTextCard({
           <View pointerEvents="box-none" style={styles.textCardTextContent}>
             <View pointerEvents="box-none" style={[styles.cardMetaRow, styles.cardMetaRowSpread]}>
               <View pointerEvents="none" style={styles.cardDateContent}>
-                <Ionicons color={semanticColors['text-tertiary']} name="calendar-outline" size={13} />
+                <Ionicons color={colors['text-tertiary']} name="calendar-outline" size={13} />
                 <Text className="text-xs font-semibold text-text-tertiary" numberOfLines={1} style={styles.cardMetaDate}>
                   {cardDate}
                 </Text>
@@ -454,6 +467,7 @@ function MurmurPreviewImage({
   onPreviewImageGallery: (images: readonly ImageBlock[], initialIndex?: number) => void
   onPreviewImage: (image: ImageBlock) => void
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
   const images = observation.murmur.images
   const firstImage = images[0]
 
@@ -461,7 +475,7 @@ function MurmurPreviewImage({
     const placeholder = (
       <View pointerEvents="none" style={[styles.textCardImage, styles.emptyMurmurImage]}>
         <View style={styles.emptyMurmurIconBubble}>
-          <Ionicons color={semanticColors.primary} name="chatbubble-ellipses-outline" size={20} />
+          <Ionicons color={colors.primary} name="chatbubble-ellipses-outline" size={20} />
         </View>
         <View style={styles.emptyMurmurLineLong} />
         <View style={styles.emptyMurmurLineShort} />
@@ -512,6 +526,7 @@ function PhotoPreviewButton({
   onPreviewImage: (image: ImageBlock) => void
   title: string
 }) {
+  const { styles } = usePhotoMapOverlayTheme()
   const imageUri = useJournalImageThumbnailUri(image.src)
 
   return (
@@ -559,6 +574,8 @@ export function PhotoMapStatus({
   title: string
   variant?: 'default' | 'loading'
 }) {
+  const { colors, styles } = usePhotoMapOverlayTheme()
+
   return (
     <View className="flex-1 items-center justify-center">
       <View
@@ -566,9 +583,9 @@ export function PhotoMapStatus({
         style={styles.statusCard}
       >
         {variant === 'loading' ? (
-          <ActivityIndicator color={semanticColors['text-tertiary']} size="small" />
+          <ActivityIndicator color={colors['text-tertiary']} size="small" />
         ) : (
-          <Ionicons color={semanticColors['text-tertiary']} name={icon} size={24} />
+          <Ionicons color={colors['text-tertiary']} name={icon} size={24} />
         )}
         <Text className="mt-4 text-base font-semibold text-foreground">{title}</Text>
         <Text className="mt-2 text-center text-sm leading-5 text-text-tertiary">{message}</Text>

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HashRouter } from 'react-router'
+import { DesktopAppearanceProvider } from '../services/appearance'
 import SettingsPage from './SettingsPage'
 
 afterEach(() => {
@@ -27,6 +28,24 @@ describe('SettingsPage diagnostics', () => {
     expect(screen.getByText('多云 24°C')).toBeInTheDocument()
     expect(screen.getByText('未询问')).toBeInTheDocument()
     expect(permissionsQuery).toHaveBeenCalledWith({ name: 'geolocation' })
+  })
+
+  it('saves the appearance preference', async () => {
+    stubNavigator({
+      geolocation: createGeolocationMock(),
+      permissions: { query: vi.fn().mockResolvedValue({ state: 'prompt' }) },
+    })
+    stubDesktopStores()
+
+    renderSettingsPage()
+
+    expect(await screen.findByText('跟随系统（当前浅色）')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '深色' }))
+
+    await waitFor(() => {
+      expect(window.journalSettings?.save).toHaveBeenCalledWith({ appearance: 'dark' })
+    })
   })
 
   it('runs manual location and weather diagnostics without rendering coordinates', async () => {
@@ -157,13 +176,16 @@ describe('SettingsPage diagnostics', () => {
 
 function renderSettingsPage() {
   render(
-    <HashRouter>
-      <SettingsPage />
-    </HashRouter>,
+    <DesktopAppearanceProvider>
+      <HashRouter>
+        <SettingsPage />
+      </HashRouter>
+    </DesktopAppearanceProvider>,
   )
 }
 
 function stubDesktopStores(options: {
+  appearance?: 'dark' | 'light' | 'system'
   refreshTodayWeather?: NonNullable<Window['journalStore']>['refreshTodayWeather']
   resolveConflict?: NonNullable<Window['journalSync']>['resolveConflict']
   saveState?: NonNullable<Window['journalSync']>['saveState']
@@ -172,6 +194,7 @@ function stubDesktopStores(options: {
 } = {}) {
   vi.stubGlobal('journalSettings', {
     load: vi.fn().mockResolvedValue({
+      appearance: options.appearance ?? 'system',
       settingsPath: '/Users/zilin/.journal/settings.json',
       settingsStatus: 'ready',
       syncBranch: 'main',
@@ -180,7 +203,16 @@ function stubDesktopStores(options: {
       weatherLocation: '',
       workingDirectory: '/Users/zilin/.journal',
     }),
-    save: vi.fn(),
+    save: vi.fn().mockImplementation((payload: { appearance?: 'dark' | 'light' | 'system' }) => Promise.resolve({
+      appearance: payload.appearance ?? options.appearance ?? 'system',
+      settingsPath: '/Users/zilin/.journal/settings.json',
+      settingsStatus: 'ready',
+      syncBranch: 'main',
+      syncRemoteUrl: options.syncRemoteUrl ?? '',
+      version: 1,
+      weatherLocation: '',
+      workingDirectory: '/Users/zilin/.journal',
+    })),
   } satisfies Window['journalSettings'])
   vi.stubGlobal('journalStore', {
     importImages: vi.fn(),

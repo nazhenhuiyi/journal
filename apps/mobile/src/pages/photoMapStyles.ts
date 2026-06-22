@@ -1,5 +1,6 @@
+import { createContext, useContext } from 'react'
 import { StyleSheet } from 'react-native'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels, type ResolvedSemanticColors } from '@journal/theme'
 import {
   textCardHeight,
   textCardContentGap,
@@ -9,10 +10,35 @@ import {
   textCarouselItemGap,
 } from './photoMapPresentation'
 
-export const photoMapStyles = StyleSheet.create({
+export type PhotoMapStyles = ReturnType<typeof createPhotoMapStyles>
+export type PhotoMapTheme = {
+  colors: ResolvedSemanticColors
+  styles: PhotoMapStyles
+}
+
+const PhotoMapThemeContext = createContext<PhotoMapTheme | null>(null)
+
+export const PhotoMapThemeProvider = PhotoMapThemeContext.Provider
+
+export function usePhotoMapTheme() {
+  const value = useContext(PhotoMapThemeContext)
+
+  if (!value) {
+    throw new Error('usePhotoMapTheme must be used within PhotoMapThemeProvider')
+  }
+
+  return value
+}
+
+export function usePhotoMapStyles() {
+  return usePhotoMapTheme().styles
+}
+
+export function createPhotoMapStyles(colors: ResolvedSemanticColors) {
+  return StyleSheet.create({
   cardNearbyBadge: {
     alignItems: 'center',
-    backgroundColor: semanticColors['primary-soft'],
+    backgroundColor: colors['primary-soft'],
     borderRadius: radiusPixels.full,
     flexShrink: 0,
     justifyContent: 'center',
@@ -22,7 +48,7 @@ export const photoMapStyles = StyleSheet.create({
     paddingVertical: 1,
   },
   cardNearbyBadgeText: {
-    color: semanticColors.primary,
+    color: colors.primary,
     fontSize: 10,
     fontWeight: '700',
     lineHeight: 13,
@@ -51,15 +77,15 @@ export const photoMapStyles = StyleSheet.create({
   },
   emptyMurmurImage: {
     alignItems: 'center',
-    borderColor: semanticColors.border,
+    borderColor: colors.border,
     borderWidth: 1,
     gap: spacingPixels['1.5'],
     justifyContent: 'center',
   },
   emptyMurmurIconBubble: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.full,
     borderWidth: 1,
     height: spacingPixels['8'],
@@ -67,13 +93,13 @@ export const photoMapStyles = StyleSheet.create({
     width: spacingPixels['8'],
   },
   emptyMurmurLineLong: {
-    backgroundColor: semanticColors.border,
+    backgroundColor: colors.border,
     borderRadius: radiusPixels.full,
     height: 3,
     width: 36,
   },
   emptyMurmurLineShort: {
-    backgroundColor: semanticColors.border,
+    backgroundColor: colors.border,
     borderRadius: radiusPixels.full,
     height: 3,
     opacity: 0.72,
@@ -81,13 +107,13 @@ export const photoMapStyles = StyleSheet.create({
   },
   expandedImageMarker: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors['text-quaternary'],
+    backgroundColor: colors.surface,
+    borderColor: colors['text-quaternary'],
     borderRadius: radiusPixels.md,
     borderWidth: 1,
     height: 42,
     justifyContent: 'center',
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 2,
       width: 0,
@@ -97,18 +123,18 @@ export const photoMapStyles = StyleSheet.create({
     width: 42,
   },
   expandedImageMarkerImage: {
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.sm,
     height: 38,
     width: 38,
   },
   expandedTextMarker: {
-    backgroundColor: semanticColors['primary-soft'],
-    borderColor: semanticColors['primary-hover'],
+    backgroundColor: colors['primary-soft'],
+    borderColor: colors['primary-hover'],
     borderRadius: radiusPixels.full,
     borderWidth: 1,
     height: 16,
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 1,
       width: 0,
@@ -118,15 +144,15 @@ export const photoMapStyles = StyleSheet.create({
     width: 16,
   },
   expandedTextMarkerSelected: {
-    backgroundColor: semanticColors.primary,
-    borderColor: semanticColors.surface,
+    backgroundColor: colors.primary,
+    borderColor: colors['primary-foreground'],
     borderWidth: 2,
     height: 22,
     width: 22,
   },
   imageClusterTray: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
     bottom: textCardHeight + spacingPixels['6'],
@@ -135,7 +161,7 @@ export const photoMapStyles = StyleSheet.create({
     paddingVertical: spacingPixels['2.5'],
     position: 'absolute',
     right: spacingPixels['4'],
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 4,
       width: 0,
@@ -145,13 +171,13 @@ export const photoMapStyles = StyleSheet.create({
     zIndex: 4,
   },
   imageClusterTrayImage: {
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.md,
     height: 56,
     width: 56,
   },
   imageClusterTrayItem: {
-    borderColor: semanticColors.border,
+    borderColor: colors.border,
     borderRadius: radiusPixels.md,
     borderWidth: 1,
     height: 58,
@@ -163,8 +189,8 @@ export const photoMapStyles = StyleSheet.create({
     paddingTop: spacingPixels['2'],
   },
   mapFrame: {
-    backgroundColor: semanticColors['surface-muted'],
-    borderColor: semanticColors.border,
+    backgroundColor: colors['surface-muted'],
+    borderColor: colors.border,
     borderRadius: radiusPixels['2xl'],
     borderWidth: 1,
     flex: 1,
@@ -188,8 +214,8 @@ export const photoMapStyles = StyleSheet.create({
     opacity: 0.82,
   },
   mapImageMarkerGroupHalo: {
-    backgroundColor: semanticColors['surface-muted'],
-    borderColor: semanticColors['text-quaternary'],
+    backgroundColor: colors['surface-muted'],
+    borderColor: colors['text-quaternary'],
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
     bottom: 1,
@@ -201,15 +227,15 @@ export const photoMapStyles = StyleSheet.create({
     transform: [{ rotate: '-7deg' }],
   },
   mapImageMarkerImage: {
-    backgroundColor: semanticColors['surface-muted'],
-    borderColor: semanticColors.surface,
+    backgroundColor: colors['surface-muted'],
+    borderColor: colors.surface,
     borderRadius: radiusPixels.md,
     borderWidth: 1,
     height: 38,
     width: 38,
   },
   mapImageMarkerImageSelected: {
-    borderColor: semanticColors.primary,
+    borderColor: colors.primary,
     borderWidth: 1.5,
   },
   mapImageMarkerSelected: {
@@ -218,8 +244,8 @@ export const photoMapStyles = StyleSheet.create({
   },
   mapImageMultiBadge: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors['text-quaternary'],
+    backgroundColor: colors.surface,
+    borderColor: colors['text-quaternary'],
     borderRadius: radiusPixels.full,
     borderWidth: 1,
     height: 16,
@@ -231,52 +257,52 @@ export const photoMapStyles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   mapImageMultiBadgeText: {
-    color: semanticColors['text-secondary'],
+    color: colors['text-secondary'],
     fontSize: 9,
     fontWeight: '700',
     lineHeight: 11,
   },
   mapImageNearbyBadge: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors['text-quaternary'],
+    backgroundColor: colors.surface,
+    borderColor: colors['text-quaternary'],
     height: 18,
     minWidth: 26,
     right: -3,
     top: -3,
   },
   mapImageNearbyBadgeText: {
-    color: semanticColors['text-secondary'],
+    color: colors['text-secondary'],
     fontSize: 9,
     lineHeight: 11,
   },
   mapTextClusterMarker: {
-    backgroundColor: semanticColors['primary-soft'],
-    borderColor: semanticColors['primary-hover'],
+    backgroundColor: colors['primary-soft'],
+    borderColor: colors['primary-hover'],
     height: 30,
     width: 30,
   },
   mapTextClusterMarkerSelected: {
-    backgroundColor: semanticColors.primary,
-    borderColor: semanticColors.surface,
+    backgroundColor: colors.primary,
+    borderColor: colors['primary-foreground'],
   },
   mapTextClusterMarkerText: {
-    color: semanticColors.primary,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '800',
     lineHeight: 14,
   },
   mapTextClusterMarkerTextSelected: {
-    color: semanticColors.surface,
+    color: colors['primary-foreground'],
   },
   mapTextMarker: {
     alignItems: 'center',
-    backgroundColor: semanticColors['primary-soft'],
-    borderColor: semanticColors['primary-hover'],
+    backgroundColor: colors['primary-soft'],
+    borderColor: colors['primary-hover'],
     borderRadius: radiusPixels.full,
     borderWidth: 1,
     height: 12,
     justifyContent: 'center',
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 1,
       width: 0,
@@ -289,16 +315,16 @@ export const photoMapStyles = StyleSheet.create({
     opacity: 1,
   },
   mapTextMarkerSelected: {
-    backgroundColor: semanticColors.primary,
-    borderColor: semanticColors.surface,
+    backgroundColor: colors.primary,
+    borderColor: colors['primary-foreground'],
     borderWidth: 2,
     height: 22,
     width: 22,
   },
   mapSummary: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
     flexDirection: 'row',
@@ -320,7 +346,7 @@ export const photoMapStyles = StyleSheet.create({
     marginTop: spacingPixels['1'],
   },
   mapSummaryTitle: {
-    color: semanticColors['text-tertiary'],
+    color: colors['text-tertiary'],
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
@@ -333,7 +359,7 @@ export const photoMapStyles = StyleSheet.create({
     zIndex: 2,
   },
   mapAttributionText: {
-    color: semanticColors['text-quaternary'],
+    color: colors['text-quaternary'],
     fontSize: 8,
     fontWeight: '500',
     lineHeight: 9,
@@ -365,8 +391,8 @@ export const photoMapStyles = StyleSheet.create({
     borderColor: 'transparent',
   },
   rangeMenu: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.xl,
     borderWidth: 1,
     elevation: 9,
@@ -375,7 +401,7 @@ export const photoMapStyles = StyleSheet.create({
     right: spacingPixels['4'],
     top: spacingPixels['12'] + spacingPixels['1'],
     padding: spacingPixels['1'],
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 8,
       width: 0,
@@ -395,13 +421,13 @@ export const photoMapStyles = StyleSheet.create({
     paddingHorizontal: spacingPixels['3'],
   },
   rangeMenuButtonSelected: {
-    backgroundColor: semanticColors['primary-soft'],
-    borderColor: semanticColors.primary,
+    backgroundColor: colors['primary-soft'],
+    borderColor: colors.primary,
   },
   recenterButton: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.full,
     borderWidth: 1,
     height: spacingPixels['10'],
@@ -409,14 +435,14 @@ export const photoMapStyles = StyleSheet.create({
     width: spacingPixels['10'],
   },
   textCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
     elevation: 1,
     height: textCardHeight,
     overflow: 'hidden',
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 2,
       width: 0,
@@ -426,7 +452,7 @@ export const photoMapStyles = StyleSheet.create({
     width: '100%',
   },
   textCardSelected: {
-    borderColor: semanticColors['primary-hover'],
+    borderColor: colors['primary-hover'],
     shadowOpacity: 0.04,
   },
   textCardInner: {
@@ -445,14 +471,14 @@ export const photoMapStyles = StyleSheet.create({
     width: textCardImageSize,
   },
   textCardImage: {
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.md,
     height: textCardImageSize,
     width: textCardImageSize,
   },
   textCardMurmurText: {
     alignSelf: 'stretch',
-    color: semanticColors['text-secondary'],
+    color: colors['text-secondary'],
     flexShrink: 1,
     fontSize: 13,
     lineHeight: 18,
@@ -523,22 +549,22 @@ export const photoMapStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   overlayMetaText: {
-    color: semanticColors['text-tertiary'],
+    color: colors['text-tertiary'],
     flexShrink: 0,
     fontSize: 11,
     fontWeight: '600',
     lineHeight: 15,
   },
   overlayTitle: {
-    color: semanticColors.foreground,
+    color: colors.foreground,
     flex: 1,
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
   },
   textClusterSheet: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radiusPixels.lg,
     borderWidth: 1,
     bottom: spacingPixels['4'],
@@ -549,7 +575,7 @@ export const photoMapStyles = StyleSheet.create({
     paddingVertical: spacingPixels['2.5'],
     position: 'absolute',
     right: spacingPixels['4'],
-    shadowColor: semanticColors.foreground,
+    shadowColor: colors.foreground,
     shadowOffset: {
       height: 4,
       width: 0,
@@ -559,7 +585,7 @@ export const photoMapStyles = StyleSheet.create({
     zIndex: 5,
   },
   textClusterSheetItem: {
-    borderColor: semanticColors.border,
+    borderColor: colors.border,
     borderRadius: radiusPixels.md,
     borderWidth: 1,
     paddingHorizontal: spacingPixels['3'],
@@ -570,10 +596,11 @@ export const photoMapStyles = StyleSheet.create({
     paddingTop: spacingPixels['2'],
   },
   textClusterSheetText: {
-    color: semanticColors.foreground,
+    color: colors.foreground,
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
     marginTop: spacingPixels['1'],
   },
-})
+  })
+}

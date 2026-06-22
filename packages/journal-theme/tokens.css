@@ -65,17 +65,6 @@
   --color-sidebar-border: var(--color-stone-200);
   --color-sidebar-ring: #a6a09b;
 
-  --color-paper: var(--color-paper-100);
-  --color-ink: var(--color-stone-950);
-  --color-sage: var(--color-teal-700);
-  --color-brass: var(--color-stone-500);
-  --color-canvas: var(--color-paper-100);
-  --color-cloud: var(--color-stone-50);
-  --color-mossMuted: var(--color-teal-700);
-  --color-reed: var(--color-stone-200);
-  --color-skyWash: var(--color-stone-100);
-  --color-soil: var(--color-stone-500);
-
   --radius: 0.625rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -99,4 +88,51 @@
   --space-8: 2rem;
   --space-10: 2.5rem;
   --space-12: 3rem;
+}
+
+.dark,
+[data-theme="dark"] {
+  --color-background: #0c0a09;
+  --color-foreground: #f5f5f4;
+  --color-card: #171412;
+  --color-card-foreground: #f5f5f4;
+  --color-popover: #211d1a;
+  --color-popover-foreground: #f5f5f4;
+  --color-surface: #171412;
+  --color-surface-muted: #211d1a;
+  --color-border: #332c27;
+  --color-border-strong: #4a4038;
+  --color-input: #3f3731;
+  --color-ring: #82766d;
+  --color-primary: #338f84;
+  --color-primary-hover: #5fa9a0;
+  --color-primary-soft: #0e211f;
+  --color-primary-fg: #071917;
+  --color-primary-foreground: #071917;
+  --color-secondary: #211d1a;
+  --color-secondary-foreground: #eee7df;
+  --color-muted: #211d1a;
+  --color-muted-fg: #b7aca4;
+  --color-muted-foreground: #b7aca4;
+  --color-accent: #2a241f;
+  --color-accent-foreground: #f5f5f4;
+  --color-destructive: #ff8a8a;
+  --color-danger: #ff8a8a;
+  --color-success: #62c8b9;
+  --color-info: #7bd4c8;
+  --color-warning: #d7b98a;
+  --color-text-primary: #f5f5f4;
+  --color-text-secondary: #eee7df;
+  --color-text-tertiary: #b7aca4;
+  --color-text-quaternary: #82766d;
+  --color-text-disabled: #5e534b;
+  --color-sidebar: #120f0d;
+  --color-sidebar-foreground: #f5f5f4;
+  --color-sidebar-primary: #4db6a6;
+  --color-sidebar-primary-foreground: #08201d;
+  --color-sidebar-accent: #211d1a;
+  --color-sidebar-accent-foreground: #eee7df;
+  --color-sidebar-border: #332c27;
+  --color-sidebar-ring: #82766d;
+
 }

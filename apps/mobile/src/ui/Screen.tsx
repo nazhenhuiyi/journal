@@ -7,7 +7,7 @@ import {
   type KeyboardAvoidingViewProps,
 } from 'react-native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
-import { semanticColors } from '@journal/theme'
+import { useJournalTheme } from './JournalTheme'
 
 type ScreenProps = {
   bottomColor?: string
@@ -17,26 +17,28 @@ type ScreenProps = {
 }
 
 export function Screen({
-  bottomColor = semanticColors.background,
+  bottomColor,
   children,
   keyboardAvoidingBehavior,
   keyboardAvoidingEnabled = true,
 }: ScreenProps) {
+  const { colors, statusBarStyle } = useJournalTheme()
   const behavior = keyboardAvoidingEnabled
     ? keyboardAvoidingBehavior ?? (Platform.OS === 'ios' ? 'padding' : undefined)
     : undefined
+  const safeBottomColor = bottomColor ?? colors.background
 
   return (
     <SafeAreaProvider
       className="flex-1 bg-background"
-      style={{ backgroundColor: semanticColors.background, flex: 1 }}
+      style={{ backgroundColor: colors.background, flex: 1 }}
     >
       <SafeAreaView
         className="flex-1 bg-background"
         edges={['top']}
-        style={{ backgroundColor: semanticColors.background, flex: 1 }}
+        style={{ backgroundColor: colors.background, flex: 1 }}
       >
-        <StatusBar backgroundColor={semanticColors.background} barStyle="dark-content" translucent={false} />
+        <StatusBar backgroundColor={colors.background} barStyle={statusBarStyle} translucent={false} />
         <View className="flex-1" style={{ flex: 1 }}>
           <KeyboardAvoidingView
             behavior={behavior}
@@ -46,7 +48,7 @@ export function Screen({
           >
             {children}
           </KeyboardAvoidingView>
-          <SafeAreaView edges={['bottom']} style={{ backgroundColor: bottomColor }} />
+          <SafeAreaView edges={['bottom']} style={{ backgroundColor: safeBottomColor }} />
         </View>
       </SafeAreaView>
     </SafeAreaProvider>

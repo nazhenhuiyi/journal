@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   StyleSheet,
@@ -14,7 +14,6 @@ import {
   type CameraRef,
 } from '@maplibre/maplibre-react-native'
 import type { ImageBlock, MurmurBlock } from '@journal/core'
-import { semanticColors } from '@journal/theme'
 import {
   listDailyJournals,
   type MobileJournalRecord,
@@ -50,16 +49,20 @@ import {
 import {
   type PhotoMapImageGalleryPreviewHandler,
   getRangeLabel,
-  openFreeMapStyleUrl,
   routeSourceId,
   textCarouselPeekWidth,
   textCarouselSideInset,
 } from './photoMapPresentation'
-import { photoMapStyles as styles } from './photoMapStyles'
+import { getOpenFreeMapStyleUrl } from './photoMapBasemap'
+import {
+  createPhotoMapStyles,
+  PhotoMapThemeProvider,
+} from './photoMapStyles'
 import { usePhotoMapRuntime } from './usePhotoMapRuntime'
 import { moveCameraToInitialView } from './photoMapCamera'
 import { usePhotoMapInteractions } from './usePhotoMapInteractions'
 import { isPhotoMapTextClusterSelected } from './photoMapViewModel'
+import { useJournalTheme } from '../ui/JournalTheme'
 
 type PhotoMapPageProps = {
   currentMurmurs: MurmurBlock[]
@@ -82,6 +85,10 @@ export function PhotoMapPage({
   sessionSnapshot,
   today,
 }: PhotoMapPageProps) {
+  const { colors, resolvedAppearance } = useJournalTheme()
+  const styles = useMemo(() => createPhotoMapStyles(colors), [colors])
+  const photoMapTheme = useMemo(() => ({ colors, styles }), [colors, styles])
+  const mapStyleUrl = getOpenFreeMapStyleUrl(resolvedAppearance)
   const cameraRef = useRef<CameraRef>(null)
   const appliedInitialCameraKeyRef = useRef<string | null>(null)
   const textCarouselListRef = useRef<FlatList<PhotoMapTextObservation>>(null)
@@ -264,220 +271,222 @@ export function PhotoMapPage({
   }
 
   return (
-    <PageShell
-      contentStyle={styles.photoMapShellContent}
-      headerRight={(
-        <PhotoMapRangeButton
-          isOpen={isRangeMenuOpen}
-          onPress={() => setIsRangeMenuOpen((isOpen) => !isOpen)}
-          range={range}
-        />
-      )}
-      onBack={handleBack}
-      testID="photo-map-page"
-      title="照片地图"
-    >
-      <View className="flex-1">
-        {isRangeMenuOpen ? (
-          <PhotoMapRangeMenu
-            onChange={handleRangeChange}
+    <PhotoMapThemeProvider value={photoMapTheme}>
+      <PageShell
+        contentStyle={styles.photoMapShellContent}
+        headerRight={(
+          <PhotoMapRangeButton
+            isOpen={isRangeMenuOpen}
+            onPress={() => setIsRangeMenuOpen((isOpen) => !isOpen)}
             range={range}
           />
-        ) : null}
-        {isLoading ? (
-          <PhotoMapStatus
-            icon="map-outline"
-            message="正在铺开照片地图"
-            title="读取日记里的照片"
-            variant="loading"
-          />
-        ) : null}
+        )}
+        onBack={handleBack}
+        testID="photo-map-page"
+        title="照片地图"
+      >
+        <View className="flex-1">
+          {isRangeMenuOpen ? (
+            <PhotoMapRangeMenu
+              onChange={handleRangeChange}
+              range={range}
+            />
+          ) : null}
+          {isLoading ? (
+            <PhotoMapStatus
+              icon="map-outline"
+              message="正在铺开照片地图"
+              title="读取日记里的照片"
+              variant="loading"
+            />
+          ) : null}
 
-        {!isLoading && didLoadFail ? (
-          <PhotoMapStatus
-            icon="warning-outline"
-            message="日记读取失败，稍后再试一次。"
-            title="照片地图没有打开"
-          />
-        ) : null}
+          {!isLoading && didLoadFail ? (
+            <PhotoMapStatus
+              icon="warning-outline"
+              message="日记读取失败，稍后再试一次。"
+              title="照片地图没有打开"
+            />
+          ) : null}
 
-        {!isLoading && !didLoadFail && murmurSlices.length === 0 ? (
-          <PhotoMapStatus
-            icon="chatbubble-ellipses-outline"
-            message={`这个${getRangeLabel(range)}还没有碎碎念。`}
-            title="还没有可浏览的碎碎念"
-          />
-        ) : null}
+          {!isLoading && !didLoadFail && murmurSlices.length === 0 ? (
+            <PhotoMapStatus
+              icon="chatbubble-ellipses-outline"
+              message={`这个${getRangeLabel(range)}还没有碎碎念。`}
+              title="还没有可浏览的碎碎念"
+            />
+          ) : null}
 
-        {!isLoading && !didLoadFail && murmurSlices.length > 0 && mappableObservationCount === 0 ? (
-          <PhotoMapStatus
-            icon="location-outline"
-            message={`${murmurSlices.length} 条内容还没有经纬度。`}
-            title="还没有带定位的内容"
-          />
-        ) : null}
+          {!isLoading && !didLoadFail && murmurSlices.length > 0 && mappableObservationCount === 0 ? (
+            <PhotoMapStatus
+              icon="location-outline"
+              message={`${murmurSlices.length} 条内容还没有经纬度。`}
+              title="还没有带定位的内容"
+            />
+          ) : null}
 
-        {!isLoading && !didLoadFail && mappableObservationCount > 0 ? (
-          <View onLayout={handleMapFrameLayout} style={styles.mapFrame}>
-            <MapLibreMap
-              attribution={false}
-              compass={false}
-              logo={false}
-              mapStyle={openFreeMapStyleUrl}
-              onDidFinishLoadingMap={() => setMapReadyGeneration((generation) => generation + 1)}
-              onPress={handleMapPress}
-              scaleBar={false}
-              style={StyleSheet.absoluteFill}
-            >
-              <Camera
-                maxZoom={17}
-                minZoom={2}
-                ref={cameraRef}
-              />
-              <GeoJSONSource
-                data={routeFeatures}
-                id={routeSourceId}
+          {!isLoading && !didLoadFail && mappableObservationCount > 0 ? (
+            <View onLayout={handleMapFrameLayout} style={styles.mapFrame}>
+              <MapLibreMap
+                attribution={false}
+                compass={false}
+                logo={false}
+                mapStyle={mapStyleUrl}
+                onDidFinishLoadingMap={() => setMapReadyGeneration((generation) => generation + 1)}
+                onPress={handleMapPress}
+                scaleBar={false}
+                style={StyleSheet.absoluteFill}
               >
-                <Layer
-                  id="photo-map-murmur-route-shadow"
-                  paint={{
-                    'line-color': semanticColors.surface,
-                    'line-opacity': 0.48,
-                    'line-width': 3,
-                  }}
-                  type="line"
+                <Camera
+                  maxZoom={17}
+                  minZoom={2}
+                  ref={cameraRef}
                 />
-                <Layer
-                  id="photo-map-murmur-route"
-                  paint={{
-                    'line-color': semanticColors.primary,
-                    'line-opacity': 0.16,
-                    'line-width': 1.5,
-                  }}
-                  type="line"
+                <GeoJSONSource
+                  data={routeFeatures}
+                  id={routeSourceId}
+                >
+                  <Layer
+                    id="photo-map-murmur-route-shadow"
+                    paint={{
+                      'line-color': colors.surface,
+                      'line-opacity': 0.48,
+                      'line-width': 3,
+                    }}
+                    type="line"
+                  />
+                  <Layer
+                    id="photo-map-murmur-route"
+                    paint={{
+                      'line-color': colors.primary,
+                      'line-opacity': 0.22,
+                      'line-width': 1.5,
+                    }}
+                    type="line"
+                  />
+                </GeoJSONSource>
+                {visibleImageClusters.map((cluster) => (
+                  <PhotoMapImageClusterMarker
+                    cluster={cluster}
+                    isExpanded={cluster.id === activeImageCluster?.id}
+                    isSelected={cluster.id === activeImageCluster?.id}
+                    key={cluster.id}
+                    onSelect={selectImageClusterFromMarker}
+                  />
+                ))}
+                {visibleTextClusters.map((cluster) => (
+                  <PhotoMapTextClusterMarker
+                    cluster={cluster}
+                    isExpanded={cluster.id === activeTextCluster?.id}
+                    isSelected={isPhotoMapTextClusterSelected(cluster, focusedTextObservation?.id)}
+                    key={cluster.id}
+                    onSelect={selectTextClusterFromMarker}
+                  />
+                ))}
+                {activeImageCluster ? (
+                  <PhotoMapExpandedImageMarkers
+                    activationKey={interactionFocus.imageActivationKey}
+                    cluster={activeImageCluster}
+                    motion={interactionFocus.imageMotion}
+                    onPreviewClusterImageGallery={previewImageGalleryFromImageGroupOverlay}
+                  />
+                ) : null}
+                {activeTextCluster ? (
+                  <PhotoMapExpandedTextMarkers
+                    activationKey={interactionFocus.textActivationKey}
+                    cluster={activeTextCluster}
+                    motion={interactionFocus.textMotion}
+                    onSelect={(observation) => selectTextObservationInsideCluster(activeTextCluster, observation)}
+                    selectedTextId={focusedTextObservation?.id}
+                  />
+                ) : null}
+              </MapLibreMap>
+
+              <View style={styles.mapTopPanel}>
+                <PhotoMapSummaryCard
+                  imageCount={totalImageCount}
+                  murmurCount={murmurCount}
+                  onRecenter={recenterToInitialMapContent}
+                  range={range}
                 />
-              </GeoJSONSource>
-              {visibleImageClusters.map((cluster) => (
-                <PhotoMapImageClusterMarker
-                  cluster={cluster}
-                  isExpanded={cluster.id === activeImageCluster?.id}
-                  isSelected={cluster.id === activeImageCluster?.id}
-                  key={cluster.id}
-                  onSelect={selectImageClusterFromMarker}
-                />
-              ))}
-              {visibleTextClusters.map((cluster) => (
-                <PhotoMapTextClusterMarker
-                  cluster={cluster}
-                  isExpanded={cluster.id === activeTextCluster?.id}
-                  isSelected={isPhotoMapTextClusterSelected(cluster, focusedTextObservation?.id)}
-                  key={cluster.id}
-                  onSelect={selectTextClusterFromMarker}
-                />
-              ))}
-              {activeImageCluster ? (
-                <PhotoMapExpandedImageMarkers
+              </View>
+
+              <View pointerEvents="none" style={styles.mapAttribution}>
+                <Text style={styles.mapAttributionText}>© OpenMapTiles · OpenStreetMap</Text>
+              </View>
+
+              {activeImageCluster && activeImageCluster.items.length > 1 ? (
+                <PhotoMapImageClusterTray
                   activationKey={interactionFocus.imageActivationKey}
                   cluster={activeImageCluster}
                   motion={interactionFocus.imageMotion}
+                  onGuardMapPress={guardOverlayMapPress}
                   onPreviewClusterImageGallery={previewImageGalleryFromImageGroupOverlay}
                 />
               ) : null}
-              {activeTextCluster ? (
-                <PhotoMapExpandedTextMarkers
+
+              {isTextClusterSheetVisible && activeTextCluster ? (
+                <PhotoMapTextClusterSheet
                   activationKey={interactionFocus.textActivationKey}
                   cluster={activeTextCluster}
+                  onGuardMapPress={guardOverlayMapPress}
                   motion={interactionFocus.textMotion}
-                  onSelect={(observation) => selectTextObservationInsideCluster(activeTextCluster, observation)}
-                  selectedTextId={focusedTextObservation?.id}
+                  onPressDayItem={openDayFromTextClusterSheet}
                 />
               ) : null}
-            </MapLibreMap>
 
-            <View style={styles.mapTopPanel}>
-              <PhotoMapSummaryCard
-                imageCount={totalImageCount}
-                murmurCount={murmurCount}
-                onRecenter={recenterToInitialMapContent}
-                range={range}
-              />
+              {textObservations.length > 0 && !isTextClusterSheetVisible ? (
+                <View pointerEvents="box-none" style={styles.textCardTray}>
+                  <FlatList
+                    contentContainerStyle={[
+                      styles.textCarouselListContent,
+                      {
+                        paddingLeft: textCarouselSideInset,
+                        paddingRight: textCarouselSideInset + textCarouselPeekWidth,
+                      },
+                    ]}
+                    data={textObservations}
+                    decelerationRate="fast"
+                    disableIntervalMomentum
+                    getItemLayout={(_, index) => ({
+                      index,
+                      length: textCarouselItemWidth,
+                      offset: textCarouselItemWidth * index,
+                    })}
+                    horizontal
+                    keyExtractor={(observation) => observation.id}
+                    onMomentumScrollEnd={handleTextCarouselMomentumEnd}
+                    onScrollBeginDrag={handleTextCarouselScrollBeginDrag}
+                    onScrollEndDrag={handleTextCarouselScrollEndDrag}
+                    ref={textCarouselListRef}
+                    renderItem={({ item: observation }) => (
+                      <View style={[styles.textCarouselPage, { width: textCarouselItemWidth }]}>
+                        <PhotoMapTextCard
+                          isSelected={observation.id === focusedTextObservation?.id}
+                          nearbyCluster={textClusterByObservationId.get(observation.id) ?? null}
+                          observation={observation}
+                          onOpenDay={openDayFromTextCard}
+                          onOpenNearbyCluster={selectTextClusterFromCard}
+                          onPreviewImageGallery={previewImageGalleryFromTextCard}
+                          onPreviewImage={previewImageFromTextCard}
+                        />
+                      </View>
+                    )}
+                    showsHorizontalScrollIndicator={false}
+                    snapToAlignment="start"
+                    snapToInterval={textCarouselItemWidth}
+                    style={[
+                      styles.textCarouselList,
+                      { width: textCarouselWidth },
+                    ]}
+                    testID="photo-map-text-carousel"
+                  />
+                </View>
+              ) : null}
             </View>
-
-            <View pointerEvents="none" style={styles.mapAttribution}>
-              <Text style={styles.mapAttributionText}>© OpenMapTiles · OpenStreetMap</Text>
-            </View>
-
-            {activeImageCluster && activeImageCluster.items.length > 1 ? (
-              <PhotoMapImageClusterTray
-                activationKey={interactionFocus.imageActivationKey}
-                cluster={activeImageCluster}
-                motion={interactionFocus.imageMotion}
-                onGuardMapPress={guardOverlayMapPress}
-                onPreviewClusterImageGallery={previewImageGalleryFromImageGroupOverlay}
-              />
-            ) : null}
-
-            {isTextClusterSheetVisible && activeTextCluster ? (
-              <PhotoMapTextClusterSheet
-                activationKey={interactionFocus.textActivationKey}
-                cluster={activeTextCluster}
-                onGuardMapPress={guardOverlayMapPress}
-                motion={interactionFocus.textMotion}
-                onPressDayItem={openDayFromTextClusterSheet}
-              />
-            ) : null}
-
-            {textObservations.length > 0 && !isTextClusterSheetVisible ? (
-              <View pointerEvents="box-none" style={styles.textCardTray}>
-                <FlatList
-                  contentContainerStyle={[
-                    styles.textCarouselListContent,
-                    {
-                      paddingLeft: textCarouselSideInset,
-                      paddingRight: textCarouselSideInset + textCarouselPeekWidth,
-                    },
-                  ]}
-                  data={textObservations}
-                  decelerationRate="fast"
-                  disableIntervalMomentum
-                  getItemLayout={(_, index) => ({
-                    index,
-                    length: textCarouselItemWidth,
-                    offset: textCarouselItemWidth * index,
-                  })}
-                  horizontal
-                  keyExtractor={(observation) => observation.id}
-                  onMomentumScrollEnd={handleTextCarouselMomentumEnd}
-                  onScrollBeginDrag={handleTextCarouselScrollBeginDrag}
-                  onScrollEndDrag={handleTextCarouselScrollEndDrag}
-                  ref={textCarouselListRef}
-                  renderItem={({ item: observation }) => (
-                    <View style={[styles.textCarouselPage, { width: textCarouselItemWidth }]}>
-                      <PhotoMapTextCard
-                        isSelected={observation.id === focusedTextObservation?.id}
-                        nearbyCluster={textClusterByObservationId.get(observation.id) ?? null}
-                        observation={observation}
-                        onOpenDay={openDayFromTextCard}
-                        onOpenNearbyCluster={selectTextClusterFromCard}
-                        onPreviewImageGallery={previewImageGalleryFromTextCard}
-                        onPreviewImage={previewImageFromTextCard}
-                      />
-                    </View>
-                  )}
-                  showsHorizontalScrollIndicator={false}
-                  snapToAlignment="start"
-                  snapToInterval={textCarouselItemWidth}
-                  style={[
-                    styles.textCarouselList,
-                    { width: textCarouselWidth },
-                  ]}
-                  testID="photo-map-text-carousel"
-                />
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-    </PageShell>
+          ) : null}
+        </View>
+      </PageShell>
+    </PhotoMapThemeProvider>
   )
 }

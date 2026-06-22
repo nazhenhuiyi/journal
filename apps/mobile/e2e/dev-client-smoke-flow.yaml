@@ -10,6 +10,10 @@ appId: ${APP_ID}
       id: back-to-today-button
     timeout: 10000
 - tapOn:
+    id: appearance-option-dark
+- assertVisible:
+    id: appearance-option-dark
+- tapOn:
     id: back-to-today-button
 - assertVisible:
     id: journal-list-button

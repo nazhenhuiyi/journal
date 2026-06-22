@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 export type JournalSettings = {
+  appearance: JournalAppearance
   syncBranch: string
   syncRemoteUrl: string
   version: 1
@@ -17,6 +18,7 @@ export type JournalSettingsFile = JournalSettings & {
 }
 
 export type SaveJournalSettingsPayload = {
+  appearance?: unknown
   syncBranch?: unknown
   syncRemoteUrl?: unknown
   weatherLocation?: unknown
@@ -25,6 +27,7 @@ export type SaveJournalSettingsPayload = {
 const SETTINGS_VERSION = 1
 const SETTINGS_FILE_NAME = 'settings.json'
 export type JournalSettingsStatus = 'corrupt' | 'created' | 'ready'
+export type JournalAppearance = 'dark' | 'light' | 'system'
 
 type ReadJsonFileResult =
   | {
@@ -40,6 +43,7 @@ type ReadJsonFileResult =
     }
 
 export const defaultJournalSettings: JournalSettings = {
+  appearance: 'system',
   syncBranch: 'main',
   syncRemoteUrl: '',
   version: SETTINGS_VERSION,
@@ -104,6 +108,7 @@ function normalizeJournalSettings(value: unknown): JournalSettings {
   }
 
   return {
+    appearance: normalizeAppearance(value.appearance),
     version: SETTINGS_VERSION,
     syncBranch: normalizeSyncBranch(value.syncBranch) ?? defaultJournalSettings.syncBranch,
     syncRemoteUrl: normalizeSyncRemoteUrl(value.syncRemoteUrl) ?? defaultJournalSettings.syncRemoteUrl,
@@ -113,6 +118,9 @@ function normalizeJournalSettings(value: unknown): JournalSettings {
 
 function normalizeSavePayload(payload: unknown, currentSettings: JournalSettings): JournalSettings {
   const payloadRecord = isRecord(payload) ? payload : {}
+  const appearance = payloadRecord.appearance === undefined
+    ? currentSettings.appearance
+    : normalizeAppearance(payloadRecord.appearance)
   const syncBranch = payloadRecord.syncBranch === undefined
     ? currentSettings.syncBranch
     : normalizeSyncBranch(payloadRecord.syncBranch)
@@ -136,11 +144,16 @@ function normalizeSavePayload(payload: unknown, currentSettings: JournalSettings
   }
 
   return {
+    appearance,
     syncBranch,
     syncRemoteUrl,
     version: SETTINGS_VERSION,
     weatherLocation: weatherLocation ?? '',
   }
+}
+
+function normalizeAppearance(value: unknown): JournalAppearance {
+  return value === 'dark' || value === 'light' || value === 'system' ? value : 'system'
 }
 
 function normalizeSyncBranch(value: unknown) {

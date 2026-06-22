@@ -33,15 +33,27 @@ describe('JournalMomentAndroidWidget', () => {
       title: '此刻的天空',
       version: 1,
     }) as {
-      props: {
-        clickAction?: string
-        clickActionData?: { uri?: string }
+      light: {
+        props: {
+          clickAction?: string
+          clickActionData?: { uri?: string }
+        }
+      }
+      dark: {
+        props: {
+          style?: {
+            backgroundColor?: string
+          }
+        }
       }
     }
 
-    expect(widget.props.clickAction).toBe('OPEN_URI')
-    expect(widget.props.clickActionData).toEqual({
+    expect(widget.light.props.clickAction).toBe('OPEN_URI')
+    expect(widget.light.props.clickActionData).toEqual({
       uri: 'journal://write?theme=sky-now',
+    })
+    expect(widget.dark.props.style).toMatchObject({
+      backgroundColor: '#171412',
     })
   })
 
@@ -62,16 +74,18 @@ describe('JournalMomentAndroidWidget', () => {
       widgetName: androidJournalCompactWidgetName,
       width: 220,
     } as Parameters<typeof renderJournalMomentAndroidWidget>[1]) as {
+      light: {
       props: {
-        style?: {
-          borderRadius?: number
-          paddingHorizontal?: number
-          paddingVertical?: number
+          style?: {
+            borderRadius?: number
+            paddingHorizontal?: number
+            paddingVertical?: number
+          }
         }
       }
     }
 
-    expect(widget.props.style).toMatchObject({
+    expect(widget.light.props.style).toMatchObject({
       borderRadius: 18,
       paddingHorizontal: 14,
       paddingVertical: 10,

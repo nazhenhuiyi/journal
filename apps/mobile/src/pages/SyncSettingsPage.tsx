@@ -1,6 +1,6 @@
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useMemo } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels, type ResolvedSemanticColors } from '@journal/theme'
 import {
   getJournalSyncBlockPresentation,
   type JournalGitConflictResolutionStrategy,
@@ -8,11 +8,18 @@ import {
 } from '@journal/sync'
 import { Button } from '../ui/Button'
 import { ListGroup, ListRow } from '../ui/ListRow'
+import { useJournalTheme } from '../ui/JournalTheme'
 import { Section } from '../ui/Section'
 import type { MobileGitSyncStatus } from '../services/sync'
 import { PageShell } from './PageShell'
 
 const recentCommitDisplayLimit = 3
+
+function useSyncSettingsStyles() {
+  const { colors } = useJournalTheme()
+
+  return useMemo(() => createSyncSettingsStyles(colors), [colors])
+}
 
 type SyncSettingsPageProps = {
   gitStatus: MobileGitSyncStatus | null
@@ -49,6 +56,8 @@ export function SyncSettingsPage({
   syncSnapshot,
   syncStatusLabel,
 }: SyncSettingsPageProps) {
+  const styles = useSyncSettingsStyles()
+
   useEffect(() => {
     void onRefreshGitStatus()
   }, [onRefreshGitStatus])
@@ -271,6 +280,8 @@ function CommitRow({
   commit: MobileGitSyncStatus['recentCommits'][number]
   divider?: boolean
 }) {
+  const styles = useSyncSettingsStyles()
+
   return (
     <View style={[styles.commitRow, divider ? styles.divider : null]}>
       <View style={styles.commitSummary}>
@@ -324,6 +335,8 @@ function ConflictSide({
   testID?: string
   value: string
 }) {
+  const styles = useSyncSettingsStyles()
+
   return (
     <View style={styles.conflictSide}>
       <Text className="text-xs font-semibold leading-5 text-text-tertiary">
@@ -345,6 +358,8 @@ function MessageRow({
   danger?: boolean
   divider?: boolean
 }) {
+  const styles = useSyncSettingsStyles()
+
   return (
     <View style={[styles.messageRow, divider ? styles.divider : null]}>
       <Text className={danger ? 'text-sm leading-5 text-danger' : 'text-sm leading-5 text-text-tertiary'}>
@@ -412,16 +427,17 @@ function formatPendingReason(value: string | null) {
   return value
 }
 
-const styles = StyleSheet.create({
+function createSyncSettingsStyles(colors: ResolvedSemanticColors) {
+  return StyleSheet.create({
   actionCard: {
-    backgroundColor: semanticColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radiusPixels.lg,
     gap: spacingPixels['2.5'],
     padding: spacingPixels['4'],
   },
   blockCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.danger,
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
     borderRadius: radiusPixels.lg,
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacingPixels['2.5'],
@@ -445,7 +461,7 @@ const styles = StyleSheet.create({
     gap: spacingPixels['2.5'],
   },
   conflictPreview: {
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.md,
     gap: spacingPixels['2'],
     padding: spacingPixels['3'],
@@ -460,7 +476,7 @@ const styles = StyleSheet.create({
     gap: spacingPixels['7'],
   },
   divider: {
-    borderTopColor: semanticColors.border,
+    borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   messageRow: {
@@ -468,13 +484,13 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   pathList: {
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.md,
     gap: spacingPixels['1'],
     padding: spacingPixels['3'],
   },
   promptCard: {
-    backgroundColor: semanticColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radiusPixels.lg,
     gap: spacingPixels['2.5'],
     padding: spacingPixels['4'],
@@ -488,4 +504,5 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacingPixels['7'],
   },
-})
+  })
+}

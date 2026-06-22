@@ -1,19 +1,8 @@
 const themeTokens = require('../../packages/journal-theme/tokens.json')
 
-function resolveTokenValue(value) {
-  const match = /^\{([a-z]+)\.(\d+)\}$/.exec(value)
-
-  if (!match) {
-    return value
-  }
-
-  const [, family, shade] = match
-  return themeTokens.primitive[family][shade]
-}
-
-function resolveTokenMap(tokenMap) {
+function semanticColorVariableMap(tokenMap) {
   return Object.fromEntries(
-    Object.entries(tokenMap).map(([name, value]) => [name, resolveTokenValue(value)]),
+    Object.keys(tokenMap).map((name) => [name, `rgb(var(--color-${name}) / <alpha-value>)`]),
   )
 }
 
@@ -23,13 +12,13 @@ module.exports = {
     './index.ts',
     './src/**/*.{ts,tsx}',
   ],
+  darkMode: 'class',
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
       colors: {
         ...themeTokens.primitive,
-        ...resolveTokenMap(themeTokens.semantic),
-        ...resolveTokenMap(themeTokens.legacy),
+        ...semanticColorVariableMap(themeTokens.semantic),
       },
       borderRadius: themeTokens.radius,
       spacing: themeTokens.spacing,

@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { StyleSheet, TextInput, type TextInputProps } from 'react-native'
-import { semanticColors } from '@journal/theme'
+import { TextInput, type TextInputProps } from 'react-native'
 import { cn } from './cn'
+import { useJournalTheme } from './JournalTheme'
 
 type InputProps = TextInputProps & {
   className?: string
@@ -18,11 +18,12 @@ export function Input({
   className,
   onBlur,
   onFocus,
-  placeholderTextColor = semanticColors['text-quaternary'],
+  placeholderTextColor,
   style,
   variant = 'box',
   ...props
 }: InputProps) {
+  const { colors } = useJournalTheme()
   const [isFocused, setIsFocused] = useState(false)
 
   return (
@@ -36,22 +37,13 @@ export function Input({
         setIsFocused(true)
         onFocus?.(event)
       }}
-      placeholderTextColor={placeholderTextColor}
+      placeholderTextColor={placeholderTextColor ?? colors['text-quaternary']}
       style={[
-        isFocused && variant === 'box' ? styles.focusedBox : null,
-        isFocused && variant === 'line' ? styles.focusedLine : null,
+        isFocused && variant === 'box' ? { borderColor: colors.ring } : null,
+        isFocused && variant === 'line' ? { borderBottomColor: colors.ring } : null,
         style,
       ]}
       {...props}
     />
   )
 }
-
-const styles = StyleSheet.create({
-  focusedBox: {
-    borderColor: semanticColors.ring,
-  },
-  focusedLine: {
-    borderBottomColor: semanticColors.ring,
-  },
-})

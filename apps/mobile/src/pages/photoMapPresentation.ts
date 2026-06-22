@@ -20,7 +20,6 @@ export type PhotoMapRangeOption = {
 }
 
 export const routeSourceId = 'journal-photo-map-murmur-route'
-export const openFreeMapStyleUrl = 'https://tiles.openfreemap.org/styles/positron'
 export const rangeOptions: PhotoMapRangeOption[] = [
   { label: '1周', value: '7d' },
   { label: '2周', value: '14d' },

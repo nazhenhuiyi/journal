@@ -12,12 +12,13 @@ import {
   type ImageBlock,
   type MurmurBlock,
 } from '@journal/core'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels } from '@journal/theme'
 import {
   loadDailyJournal,
   type MobileJournalRecord,
 } from '../services/mobileJournalStore'
 import { useJournalImageThumbnailUri } from '../services/mobileImageThumbnails'
+import { useJournalTheme } from '../ui/JournalTheme'
 import { PageShell } from './PageShell'
 
 type ReviewDayPageProps = {
@@ -165,6 +166,7 @@ function ReadonlyMurmurImage({
 }) {
   const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
+  const { colors } = useJournalTheme()
 
   return (
     <View className="gap-2">
@@ -182,7 +184,7 @@ function ReadonlyMurmurImage({
           source={{ uri: imageUri }}
           style={{
             aspectRatio: 4 / 3,
-            backgroundColor: semanticColors['surface-muted'],
+            backgroundColor: colors['surface-muted'],
             borderRadius: radiusPixels.xl,
             width: '100%',
           }}

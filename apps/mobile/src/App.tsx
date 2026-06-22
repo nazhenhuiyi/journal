@@ -22,7 +22,7 @@ import {
   type ImageBlock,
   type MurmurBlock,
 } from '@journal/core'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels } from '@journal/theme'
 import {
   getJournalSyncStatusPresentation,
   type JournalSyncStatusTone,
@@ -44,6 +44,7 @@ import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
 import { cn } from './ui/cn'
 import { ImagePreviewModal, type ImagePreviewModalItem } from './ui/ImagePreviewModal'
+import { JournalThemeProvider, useJournalTheme } from './ui/JournalTheme'
 import { JournalListPage } from './pages/JournalListPage'
 import { PhotoMapPage } from './pages/PhotoMapPage'
 import type { PhotoMapSessionSnapshot } from './pages/photoMapInteraction'
@@ -222,10 +223,15 @@ export default function App() {
     return null
   }
 
-  return <JournalApp />
+  return (
+    <JournalThemeProvider>
+      <JournalApp />
+    </JournalThemeProvider>
+  )
 }
 
 function JournalApp() {
+  const { colors } = useJournalTheme()
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null)
   const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
   const hasRequestedInitialUrlRef = useRef(false)
@@ -706,10 +712,10 @@ function JournalApp() {
         }}
         ref={navigationRef}
       >
-      <Stack.Navigator
+        <Stack.Navigator
         screenOptions={{
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: semanticColors.background },
+          contentStyle: { backgroundColor: colors.background },
           gestureEnabled: true,
           headerShown: false,
         }}
@@ -717,7 +723,7 @@ function JournalApp() {
         <Stack.Screen name="Today">
           {({ navigation }) => (
             <Screen
-              bottomColor={semanticColors.surface}
+              bottomColor={colors.surface}
               keyboardAvoidingEnabled={false}
             >
               {homeMode === 'murmur' ? (
@@ -978,6 +984,8 @@ function LongEntryStatusButton({
   longEntryMarkdown: string
   onPress: () => void
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <Pressable
       accessibilityLabel="打开长文"
@@ -989,7 +997,7 @@ function LongEntryStatusButton({
       })}
       testID="long-entry-summary-button"
     >
-      <Ionicons color={semanticColors['text-tertiary']} name="document-text-outline" size={17} />
+      <Ionicons color={colors['text-tertiary']} name="document-text-outline" size={17} />
       <Text className="shrink text-xs font-semibold text-text-tertiary" numberOfLines={1}>
         {formatLongEntryStatusLabel(longEntryMarkdown)}
       </Text>
@@ -1058,9 +1066,11 @@ function LongEntryPage({
   onChangeLongEntry: (value: string) => void
   paperHeaderLine: string
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <Screen
-      bottomColor={semanticColors.surface}
+      bottomColor={colors.surface}
       keyboardAvoidingEnabled={false}
     >
       <KeyboardAwareScrollView
@@ -1096,6 +1106,8 @@ function SimplePageTopBar({
   onBack: () => void
   title: string
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View className="flex-row items-center px-5">
       <Pressable
@@ -1107,7 +1119,7 @@ function SimplePageTopBar({
           opacity: pressed ? 0.72 : 1,
         })}
       >
-        <Ionicons color={semanticColors['text-tertiary']} name="chevron-back" size={24} />
+        <Ionicons color={colors['text-tertiary']} name="chevron-back" size={24} />
       </Pressable>
       <Text
         className="flex-1 text-lg font-semibold text-foreground"
@@ -1157,6 +1169,8 @@ function MurmurPage({
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <PageShell onBack={onBack} title="碎碎念">
       <KeyboardAwareScrollView
@@ -1210,6 +1224,8 @@ function LongEntryPaper({
   paperHeaderLine: string
   rightAction?: ReactNode
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View
       className="flex-1 rounded-lg bg-surface"
@@ -1249,7 +1265,7 @@ function LongEntryPaper({
           isLongEntryFocusedRef.current = true
         }}
         placeholder="写一点今天真正留下来的东西。"
-        placeholderTextColor={semanticColors['text-quaternary']}
+        placeholderTextColor={colors['text-quaternary']}
         scrollEnabled
         spellCheck={false}
         style={{
@@ -1317,6 +1333,8 @@ function TodayMurmurMode({
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <KeyboardAwareScrollView
       bottomOffset={spacingPixels['8']}
@@ -1470,6 +1488,8 @@ function MurmurComposer({
   onImportImages: (source: ImageImportSource) => void
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View>
       <View
@@ -1504,7 +1524,7 @@ function MurmurComposer({
           }}
           onChangeText={onChangeMurmurDraft}
           placeholder={murmurCount === 0 ? '比如：刚刚想到的一句话。' : '再补一句碎碎念。'}
-          placeholderTextColor={semanticColors['text-quaternary']}
+          placeholderTextColor={colors['text-quaternary']}
           scrollEnabled={false}
           style={{
             height: murmurDraftInputHeight,
@@ -1597,6 +1617,8 @@ function ThemeSelectionBanner({
   label: string
   onClear: () => void
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View className="mb-4 flex-row items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-2">
       <Text className="shrink text-sm font-semibold text-foreground">
@@ -1611,7 +1633,7 @@ function ThemeSelectionBanner({
           opacity: pressed ? 0.72 : 1,
         })}
       >
-        <Ionicons color={semanticColors['text-tertiary']} name="close" size={16} />
+        <Ionicons color={colors['text-tertiary']} name="close" size={16} />
       </Pressable>
     </View>
   )
@@ -1628,6 +1650,8 @@ function TopNavButton({
   onPress: () => void
   testID?: string
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <Pressable
       accessibilityLabel={label}
@@ -1639,7 +1663,7 @@ function TopNavButton({
       })}
       testID={testID}
     >
-      <Ionicons color={semanticColors['text-tertiary']} name={icon} size={19} />
+      <Ionicons color={colors['text-tertiary']} name={icon} size={19} />
     </Pressable>
   )
 }
@@ -1655,6 +1679,8 @@ function HeaderIconButton({
   onPress: () => void
   testID?: string
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <Pressable
       accessibilityLabel={label}
@@ -1666,7 +1692,7 @@ function HeaderIconButton({
       })}
       testID={testID}
     >
-      <Ionicons color={semanticColors['text-tertiary']} name={icon} size={15} />
+      <Ionicons color={colors['text-tertiary']} name={icon} size={15} />
     </Pressable>
   )
 }
@@ -1680,6 +1706,8 @@ function InlineStatusButton({
   status: HeaderStatus
   testID?: string
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -1709,6 +1737,8 @@ function MurmurItem({
   onEdit: () => void
   onPreviewImage: (image: ImageBlock) => void
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View
       className="border border-border bg-surface px-4 py-4"
@@ -1727,7 +1757,7 @@ function MurmurItem({
           })}
           testID="murmur-edit-button"
         >
-          <Ionicons color={semanticColors['text-tertiary']} name="create-outline" size={17} />
+          <Ionicons color={colors['text-tertiary']} name="create-outline" size={17} />
         </Pressable>
       </View>
       {murmur.body.trim() ? (
@@ -1768,6 +1798,7 @@ function MurmurImageItem({
 }) {
   const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
+  const { colors } = useJournalTheme()
 
   return (
     <View className="gap-2">
@@ -1785,7 +1816,7 @@ function MurmurImageItem({
           source={{ uri: imageUri }}
           style={{
             aspectRatio: 4 / 3,
-            backgroundColor: semanticColors['surface-muted'],
+            backgroundColor: colors['surface-muted'],
             borderRadius: radiusPixels.xl,
             width: '100%',
           }}
@@ -1823,6 +1854,8 @@ function MurmurEditPanel({
   onTakePhoto: (murmurId: string) => void
   onUpdateImageCaption: (murmurId: string, imageId: string, caption: string) => void
 }) {
+  const { colors } = useJournalTheme()
+
   return (
     <View className="flex-1">
       <View className="mb-5 flex-row items-start justify-between gap-4">
@@ -1867,7 +1900,7 @@ function MurmurEditPanel({
               multiline
               onChangeText={(value) => onChangeBody(murmur.id, value)}
               placeholder="写下这条碎碎念。"
-              placeholderTextColor={semanticColors['text-quaternary']}
+              placeholderTextColor={colors['text-quaternary']}
               scrollEnabled={false}
               style={{
                 margin: 0,
@@ -1958,6 +1991,7 @@ function MurmurEditableImageItem({
 }) {
   const imageUri = useJournalImageThumbnailUri(image.src)
   const imageLabel = image.caption?.trim() || '碎碎念图片'
+  const { colors } = useJournalTheme()
 
   return (
     <View
@@ -1978,7 +2012,7 @@ function MurmurEditableImageItem({
           source={{ uri: imageUri }}
           style={{
             aspectRatio: 4 / 3,
-            backgroundColor: semanticColors['surface-muted'],
+            backgroundColor: colors['surface-muted'],
             borderRadius: radiusPixels.xl,
             width: '100%',
           }}
@@ -1990,7 +2024,7 @@ function MurmurEditableImageItem({
           className="min-h-11 flex-1 rounded-lg border border-border bg-surface-muted px-3 text-sm text-foreground"
           onChangeText={(value) => onUpdateCaption(murmurId, image.id, value)}
           placeholder="给这张图留一句说明"
-          placeholderTextColor={semanticColors['text-quaternary']}
+          placeholderTextColor={colors['text-quaternary']}
           style={{ minWidth: 0 }}
           testID="murmur-edit-image-caption-input"
           value={image.caption ?? ''}
@@ -2004,7 +2038,7 @@ function MurmurEditableImageItem({
             opacity: pressed ? 0.72 : 1,
           })}
         >
-          <Ionicons color={semanticColors.danger} name="trash-outline" size={17} />
+          <Ionicons color={colors.danger} name="trash-outline" size={17} />
         </Pressable>
       </View>
     </View>

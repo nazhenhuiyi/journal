@@ -18,6 +18,30 @@ import {
 } from '@expo/ui/swift-ui/modifiers'
 import { createWidget, type WidgetEnvironment } from 'expo-widgets'
 import type { JournalWidgetSnapshot } from '@journal/core'
+import { getSemanticColors, type SemanticColorScheme } from '@journal/theme'
+
+function getWidgetPalette(scheme: SemanticColorScheme, mode: JournalWidgetSnapshot['mode']) {
+  const colors = getSemanticColors(scheme)
+  const accent = mode === 'review-moment'
+    ? scheme === 'dark' ? '#b7a0d8' : '#8F7AAE'
+    : colors.primary
+
+  if (scheme === 'dark') {
+    return {
+      accent,
+      background: colors.surface,
+      subtitle: colors['text-tertiary'],
+      title: colors.foreground,
+    }
+  }
+
+  return {
+    accent,
+    background: '#F8F2E9',
+    subtitle: '#7B7167',
+    title: '#201B16',
+  }
+}
 
 function JournalMomentWidgetView(
   props: Partial<JournalWidgetSnapshot>,
@@ -97,14 +121,14 @@ function JournalMomentWidgetView(
   }
 
   const isSmallWidget = environment.widgetFamily === 'systemSmall'
-  const accentColor = snapshot.mode === 'review-moment' ? '#8F7AAE' : '#4C8B7D'
+  const palette = getWidgetPalette(environment.colorScheme === 'dark' ? 'dark' : 'light', snapshot.mode)
 
   return (
     <VStack
       alignment="leading"
       modifiers={[
         frame({ maxHeight: Infinity, maxWidth: Infinity, alignment: 'topLeading' }),
-        containerBackground('#F8F2E9', 'widget'),
+        containerBackground(palette.background, 'widget'),
         padding({
           horizontal: isSmallWidget ? 17 : 22,
           vertical: isSmallWidget ? 16 : 17,
@@ -119,7 +143,7 @@ function JournalMomentWidgetView(
         <VStack
           modifiers={[
             frame({ height: isSmallWidget ? 38 : 44, width: 5 }),
-            background(accentColor),
+            background(palette.accent),
             cornerRadius(3),
             offset({ y: isSmallWidget ? 5 : 6 }),
           ]}
@@ -139,7 +163,7 @@ function JournalMomentWidgetView(
                 size: isSmallWidget ? 29 : 31,
                 weight: 'regular',
               }),
-              foregroundStyle('#201B16'),
+              foregroundStyle(palette.title),
               lineLimit(2),
             ]}
           >
@@ -154,7 +178,7 @@ function JournalMomentWidgetView(
                   size: isSmallWidget ? 16 : 17,
                   weight: 'regular',
                 }),
-                foregroundStyle('#7B7167'),
+                foregroundStyle(palette.subtitle),
                 lineLimit(1),
               ]}
             >

@@ -23,16 +23,28 @@ import type {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import SegmentedControl from '../components/SegmentedControl'
+import {
+  useDesktopAppearance,
+  type DesktopAppearance,
+} from '../services/appearance'
 import { desktopSyncManager, type DesktopSyncManagerState } from '../services/sync/desktopSyncManager'
 import { panelTransition } from './markdown-preview/constants'
 import { getSyncStatusPresentation } from './syncStatusPresentation'
 
 const storedTokenMask = '••••••••'
+const appearanceOptions: Array<{ label: string; value: DesktopAppearance }> = [
+  { label: '跟随系统', value: 'system' },
+  { label: '浅色', value: 'light' },
+  { label: '深色', value: 'dark' },
+]
 type JournalSettingsFile = Awaited<ReturnType<NonNullable<Window['journalSettings']>['load']>>
 type JournalFile = Awaited<ReturnType<NonNullable<Window['journalStore']>['loadToday']>>
 type BrowserLocationStatus = 'denied' | 'granted' | 'prompt' | 'unknown' | 'unavailable'
 
 function SettingsPage() {
+  const { appearance, resolvedAppearance, setAppearance } = useDesktopAppearance()
+  const [appearanceMessage, setAppearanceMessage] = useState('')
   const [browserLocationStatus, setBrowserLocationStatus] = useState<BrowserLocationStatus>('unknown')
   const [diagnosticFrontMatter, setDiagnosticFrontMatter] = useState<DayFrontMatter | null>(null)
   const [diagnosticJournalFile, setDiagnosticJournalFile] = useState<JournalFile | null>(null)
@@ -165,6 +177,16 @@ function SettingsPage() {
     void desktopSyncManager.resolveConflict(strategy)
   }
 
+  async function handleAppearanceChange(nextAppearance: DesktopAppearance) {
+    setAppearanceMessage('')
+
+    try {
+      await setAppearance(nextAppearance)
+    } catch (error) {
+      setAppearanceMessage(getErrorMessage(error))
+    }
+  }
+
   return (
     <>
       <motion.header
@@ -293,6 +315,27 @@ function SettingsPage() {
                 <SettingsMessageRow>还没有本地 commit。</SettingsMessageRow>
               )}
             </div>
+          </section>
+
+          <section className="settings-section">
+            <h2 className="settings-section-title">偏好</h2>
+            <div className="settings-list-group">
+              <SettingsListRow
+                label="外观"
+                value={formatAppearanceLabel(appearance, resolvedAppearance)}
+              />
+            </div>
+            <div className="settings-actions">
+              <SegmentedControl
+                ariaLabel="外观"
+                onChange={(nextAppearance) => void handleAppearanceChange(nextAppearance)}
+                options={appearanceOptions}
+                value={appearance}
+              />
+            </div>
+            {appearanceMessage ? (
+              <SettingsMessageRow danger>{appearanceMessage}</SettingsMessageRow>
+            ) : null}
           </section>
 
           <section className="settings-section">
@@ -656,6 +699,19 @@ function formatBrowserLocationStatus(status: BrowserLocationStatus) {
   }
 
   return statusLabels[status]
+}
+
+function formatAppearanceLabel(
+  appearance: DesktopAppearance,
+  resolvedAppearance: 'dark' | 'light',
+) {
+  const resolvedLabel = resolvedAppearance === 'dark' ? '深色' : '浅色'
+
+  if (appearance === 'system') {
+    return `跟随系统（当前${resolvedLabel}）`
+  }
+
+  return appearance === 'dark' ? '深色' : '浅色'
 }
 
 function formatLocationLabel(location: DayFrontMatter['location'] | undefined) {

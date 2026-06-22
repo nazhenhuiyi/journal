@@ -21,7 +21,7 @@ import {
   textClusterMarkerOffset,
   usePhotoMapEnterProgress,
 } from './photoMapPresentation'
-import { photoMapStyles as styles } from './photoMapStyles'
+import { usePhotoMapStyles } from './photoMapStyles'
 
 type PhotoMapMarkerPressEvent = NativeSyntheticEvent<MarkerEvent>
 
@@ -41,6 +41,7 @@ export function PhotoMapTextClusterMarker({
   isSelected: boolean
   onSelect: (cluster: PhotoMapTextCluster) => void
 }) {
+  const styles = usePhotoMapStyles()
   const isCluster = cluster.items.length > 1
   const firstItem = cluster.items[0]
   const markerText = isCluster ? formatPhotoMapCountBadge(cluster.items.length) : ''
@@ -90,6 +91,7 @@ export function PhotoMapImageClusterMarker({
   isSelected: boolean
   onSelect: (cluster: PhotoMapImageCluster) => void
 }) {
+  const styles = usePhotoMapStyles()
   const item = cluster.representativeItem
   const title = getPhotoMapImageTitle(item)
   const isCluster = cluster.items.length > 1
@@ -208,6 +210,7 @@ function PhotoMapExpandedImageMarker({
   onPress: () => void
   title: string
 }) {
+  const styles = usePhotoMapStyles()
   const imageUri = useJournalImageThumbnailUri(image.src)
   const progress = usePhotoMapEnterProgress(activationKey, motion, {
     delay: index * 28,
@@ -302,6 +305,7 @@ function PhotoMapExpandedTextMarker({
   originOffset: [x: number, y: number]
   onSelect: (observation: PhotoMapTextObservation) => void
 }) {
+  const styles = usePhotoMapStyles()
   const progress = usePhotoMapEnterProgress(activationKey, motion, {
     delay: index * 24,
     duration: 220,

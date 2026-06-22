@@ -3,9 +3,10 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { Ionicons } from '@expo/vector-icons'
 import type { DayFrontMatter } from '@journal/core'
 import type { SyncSnapshot } from '@journal/sync'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels, type ResolvedSemanticColors } from '@journal/theme'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { useJournalTheme } from '../ui/JournalTheme'
 import { Section } from '../ui/Section'
 import { PageShell } from './PageShell'
 import {
@@ -20,9 +21,25 @@ import {
   createMobileDiagnosticPackage,
   saveMobileDiagnosticPackageToAndroidDirectory,
 } from '../services/diagnostics/package'
-import type { MobileHomeMode } from '../services/mobileUiSettings'
+import type { MobileAppearance, MobileHomeMode } from '../services/mobileUiSettings'
 
 const storedTokenMask = '••••••••'
+const appearanceOptions: Array<{ label: string; value: MobileAppearance }> = [
+  { label: '跟随系统', value: 'system' },
+  { label: '浅色', value: 'light' },
+  { label: '深色', value: 'dark' },
+]
+
+function useSettingsTheme() {
+  const { colors } = useJournalTheme()
+  const styles = useSettingsStyles(colors)
+
+  return { colors, styles }
+}
+
+function useSettingsStyles(colors: ResolvedSemanticColors) {
+  return useMemo(() => createSettingsStyles(colors), [colors])
+}
 
 type SettingsPageProps = {
   currentFrontMatter: DayFrontMatter
@@ -61,6 +78,14 @@ export function SettingsPage({
   syncTokenDraft,
   today,
 }: SettingsPageProps) {
+  const {
+    appearance,
+    colors,
+    resolvedAppearance,
+    setAppearance,
+  } = useJournalTheme()
+  const styles = useSettingsStyles(colors)
+  const [appearanceMessage, setAppearanceMessage] = useState('')
   const [locationDiagnostic, setLocationDiagnostic] = useState<MobileLocationDiagnostic | null>(null)
   const [locationMessage, setLocationMessage] = useState('')
   const [diagnosticFrontMatter, setDiagnosticFrontMatter] = useState(currentFrontMatter)
@@ -136,6 +161,16 @@ export function SettingsPage({
     }
   }
 
+  async function handleAppearanceChange(nextAppearance: MobileAppearance) {
+    setAppearanceMessage('')
+
+    try {
+      await setAppearance(nextAppearance)
+    } catch (error) {
+      setAppearanceMessage(getErrorMessage(error))
+    }
+  }
+
   async function handleExportDiagnosticPackage() {
     if (Platform.OS !== 'android') {
       const message = '诊断包导出暂只支持 Android。'
@@ -198,6 +233,12 @@ export function SettingsPage({
               <PreferenceCard
                 enabled={homeMode === 'murmur'}
                 onToggle={(enabled) => onChangeHomeMode(enabled ? 'murmur' : 'long-entry')}
+              />
+              <AppearancePreferenceCard
+                appearance={appearance}
+                message={appearanceMessage}
+                onChange={(nextAppearance) => void handleAppearanceChange(nextAppearance)}
+                resolvedAppearance={resolvedAppearance}
               />
             </Section>
 
@@ -394,6 +435,19 @@ function formatDiagnosticDisplayMessage(message: string, kind: 'location' | 'wea
   return message
 }
 
+function formatAppearanceLabel(
+  appearance: MobileAppearance,
+  resolvedAppearance: 'dark' | 'light',
+) {
+  const resolvedLabel = resolvedAppearance === 'dark' ? '深色' : '浅色'
+
+  if (appearance === 'system') {
+    return `跟随系统（当前${resolvedLabel}）`
+  }
+
+  return appearance === 'dark' ? '深色' : '浅色'
+}
+
 function PreferenceCard({
   enabled,
   onToggle,
@@ -401,6 +455,8 @@ function PreferenceCard({
   enabled: boolean
   onToggle: (enabled: boolean) => void
 }) {
+  const { styles } = useSettingsTheme()
+
   return (
     <Pressable
       accessibilityLabel="碎碎念模式"
@@ -426,7 +482,83 @@ function PreferenceCard({
   )
 }
 
+function AppearancePreferenceCard({
+  appearance,
+  message,
+  onChange,
+  resolvedAppearance,
+}: {
+  appearance: MobileAppearance
+  message: string
+  onChange: (appearance: MobileAppearance) => void
+  resolvedAppearance: 'dark' | 'light'
+}) {
+  const { styles } = useSettingsTheme()
+
+  return (
+    <View style={styles.preferenceCard}>
+      <View style={styles.preferenceHeader}>
+        <View style={styles.preferenceTitleGroup}>
+          <Text className="text-base font-semibold leading-6 text-foreground">外观</Text>
+          <Text className="text-sm leading-5 text-text-tertiary">
+            {formatAppearanceLabel(appearance, resolvedAppearance)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.appearanceOptions}>
+        {appearanceOptions.map((option) => (
+          <AppearanceOptionButton
+            isSelected={option.value === appearance}
+            key={option.value}
+            label={option.label}
+            onPress={() => onChange(option.value)}
+            value={option.value}
+          />
+        ))}
+      </View>
+      {message ? (
+        <Text className="text-xs leading-5 text-danger">{message}</Text>
+      ) : null}
+    </View>
+  )
+}
+
+function AppearanceOptionButton({
+  isSelected,
+  label,
+  onPress,
+  value,
+}: {
+  isSelected: boolean
+  label: string
+  onPress: () => void
+  value: MobileAppearance
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      onPress={onPress}
+      testID={`appearance-option-${value}`}
+      className={isSelected ? 'bg-surface text-foreground' : 'bg-transparent'}
+      style={({ pressed }) => ({
+        borderRadius: radiusPixels.md,
+        flex: 1,
+        minHeight: 36,
+        justifyContent: 'center',
+        opacity: pressed ? 0.72 : 1,
+      })}
+    >
+      <Text className={isSelected ? 'text-center text-sm font-semibold text-foreground' : 'text-center text-sm font-semibold text-text-tertiary'}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 function QuietSwitch({ enabled }: { enabled: boolean }) {
+  const { styles } = useSettingsTheme()
+
   return (
     <View
       style={[
@@ -458,11 +590,13 @@ function DiagnosticCard({
   label: string
   value: string
 }) {
+  const { colors, styles } = useSettingsTheme()
+
   return (
     <View style={styles.diagnosticCard}>
       <View style={styles.diagnosticCardHeader}>
         <View style={styles.diagnosticIcon}>
-          <Ionicons color={semanticColors['text-tertiary']} name={icon} size={16} />
+          <Ionicons color={colors['text-tertiary']} name={icon} size={16} />
         </View>
         <Text className="text-xs font-semibold leading-5 text-text-tertiary">{label}</Text>
       </View>
@@ -486,6 +620,8 @@ function DiagnosticPathRow({
   label: string
   value: string
 }) {
+  const { styles } = useSettingsTheme()
+
   return (
     <View style={[styles.pathRow, divider ? styles.pathDivider : null]}>
       <Text className="text-xs font-semibold leading-5 text-text-tertiary">{label}</Text>
@@ -511,6 +647,8 @@ function ConfigField({
   children: ReactNode
   label: string
 }) {
+  const { styles } = useSettingsTheme()
+
   return (
     <View style={styles.configField}>
       <Text className="text-xs font-semibold leading-5 text-text-tertiary">{label}</Text>
@@ -519,7 +657,17 @@ function ConfigField({
   )
 }
 
-const styles = StyleSheet.create({
+function createSettingsStyles(colors: ResolvedSemanticColors) {
+  return StyleSheet.create({
+  appearanceOptions: {
+    backgroundColor: colors['surface-muted'],
+    borderColor: colors.border,
+    borderRadius: radiusPixels.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacingPixels['1'],
+    padding: spacingPixels['1'],
+  },
   configField: {
     gap: spacingPixels['1.5'],
   },
@@ -527,8 +675,8 @@ const styles = StyleSheet.create({
     gap: spacingPixels['7'],
   },
   diagnosticCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radiusPixels.lg,
     flex: 1,
@@ -551,23 +699,23 @@ const styles = StyleSheet.create({
   },
   diagnosticIcon: {
     alignItems: 'center',
-    backgroundColor: semanticColors['surface-muted'],
+    backgroundColor: colors['surface-muted'],
     borderRadius: radiusPixels.full,
     height: spacingPixels['7'],
     justifyContent: 'center',
     width: spacingPixels['7'],
   },
   formCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radiusPixels.lg,
     gap: spacingPixels['3.5'],
     padding: spacingPixels['4'],
   },
   pathCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radiusPixels.lg,
     overflow: 'hidden',
@@ -575,7 +723,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacingPixels['1'],
   },
   pathDivider: {
-    borderTopColor: semanticColors.border,
+    borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   pathRow: {
@@ -586,8 +734,8 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   preferenceCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radiusPixels.lg,
     gap: spacingPixels['1.5'],
@@ -600,6 +748,11 @@ const styles = StyleSheet.create({
     gap: spacingPixels['3'],
     justifyContent: 'space-between',
   },
+  preferenceTitleGroup: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
   root: {
     flex: 1,
   },
@@ -610,7 +763,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacingPixels['7'],
   },
   switchThumb: {
-    backgroundColor: semanticColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radiusPixels.full,
     height: 28,
     shadowColor: '#000000',
@@ -632,11 +785,12 @@ const styles = StyleSheet.create({
     width: 56,
   },
   switchTrackDisabled: {
-    backgroundColor: semanticColors['surface-muted'],
-    borderColor: semanticColors.border,
+    backgroundColor: colors['surface-muted'],
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
   },
   switchTrackEnabled: {
-    backgroundColor: semanticColors.primary,
+    backgroundColor: colors.primary,
   },
-})
+  })
+}

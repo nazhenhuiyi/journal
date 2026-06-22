@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import {
   Pressable,
   StyleSheet,
@@ -8,7 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { radiusPixels, semanticColors, spacingPixels } from '@journal/theme'
+import { radiusPixels, spacingPixels, type ResolvedSemanticColors } from '@journal/theme'
+import { useJournalTheme } from './JournalTheme'
 
 type ListGroupProps = {
   children: ReactNode
@@ -29,6 +30,9 @@ type ListRowProps = {
 }
 
 export function ListGroup({ children, style }: ListGroupProps) {
+  const { colors } = useJournalTheme()
+  const styles = useMemo(() => createListRowStyles(colors), [colors])
+
   return <View style={[styles.group, style]}>{children}</View>
 }
 
@@ -44,6 +48,8 @@ export function ListRow({
   value,
   valueNumberOfLines = 1,
 }: ListRowProps) {
+  const { colors } = useJournalTheme()
+  const styles = useMemo(() => createListRowStyles(colors), [colors])
   const rowContent = (
     <>
       <Text className="text-sm font-medium leading-5 text-text-tertiary">{label}</Text>
@@ -59,7 +65,7 @@ export function ListRow({
             {value}
           </Text>
           {showChevron ? (
-            <Ionicons color={semanticColors['text-quaternary']} name="chevron-forward" size={17} />
+            <Ionicons color={colors['text-quaternary']} name="chevron-forward" size={17} />
           ) : null}
         </View>
       )}
@@ -92,13 +98,14 @@ export function ListRow({
   )
 }
 
-const styles = StyleSheet.create({
+function createListRowStyles(colors: ResolvedSemanticColors) {
+  return StyleSheet.create({
   divider: {
-    borderTopColor: semanticColors.border,
+    borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   group: {
-    backgroundColor: semanticColors.surface,
+    backgroundColor: colors.surface,
     borderRadius: radiusPixels.lg,
     overflow: 'hidden',
     paddingHorizontal: spacingPixels['4'],
@@ -127,4 +134,5 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-})
+  })
+}

@@ -45,9 +45,16 @@ describe('widgetTaskHandler', () => {
 
     expect(mockLoadJournalWidgetSnapshot).toHaveBeenCalledOnce()
     expect(renderWidget).toHaveBeenCalledOnce()
-    expect(renderWidget.mock.calls[0]?.[0]).toMatchObject({
+    expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
       props: {
         accessibilityLabel: '此刻的天空',
+      },
+    })
+    expect(renderWidget.mock.calls[0]?.[0]?.dark).toMatchObject({
+      props: {
+        style: {
+          backgroundColor: '#171412',
+        },
       },
     })
   })
@@ -63,7 +70,7 @@ describe('widgetTaskHandler', () => {
       widgetName: androidJournalWidgetName,
     }))
 
-    expect(renderWidget.mock.calls[0]?.[0]).toMatchObject({
+    expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
       props: {
         accessibilityLabel: '记一件小事',
       },

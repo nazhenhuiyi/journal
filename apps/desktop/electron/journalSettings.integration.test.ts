@@ -24,23 +24,43 @@ describe('journal settings', () => {
 
     const settings = await loadJournalSettings(journalDirectory)
 
+    expect(settings.appearance).toBe('system')
     expect(settings.weatherLocation).toBe('')
     expect(settings.settingsStatus).toBe('created')
     expect(settings.workingDirectory).toBe(journalDirectory)
+    await expect(readFile(settings.settingsPath, 'utf8')).resolves.toContain('"appearance": "system"')
     await expect(readFile(settings.settingsPath, 'utf8')).resolves.toContain('"weatherLocation": ""')
   })
 
-  it('persists a fixed weather location', async () => {
+  it('persists appearance and a fixed weather location', async () => {
     const journalDirectory = await createTemporaryJournalDirectory()
 
     await saveJournalSettings(journalDirectory, {
+      appearance: 'dark',
       weatherLocation: ' Shanghai ',
     })
 
     const settings = await loadJournalSettings(journalDirectory)
 
+    expect(settings.appearance).toBe('dark')
     expect(settings.weatherLocation).toBe('Shanghai')
     expect(settings.settingsStatus).toBe('ready')
+  })
+
+  it('normalizes invalid appearance values to system', async () => {
+    const journalDirectory = await createTemporaryJournalDirectory()
+    const settingsPath = path.join(journalDirectory, 'settings.json')
+
+    await writeFile(settingsPath, JSON.stringify({
+      appearance: 'midnight',
+      version: 1,
+      weatherLocation: '成都',
+    }), 'utf8')
+
+    const settings = await loadJournalSettings(journalDirectory)
+
+    expect(settings.appearance).toBe('system')
+    expect(settings.weatherLocation).toBe('成都')
   })
 
   it('keeps broken settings intact until the user saves again', async () => {

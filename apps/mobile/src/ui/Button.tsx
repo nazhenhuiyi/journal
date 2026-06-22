@@ -1,8 +1,8 @@
 import { type ComponentProps, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text, type PressableProps } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { semanticColors } from '@journal/theme'
 import { cn } from './cn'
+import { useJournalTheme } from './JournalTheme'
 
 type IconName = ComponentProps<typeof Ionicons>['name']
 type ButtonSize = 'md' | 'sm'
@@ -35,12 +35,6 @@ const textVariants: Record<ButtonVariant, string> = {
   primary: 'text-primary-fg',
   secondary: 'text-foreground',
 }
-const iconColors: Record<ButtonVariant, string> = {
-  ghost: semanticColors['text-tertiary'],
-  primary: semanticColors['primary-fg'],
-  secondary: semanticColors['text-tertiary'],
-}
-
 export function Button({
   children,
   className,
@@ -52,7 +46,13 @@ export function Button({
   variant = 'primary',
   ...props
 }: ButtonProps) {
+  const { colors } = useJournalTheme()
   const isDisabled = disabled || loading
+  const iconColors: Record<ButtonVariant, string> = {
+    ghost: colors['text-tertiary'],
+    primary: colors['primary-fg'],
+    secondary: colors['text-tertiary'],
+  }
 
   return (
     <Pressable
