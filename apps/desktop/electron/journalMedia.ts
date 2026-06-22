@@ -26,8 +26,8 @@ export type ImportedJournalImage = {
 }
 
 const compressedImageExtension = '.webp'
-const compressedImageMaxLongEdge = 2560
-const compressedImageQuality = 85
+const compressedImageMaxLongEdge = 4096
+const compressedImageQuality = 92
 const passthroughImageExtensions = new Set(['.gif'])
 
 export async function importJournalImagesForDate(

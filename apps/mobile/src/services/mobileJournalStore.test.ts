@@ -267,9 +267,9 @@ describe('mobileJournalStore', () => {
     )
     expect(mockImageManipulator.manipulateAsync).toHaveBeenCalledWith(
       'file:///picker/source.jpg',
-      [{ resize: { width: 2560 } }],
+      [],
       {
-        compress: 0.85,
+        compress: 0.92,
         format: 'webp',
       },
     )
