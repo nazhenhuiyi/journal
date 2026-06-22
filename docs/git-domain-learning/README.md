@@ -2,6 +2,11 @@
 
 这份文档整理 Git 里几个最容易混淆、但理解同步系统时最关键的概念：commit 到底存什么、为什么历史是一张图、merge base 是什么、fast-forward 和 merge commit 又分别意味着什么。
 
+## 相关专题
+
+- [Git 对象库与 GC：loose object、pack 和 prune](./object-database-and-gc.md)
+- [Journal Sync Smart Merge：日记内容如何自动合并](./smart-merge.md)
+
 ## 1. Commit 不是 diff，而是快照入口
 
 日常看 `git show` 时，Git 会展示某个 commit 相对父提交改了什么，所以很容易把 commit 理解成 diff。更准确的模型是：
