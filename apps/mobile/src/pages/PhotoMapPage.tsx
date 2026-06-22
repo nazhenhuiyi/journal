@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
+  type NativeSyntheticEvent,
   StyleSheet,
   Text,
   View,
@@ -12,6 +13,7 @@ import {
   Layer,
   Map as MapLibreMap,
   type CameraRef,
+  type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native'
 import type { ImageBlock, MurmurBlock } from '@journal/core'
 import {
@@ -59,7 +61,11 @@ import {
   PhotoMapThemeProvider,
 } from './photoMapStyles'
 import { usePhotoMapRuntime } from './usePhotoMapRuntime'
-import { moveCameraToInitialView } from './photoMapCamera'
+import {
+  createPhotoMapCameraSnapshot,
+  getPhotoMapInitialViewState,
+  moveCameraToInitialView,
+} from './photoMapCamera'
 import { usePhotoMapInteractions } from './usePhotoMapInteractions'
 import { isPhotoMapTextClusterSelected } from './photoMapViewModel'
 import { useJournalTheme } from '../ui/JournalTheme'
@@ -91,6 +97,7 @@ export function PhotoMapPage({
   const mapStyleUrl = getOpenFreeMapStyleUrl(resolvedAppearance)
   const cameraRef = useRef<CameraRef>(null)
   const appliedInitialCameraKeyRef = useRef<string | null>(null)
+  const shouldSkipNextInitialCameraMoveRef = useRef(true)
   const textCarouselListRef = useRef<FlatList<PhotoMapTextObservation>>(null)
   const restoredSessionRef = useRef(sessionSnapshot)
   const restoredSession = restoredSessionRef.current
@@ -101,6 +108,7 @@ export function PhotoMapPage({
   const [isRangeMenuOpen, setIsRangeMenuOpen] = useState(false)
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0)
   const [mapFrameWidth, setMapFrameWidth] = useState(0)
+  const [cameraSnapshot, setCameraSnapshot] = useState(restoredSession?.camera ?? null)
   const [selectedTextId, setSelectedTextId] = useState<string | null>(restoredSession?.selectedTextId ?? null)
   const [interaction, setInteraction] = useState<PhotoMapInteractionState>(
     restoredSession?.interaction ?? browsePhotoMapInteraction,
@@ -137,6 +145,9 @@ export function PhotoMapPage({
     selectedTextId,
     today,
   })
+  const initialViewState = useMemo(() => (
+    getPhotoMapInitialViewState(initialCamera, restoredSession?.camera ?? null)
+  ), [initialCamera, restoredSession?.camera])
   const {
     guardOverlayMapPress,
     handleMapPress,
@@ -173,11 +184,12 @@ export function PhotoMapPage({
 
   useEffect(() => {
     onSessionSnapshotChange({
+      camera: cameraSnapshot,
       interaction,
       range,
       selectedTextId,
     })
-  }, [interaction, onSessionSnapshotChange, range, selectedTextId])
+  }, [cameraSnapshot, interaction, onSessionSnapshotChange, range, selectedTextId])
 
   useEffect(() => {
     let isMounted = true
@@ -235,12 +247,20 @@ export function PhotoMapPage({
       return
     }
 
+    if (shouldSkipNextInitialCameraMoveRef.current) {
+      shouldSkipNextInitialCameraMoveRef.current = false
+      appliedInitialCameraKeyRef.current = initialCameraKey
+      return
+    }
+
     appliedInitialCameraKeyRef.current = initialCameraKey
     moveCameraToInitialView(cameraRef, initialCamera)
   }, [initialCamera, initialCameraKey, interaction.kind, mapReadyGeneration, mappableObservationCount])
 
   useEffect(() => {
     if (mappableObservationCount === 0) {
+      appliedInitialCameraKeyRef.current = null
+      shouldSkipNextInitialCameraMoveRef.current = true
       setMapReadyGeneration(0)
     }
   }, [mappableObservationCount])
@@ -265,8 +285,15 @@ export function PhotoMapPage({
     ))
   }
 
+  function handleRegionDidChange(event: NativeSyntheticEvent<ViewStateChangeEvent>) {
+    const nextCameraSnapshot = createPhotoMapCameraSnapshot(event.nativeEvent)
+
+    if (nextCameraSnapshot) {
+      setCameraSnapshot(nextCameraSnapshot)
+    }
+  }
+
   function handleBack() {
-    onSessionSnapshotChange(null)
     onBack()
   }
 
@@ -334,10 +361,12 @@ export function PhotoMapPage({
                 mapStyle={mapStyleUrl}
                 onDidFinishLoadingMap={() => setMapReadyGeneration((generation) => generation + 1)}
                 onPress={handleMapPress}
+                onRegionDidChange={handleRegionDidChange}
                 scaleBar={false}
                 style={StyleSheet.absoluteFill}
               >
                 <Camera
+                  initialViewState={initialViewState}
                   maxZoom={17}
                   minZoom={2}
                   ref={cameraRef}

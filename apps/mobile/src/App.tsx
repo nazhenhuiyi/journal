@@ -47,7 +47,10 @@ import { ImagePreviewModal, type ImagePreviewModalItem } from './ui/ImagePreview
 import { JournalThemeProvider, useJournalTheme } from './ui/JournalTheme'
 import { JournalListPage } from './pages/JournalListPage'
 import { PhotoMapPage } from './pages/PhotoMapPage'
-import type { PhotoMapSessionSnapshot } from './pages/photoMapInteraction'
+import {
+  createPhotoMapCameraOnlySessionSnapshot,
+  type PhotoMapSessionSnapshot,
+} from './pages/photoMapInteraction'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReviewDayPage } from './pages/ReviewDayPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -708,7 +711,7 @@ function JournalApp() {
         }}
         onStateChange={(state) => {
           if (!shouldKeepPhotoMapSessionSnapshot(state)) {
-            setPhotoMapSessionSnapshot(null)
+            setPhotoMapSessionSnapshot(createPhotoMapCameraOnlySessionSnapshot)
           }
         }}
         ref={navigationRef}

@@ -22,7 +22,15 @@ export type PhotoMapInteractionState =
       revision: number
     }
 
+export type PhotoMapCameraSnapshot = {
+  bearing: number
+  center: [longitude: number, latitude: number]
+  pitch: number
+  zoom: number
+}
+
 export type PhotoMapSessionSnapshot = {
+  camera: PhotoMapCameraSnapshot | null
   interaction: PhotoMapInteractionState
   range: PhotoMapRange
   selectedTextId: string | null
@@ -105,6 +113,28 @@ export function reconcilePhotoMapInteraction(
   }
 
   return state
+}
+
+export function createPhotoMapCameraOnlySessionSnapshot(
+  snapshot: PhotoMapSessionSnapshot | null,
+): PhotoMapSessionSnapshot | null {
+  if (!snapshot?.camera) {
+    return null
+  }
+
+  if (
+    snapshot.interaction.kind === 'browse' &&
+    snapshot.selectedTextId === null
+  ) {
+    return snapshot
+  }
+
+  return {
+    camera: snapshot.camera,
+    interaction: browsePhotoMapInteraction,
+    range: snapshot.range,
+    selectedTextId: null,
+  }
 }
 
 function getNextPhotoMapInteractionRevision(state: PhotoMapInteractionState) {
