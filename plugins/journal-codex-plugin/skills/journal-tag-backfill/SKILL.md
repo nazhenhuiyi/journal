@@ -92,7 +92,9 @@ description: 从任意 Codex 工作区访问已配置的 journal data git 仓库
 | `light-shadow` | 光线、影子、反光、画面明暗关系明显的照片 |
 | `curious-colors` | 颜色本身很突出或有趣的照片 |
 | `sunrise-sunset` | 日出、日落、晚霞、晨昏天色 |
-| `season-report` | 季节变化、植物、温度、节气、天气带来的生活变化 |
+| `season-report` | 明确的季节变化、植物生长、温度、节气、天气带来的生活变化 |
+
+`season-report` 不要泛化成普通自然照片桶。只有当正文、天气、植物状态或图片明显指向季节/植物/温度/节气/天气变化时才使用；小鸟、池塘、锦鲤、园林水面等单张自然照片优先用 `quick-photo`，除非它们明确承载季节观察。
 
 图片 tag 写法：
 
