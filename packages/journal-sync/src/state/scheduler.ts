@@ -88,9 +88,12 @@ const defaultTimers: SyncTimerApi = {
 
 export class JournalSyncCoordinator {
   private activeRun: Promise<SyncSnapshot> | null = null
+  private activeOperationPendingChangedPathsVersion: number | null = null
   private leaveFlushTimeoutHandle: unknown | null = null
   private pendingChangedPathsKnown = true
-  private pendingChangedPaths = new Set<string>()
+  private pendingChangedPaths = new Map<string, number>()
+  private pendingUnknownChangedPathsVersion = 0
+  private pendingChangedPathsVersion = 0
   private pendingPullAfterRun: SyncTrigger | null = null
   private pendingPushAfterRun: SyncTrigger | null = null
   private lastAutomaticPullStartedAtMs: number | null = null
@@ -140,7 +143,9 @@ export class JournalSyncCoordinator {
   }
 
   recordPendingChangedPaths(changedPaths: readonly string[]) {
-    this.addPendingChangedPaths(changedPaths)
+    const version = this.activeOperationPendingChangedPathsVersion
+
+    this.addPendingChangedPaths(changedPaths, version === null ? {} : { version })
   }
 
   private markLocalChangesPending() {
@@ -313,8 +318,19 @@ export class JournalSyncCoordinator {
     const isBackgroundPull = operation === 'pull' && trigger !== 'manual'
 
     try {
+      const pendingChangedPathsVersion = this.pendingChangedPathsVersion
       const request = this.createOperationRequest(operation, trigger)
-      const result = await this.options.runOperation(request)
+      const previousActiveOperationPendingChangedPathsVersion = this.activeOperationPendingChangedPathsVersion
+
+      this.activeOperationPendingChangedPathsVersion = operation === 'pull' ? null : pendingChangedPathsVersion
+
+      let result: SyncOperationResult
+
+      try {
+        result = await this.options.runOperation(request)
+      } finally {
+        this.activeOperationPendingChangedPathsVersion = previousActiveOperationPendingChangedPathsVersion
+      }
 
       if (result.block) {
         this.markBlocked(result.block)
@@ -345,14 +361,24 @@ export class JournalSyncCoordinator {
         return this.snapshot
       } else {
         this.clearRetryTimer()
-        this.clearCompletedLocalChanges(operation)
-        this.updateSnapshot({
-          block: null,
-          lastError: null,
-          lastSyncedAt: this.now().toISOString(),
-          pendingReason: null,
-          status: 'synced',
-        })
+        const hasPendingLocalChanges = this.clearCompletedLocalChanges(operation, pendingChangedPathsVersion)
+
+        if (hasPendingLocalChanges) {
+          this.updateSnapshot({
+            block: null,
+            lastError: null,
+            pendingReason: 'local-save',
+            status: 'pending',
+          })
+        } else {
+          this.updateSnapshot({
+            block: null,
+            lastError: null,
+            lastSyncedAt: this.now().toISOString(),
+            pendingReason: null,
+            status: 'synced',
+          })
+        }
       }
     } catch (error) {
       const block = getJournalSyncBlock(error)
@@ -446,37 +472,84 @@ export class JournalSyncCoordinator {
     }
   }
 
-  private addPendingChangedPaths(changedPaths: readonly string[] | undefined) {
+  private addPendingChangedPaths(
+    changedPaths: readonly string[] | undefined,
+    options: { version?: number } = {},
+  ) {
     if (changedPaths === undefined) {
-      this.pendingChangedPathsKnown = false
+      const version = options.version ?? this.nextPendingChangedPathsVersion()
+
+      if (this.pendingChangedPathsKnown || this.pendingUnknownChangedPathsVersion < version) {
+        this.pendingChangedPathsKnown = false
+        this.pendingUnknownChangedPathsVersion = version
+      }
       return
     }
 
-    let didChange = false
+    const changedPathList = changedPaths.filter((changedPath) => changedPath)
 
-    for (const changedPath of changedPaths) {
-      if (!changedPath || this.pendingChangedPaths.has(changedPath)) {
+    if (changedPathList.length === 0) {
+      return
+    }
+
+    const version = options.version ?? this.nextPendingChangedPathsVersion()
+    let didAddPath = false
+
+    for (const changedPath of changedPathList) {
+      const previousVersion = this.pendingChangedPaths.get(changedPath)
+
+      if (previousVersion !== undefined && previousVersion >= version) {
         continue
       }
 
-      this.pendingChangedPaths.add(changedPath)
-      didChange = true
+      this.pendingChangedPaths.set(changedPath, version)
+      didAddPath ||= previousVersion === undefined
     }
 
-    if (didChange) {
+    if (didAddPath) {
       this.emitPendingChangedPaths()
     }
   }
 
-  private clearCompletedLocalChanges(operation: SyncOperation) {
+  private clearCompletedLocalChanges(operation: SyncOperation, pendingChangedPathsVersion: number) {
     if (operation === 'pull' || (this.pendingChangedPaths.size === 0 && this.pendingChangedPathsKnown)) {
-      return
+      return this.hasQueuedLocalChanges()
     }
 
-    this.pendingChangedPaths.clear()
-    this.pendingChangedPathsKnown = true
-    this.clearPushTimer()
-    this.emitPendingChangedPaths()
+    let didRemovePath = false
+
+    for (const [changedPath, version] of this.pendingChangedPaths) {
+      if (version > pendingChangedPathsVersion) {
+        continue
+      }
+
+      this.pendingChangedPaths.delete(changedPath)
+      didRemovePath = true
+    }
+
+    if (!this.pendingChangedPathsKnown && this.pendingUnknownChangedPathsVersion <= pendingChangedPathsVersion) {
+      this.pendingChangedPathsKnown = true
+      this.pendingUnknownChangedPathsVersion = 0
+    }
+
+    const hasPendingLocalChanges = this.hasQueuedLocalChanges()
+
+    if (!hasPendingLocalChanges) {
+      this.clearPushTimer()
+    }
+
+    if (didRemovePath) {
+      this.emitPendingChangedPaths()
+    }
+
+    return hasPendingLocalChanges
+  }
+
+  private hasQueuedLocalChanges() {
+    return this.pushTimeoutHandle !== null ||
+      this.pendingPushAfterRun !== null ||
+      this.pendingChangedPaths.size > 0 ||
+      !this.pendingChangedPathsKnown
   }
 
   private emitPendingChangedPaths() {
@@ -484,7 +557,13 @@ export class JournalSyncCoordinator {
   }
 
   private getPendingChangedPaths() {
-    return [...this.pendingChangedPaths].sort()
+    return [...this.pendingChangedPaths.keys()].sort()
+  }
+
+  private nextPendingChangedPathsVersion() {
+    this.pendingChangedPathsVersion += 1
+
+    return this.pendingChangedPathsVersion
   }
 
   private scheduleRetry() {

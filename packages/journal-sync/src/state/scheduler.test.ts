@@ -56,6 +56,106 @@ describe('JournalSyncCoordinator', () => {
     expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual([])
   })
 
+  it('keeps paths saved while a push is in flight for the next push', async () => {
+    const pendingSnapshots: string[][] = []
+    let finishFirstPush: (result: SyncOperationResult) => void = () => undefined
+    const firstPush = new Promise<SyncOperationResult>((resolve) => {
+      finishFirstPush = resolve
+    })
+    const runOperation = vi.fn()
+      .mockReturnValueOnce(firstPush)
+      .mockResolvedValueOnce({})
+    const coordinator = new JournalSyncCoordinator({
+      onPendingChangedPathsChange: (paths) => pendingSnapshots.push([...paths]),
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave([
+      'entries/2026/06/2026-06-22.md',
+      'media/2026/06/img_20260622_122022.webp',
+    ])
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    coordinator.markLocalSave([
+      'entries/2026/06/2026-06-22.md',
+      'media/2026/06/img_20260622_123055.webp',
+    ])
+    finishFirstPush({})
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      changedPaths: [
+        'entries/2026/06/2026-06-22.md',
+        'media/2026/06/img_20260622_123055.webp',
+      ],
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+    expect(pendingSnapshots[pendingSnapshots.length - 1]).toEqual([])
+  })
+
+  it('keeps a path saved again while a push is in flight', async () => {
+    let finishFirstPush: (result: SyncOperationResult) => void = () => undefined
+    const firstPush = new Promise<SyncOperationResult>((resolve) => {
+      finishFirstPush = resolve
+    })
+    const runOperation = vi.fn()
+      .mockReturnValueOnce(firstPush)
+      .mockResolvedValueOnce({})
+    const coordinator = new JournalSyncCoordinator({
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-22.md'])
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+
+    coordinator.markLocalSave(['entries/2026/06/2026-06-22.md'])
+    finishFirstPush({})
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(2)
+    expect(runOperation).toHaveBeenLastCalledWith({
+      changedPaths: ['entries/2026/06/2026-06-22.md'],
+      operation: 'push',
+      trigger: 'save-idle',
+    })
+  })
+
+  it('clears paths recorded during the operation after that operation succeeds', async () => {
+    const pendingSnapshots: string[][] = []
+    const coordinatorRef: { current?: JournalSyncCoordinator } = {}
+    const runOperation = vi.fn(async () => {
+      coordinatorRef.current?.recordPendingChangedPaths(['entries/2026/06/2026-06-22.md'])
+
+      return {}
+    })
+
+    const coordinator = new JournalSyncCoordinator({
+      onPendingChangedPathsChange: (paths) => pendingSnapshots.push([...paths]),
+      pushDebounceMs: 20_000,
+      runOperation,
+    })
+
+    coordinatorRef.current = coordinator
+
+    await coordinator.syncNow()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(runOperation).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot().status).toBe('synced')
+    expect(pendingSnapshots).toEqual([
+      ['entries/2026/06/2026-06-22.md'],
+      [],
+    ])
+  })
+
   it('passes an explicit empty changed path set to a clean manual full sync', async () => {
     const runOperation = vi.fn(async () => ({}))
     const coordinator = new JournalSyncCoordinator({
