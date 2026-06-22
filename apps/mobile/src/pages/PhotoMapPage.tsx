@@ -26,7 +26,6 @@ import {
 } from './photoMapData'
 import {
   browsePhotoMapInteraction,
-  clearPhotoMapInteraction,
   reconcilePhotoMapInteraction,
   type PhotoMapInteractionState,
   type PhotoMapSessionSnapshot,

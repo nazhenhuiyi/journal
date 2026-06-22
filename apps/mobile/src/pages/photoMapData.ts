@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, LineString } from 'geojson'
+import type { FeatureCollection, LineString } from 'geojson'
 import {
   hasUsableImageLocationCoordinates,
   type ImageBlock,

@@ -66,6 +66,7 @@ import {
   saveMobileUiSettings,
   type MobileHomeMode,
 } from './services/mobileUiSettings'
+import { useMurmurDraftBackup } from './hooks/useMurmurDraftBackup'
 import { journalEffects } from './services/journalEffects'
 import { isMobileE2eDebugLinkEnabled } from './services/e2eEnvironment'
 import { loadMobileE2eRuntimeConfig } from './services/mobileE2eRuntimeConfig'
@@ -361,6 +362,13 @@ function JournalApp() {
     today,
     updateTodayFrontMatter,
   })
+  const { clearStoredMurmurDraftBackup } = useMurmurDraftBackup({
+    murmurDraft,
+    selectedMurmurThemeIds,
+    setMurmurDraft,
+    setSelectedMurmurThemeIds,
+    today,
+  })
 
   const setHomeMode = useCallback((nextHomeMode: MobileHomeMode) => {
     const previousHomeMode = homeModeRef.current
@@ -528,10 +536,11 @@ function JournalApp() {
     const didAdd = await addMurmur(murmurDraft, selectedMurmurThemeIds)
 
     if (didAdd) {
+      clearStoredMurmurDraftBackup()
       setMurmurDraft('')
       setSelectedMurmurThemeIds([])
     }
-  }, [addMurmur, murmurDraft, selectedMurmurThemeIds])
+  }, [addMurmur, clearStoredMurmurDraftBackup, murmurDraft, selectedMurmurThemeIds])
 
   const handleImportMurmurImages = useCallback(async (
     source: ImageImportSource,
@@ -597,6 +606,7 @@ function JournalApp() {
       })
 
       if (didAdd && !murmurId) {
+        clearStoredMurmurDraftBackup()
         setMurmurDraft('')
         setSelectedMurmurThemeIds([])
       }
@@ -608,7 +618,7 @@ function JournalApp() {
     } finally {
       setActiveImageImport(null)
     }
-  }, [addImagesToMurmur, isBusy, isImportingImages, murmurDraft, selectedMurmurThemeIds, today])
+  }, [addImagesToMurmur, clearStoredMurmurDraftBackup, isBusy, isImportingImages, murmurDraft, selectedMurmurThemeIds, today])
 
   useEffect(() => {
     let isMounted = true
@@ -1179,8 +1189,6 @@ function MurmurPage({
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
-  const { colors } = useJournalTheme()
-
   return (
     <PageShell onBack={onBack} title="碎碎念">
       <KeyboardAwareScrollView
@@ -1345,8 +1353,6 @@ function TodayMurmurMode({
   paperHeaderLine: string
   selectedMurmurTheme: ReturnType<typeof getBuiltInThemeById> | null
 }) {
-  const { colors } = useJournalTheme()
-
   return (
     <KeyboardAwareScrollView
       bottomOffset={spacingPixels['8']}
@@ -1719,8 +1725,6 @@ function InlineStatusButton({
   status: HeaderStatus
   testID?: string
 }) {
-  const { colors } = useJournalTheme()
-
   return (
     <Pressable
       accessibilityRole="button"
