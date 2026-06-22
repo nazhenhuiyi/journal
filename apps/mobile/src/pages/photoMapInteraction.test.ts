@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   browsePhotoMapInteraction,
   clearPhotoMapInteraction,
+  createPhotoMapCameraOnlySessionSnapshot,
   focusPhotoMapImageCluster,
   focusPhotoMapTextCluster,
   getPhotoMapInteractionFocus,
@@ -111,5 +112,42 @@ describe('photoMapInteraction', () => {
       textClusterId: 'text-a',
       textMotion: 'enter',
     })
+  })
+
+  it('keeps only the camera when the map session leaves the map flow', () => {
+    const focusedState = focusPhotoMapImageCluster(browsePhotoMapInteraction, 'image-a')
+    const camera = {
+      bearing: 8,
+      center: [104.06331, 30.65761] as [longitude: number, latitude: number],
+      pitch: 12,
+      zoom: 13.4,
+    }
+
+    expect(createPhotoMapCameraOnlySessionSnapshot({
+      camera,
+      interaction: focusedState,
+      range: 'all',
+      selectedTextId: 'text-a',
+    })).toEqual({
+      camera,
+      interaction: browsePhotoMapInteraction,
+      range: 'all',
+      selectedTextId: null,
+    })
+    const cameraOnlySnapshot = {
+      camera,
+      interaction: browsePhotoMapInteraction,
+      range: 'all' as const,
+      selectedTextId: null,
+    }
+
+    expect(createPhotoMapCameraOnlySessionSnapshot(cameraOnlySnapshot)).toBe(cameraOnlySnapshot)
+    expect(createPhotoMapCameraOnlySessionSnapshot(null)).toBeNull()
+    expect(createPhotoMapCameraOnlySessionSnapshot({
+      camera: null,
+      interaction: focusedState,
+      range: 'all',
+      selectedTextId: 'text-a',
+    })).toBeNull()
   })
 })
