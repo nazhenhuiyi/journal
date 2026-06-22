@@ -1196,7 +1196,7 @@ function MurmurPage({
     <PageShell onBack={onBack} title="碎碎念">
       <KeyboardAwareScrollView
         bottomOffset={spacingPixels['8']}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: spacingPixels['6'] }}
+        contentContainerStyle={{ flexGrow: 1 }}
         disableScrollOnKeyboardHide
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -1359,7 +1359,7 @@ function TodayMurmurMode({
   return (
     <KeyboardAwareScrollView
       bottomOffset={spacingPixels['8']}
-      contentContainerStyle={{ flexGrow: 1, paddingBottom: spacingPixels['6'] }}
+      contentContainerStyle={{ flexGrow: 1 }}
       disableScrollOnKeyboardHide
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}

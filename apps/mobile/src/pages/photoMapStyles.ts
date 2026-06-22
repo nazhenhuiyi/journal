@@ -438,7 +438,7 @@ export function createPhotoMapStyles(colors: ResolvedSemanticColors) {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radiusPixels.lg,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     elevation: 1,
     height: textCardHeight,
     overflow: 'hidden',
@@ -452,8 +452,11 @@ export function createPhotoMapStyles(colors: ResolvedSemanticColors) {
     width: '100%',
   },
   textCardSelected: {
-    borderColor: colors['primary-hover'],
-    shadowOpacity: 0.04,
+    borderColor: colors['border-strong'],
+    borderWidth: 1,
+    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 7,
   },
   textCardInner: {
     alignItems: 'center',
