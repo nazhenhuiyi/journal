@@ -6,7 +6,7 @@
 
 - [架构与数据流](架构与数据流.md)：workspace 分层、日记数据从输入到落盘、同步和回流的主路径。
 - [数据结构](数据结构.md)：Markdown、media、annotations、reviews 和 manifest 的文件约定。
-- [照片地图领域文档](photo-map/README.md)：移动端照片地图的功能总览、数据模型、交互流转、概念词典、数据派生、marker 聚合和 MapLibre 事件机制。
+- [照片地图领域文档](photo-map/README.md)：移动端照片地图的功能总览、数据模型、交互流转、概念词典、实现拆分、marker 聚合、视觉层级和 MapLibre 事件机制。
 - [Journal Sync 目标与边界](<Journal Sync 目标与边界.md>)：从用户故事出发定义同步要解决的问题、系统承诺、阻断边界和验收故事。
 - [Git 同步机制](<Git 同步机制.md>)：`@journal/sync`、同步调度、桌面/移动平台适配和 git client 使用方式。
 - [Git 同步性能笔记](<Git 同步性能笔记.md>)：`isomorphic-git`、Expo 文件系统和仓库规模相关的优化状态。

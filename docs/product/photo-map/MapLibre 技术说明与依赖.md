@@ -1,6 +1,6 @@
 # MapLibre 技术说明与依赖
 
-这份文档记录照片地图当前使用 `@maplibre/maplibre-react-native` 的方式、组件职责、事件机制和相关依赖。当前安装版本是 `@maplibre/maplibre-react-native@11.3.4`，代码事实以本地 `node_modules/@maplibre/maplibre-react-native/src/` 和 `apps/mobile/src/pages/PhotoMapPage.tsx` 为准。
+这份文档记录照片地图当前使用 `@maplibre/maplibre-react-native` 的方式、组件职责、事件机制和相关依赖。当前安装版本是 `@maplibre/maplibre-react-native@11.3.4`，代码事实以本地 `node_modules/@maplibre/maplibre-react-native/src/`、`apps/mobile/src/pages/PhotoMapPage.tsx`、`apps/mobile/src/pages/PhotoMapMarkers.tsx` 和 `apps/mobile/src/pages/usePhotoMapInteractions.ts` 为准。
 
 ## 1. 当前使用范围
 
@@ -23,7 +23,7 @@ flowchart TD
 - `Camera`：执行首次定位、聚合点放大、普通文字选择、底部卡片横滑和统计卡定位。
 - `GeoJSONSource + Layer`：只用于碎碎念路线，路线来自 murmur 本体坐标。
 - `Marker`：用于图片聚合 marker、展开图片 marker、文字聚合 marker、展开文字 marker。
-- React Native absolute overlay：用于顶部统计卡、照片 tray、附近碎碎念 sheet、底部文字卡片。
+- React Native absolute overlay：用于顶部统计卡、range menu、照片 tray、附近碎碎念 sheet、底部文字卡片和状态页。
 
 ## 2. MapLibre 组件模型
 
@@ -166,6 +166,11 @@ iOS 的 Source press 也会先查询 visible features，命中后调用 `source.
 
 文字 marker 更简单，只需要小绿点和数字聚合点。后续如果 marker 数量、事件清晰度或性能成为问题，可以优先评估把文字层迁到 `GeoJSONSource + Layer`，并用 Source `onPress + stopPropagation()` 管理点击。
 
+当前 marker 视觉有两个实现约定：
+
+- 图片 marker 使用 `imageClusterMarkerOffset = [30, -30]`，在同一地点有图文时向右上让开。
+- 文字 marker 使用 `textClusterMarkerOffset = [0, 0]`，保持在真实文字坐标上；未选中态是轻量绿色，选中态才是主题绿。
+
 ## 5. 相关依赖
 
 | 依赖 | 当前用途 |
@@ -208,3 +213,5 @@ iOS 的 Source press 也会先查询 visible features，命中后调用 `source.
 - `node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt`
 - `node_modules/@maplibre/maplibre-react-native/ios/components/map-view/MLRNMapView.m`
 - `apps/mobile/src/pages/PhotoMapPage.tsx`
+- `apps/mobile/src/pages/PhotoMapMarkers.tsx`
+- `apps/mobile/src/pages/usePhotoMapInteractions.ts`
