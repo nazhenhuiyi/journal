@@ -91,6 +91,8 @@ function JournalMomentAndroidWidget({
 }) {
   const palette = getWidgetPalette(scheme, snapshot.mode)
   const isCompact = isCompactAndroidWidget(widgetInfo)
+  const titleMaxLines = isCompact ? 1 : 2
+  const subtitleMaxLines = isCompact ? 1 : 3
 
   return (
     <FlexWidget
@@ -107,14 +109,14 @@ function JournalMomentAndroidWidget({
         flexGap: 0,
         height: 'match_parent',
         justifyContent: 'flex-start',
-        paddingHorizontal: isCompact ? 14 : 22,
-        paddingVertical: isCompact ? 10 : 17,
+        paddingHorizontal: isCompact ? 14 : 20,
+        paddingVertical: isCompact ? 10 : 12,
         width: 'match_parent',
       }}
     >
       <FlexWidget
         style={{
-          height: isCompact ? 2 : 8,
+          height: isCompact ? 2 : 0,
           width: 'match_parent',
         }}
       />
@@ -123,7 +125,7 @@ function JournalMomentAndroidWidget({
         style={{
           alignItems: 'flex-start',
           flexDirection: 'row',
-          flexGap: isCompact ? 8 : 13,
+          flexGap: isCompact ? 8 : 11,
           width: 'match_parent',
         }}
       >
@@ -131,8 +133,8 @@ function JournalMomentAndroidWidget({
           style={{
             backgroundColor: palette.accent,
             borderRadius: 3,
-            height: isCompact ? 30 : 44,
-            marginTop: isCompact ? 3 : 6,
+            height: isCompact ? 30 : 42,
+            marginTop: isCompact ? 3 : 5,
             width: isCompact ? 4 : 5,
           }}
         />
@@ -141,31 +143,31 @@ function JournalMomentAndroidWidget({
           style={{
             flex: 1,
             flexDirection: 'column',
-            flexGap: isCompact ? 4 : 5,
+            flexGap: isCompact ? 4 : 3,
           }}
         >
           <TextWidget
             allowFontScaling={false}
-            maxLines={isCompact ? 1 : 2}
+            maxLines={titleMaxLines}
             text={snapshot.title}
             truncate="END"
             style={{
               color: palette.title,
               fontFamily: journalWidgetFontFamily,
-              fontSize: isCompact ? 22 : 31,
+              fontSize: isCompact ? 22 : 28,
               fontWeight: '400',
             }}
           />
           {snapshot.subtitle ? (
             <TextWidget
               allowFontScaling={false}
-              maxLines={1}
+              maxLines={subtitleMaxLines}
               text={snapshot.subtitle}
               truncate="END"
               style={{
                 color: palette.subtitle,
                 fontFamily: journalWidgetFontFamily,
-                fontSize: isCompact ? 13 : 17,
+                fontSize: isCompact ? 13 : 16,
                 fontWeight: '400',
               }}
             />
@@ -175,7 +177,7 @@ function JournalMomentAndroidWidget({
 
       <FlexWidget
         style={{
-          height: isCompact ? 6 : 20,
+          height: isCompact ? 6 : 0,
           width: 'match_parent',
         }}
       />
