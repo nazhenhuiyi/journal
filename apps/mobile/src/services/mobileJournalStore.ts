@@ -34,6 +34,18 @@ export type MobileJournalRecord = {
   updatedAt: string | null
 }
 
+export type MobileWeeklyReviewRecord = {
+  bodyMarkdown: string
+  coverImage?: string
+  endDate: string
+  question?: string
+  repositoryPath: string
+  startDate: string
+  summary: string
+  title: string
+  week: string
+}
+
 export type SaveDailyJournalResult = MobileJournalRecord & {
   changedPaths: string[]
   didWrite: boolean
@@ -211,6 +223,46 @@ export async function loadDailyReview(date: string): Promise<ReviewFile | null> 
     const review = normalizeReviewFile(parsed)
 
     return review?.date === date ? review : null
+  } catch {
+    return null
+  }
+}
+
+export async function listWeeklyReviews(): Promise<MobileWeeklyReviewRecord[]> {
+  const weeklyReviewsDirectory = `${getJournalWorktreeDirectory()}reviews/weekly/`
+  const fileNames = await readDirectoryIfExists(weeklyReviewsDirectory)
+  const records: MobileWeeklyReviewRecord[] = []
+
+  for (const fileName of fileNames.filter(isWeeklyReviewFileName)) {
+    const week = fileName.slice(0, -'.md'.length)
+    const record = await loadWeeklyReview(week)
+
+    if (record) {
+      records.push(record)
+    }
+  }
+
+  return records.sort((first, second) => second.week.localeCompare(first.week))
+}
+
+export async function loadWeeklyReview(week: string): Promise<MobileWeeklyReviewRecord | null> {
+  if (!isWeeklyReviewWeek(week)) {
+    return null
+  }
+
+  const repositoryPath = getWeeklyReviewRepositoryPath(week)
+  const filePath = `${getJournalWorktreeDirectory()}${repositoryPath}`
+  const fileInfo = await FileSystem.getInfoAsync(filePath)
+
+  if (!fileInfo.exists) {
+    return null
+  }
+
+  try {
+    const markdown = await FileSystem.readAsStringAsync(filePath)
+    const record = parseWeeklyReviewMarkdown(markdown, repositoryPath)
+
+    return record?.week === week ? record : null
   } catch {
     return null
   }
@@ -433,6 +485,10 @@ export function getReviewRepositoryPath(date: string) {
   return `reviews/${year}/${month}/${date}.json`
 }
 
+export function getWeeklyReviewRepositoryPath(week: string) {
+  return `reviews/weekly/${week}.md`
+}
+
 export function resolveJournalMediaFileUri(src: string) {
   const normalizedSrc = src.trim().replace(/^\.?\//, '')
 
@@ -502,6 +558,147 @@ function isMonthDirectoryName(value: string) {
 
 function isDailyJournalFileName(value: string) {
   return /^\d{4}-\d{2}-\d{2}\.md$/.test(value)
+}
+
+function isWeeklyReviewFileName(value: string) {
+  return /^\d{4}-W\d{2}\.md$/.test(value)
+}
+
+function isWeeklyReviewWeek(value: string) {
+  return /^\d{4}-W\d{2}$/.test(value)
+}
+
+function parseWeeklyReviewMarkdown(markdown: string, repositoryPath: string): MobileWeeklyReviewRecord | null {
+  const normalizedMarkdown = markdown.replace(/\r\n/g, '\n')
+  const split = splitFlatFrontMatter(normalizedMarkdown)
+
+  if (!split) {
+    return null
+  }
+
+  const frontMatter = split.frontMatter
+  const week = frontMatter.get('week')?.trim()
+  const startDate = frontMatter.get('startDate')?.trim()
+  const endDate = frontMatter.get('endDate')?.trim()
+  const title = frontMatter.get('title')?.trim()
+  const summary = frontMatter.get('summary')?.trim()
+  const coverImage = frontMatter.get('coverImage')?.trim()
+
+  if (
+    !week ||
+    !isWeeklyReviewWeek(week) ||
+    !startDate ||
+    !isDateKey(startDate) ||
+    !endDate ||
+    !isDateKey(endDate) ||
+    !title ||
+    !summary ||
+    frontMatter.has('sourceDays') ||
+    (coverImage && !isSafeMediaRepositoryPath(coverImage))
+  ) {
+    return null
+  }
+
+  const displayBody = normalizeWeeklyReviewDisplayBody(split.body)
+  const questionSplit = splitWeeklyReviewQuestion(displayBody)
+
+  return {
+    bodyMarkdown: questionSplit.bodyMarkdown,
+    ...(coverImage ? { coverImage } : {}),
+    endDate,
+    ...(questionSplit.question ? { question: questionSplit.question } : {}),
+    repositoryPath,
+    startDate,
+    summary,
+    title,
+    week,
+  }
+}
+
+function splitFlatFrontMatter(markdown: string) {
+  if (!markdown.startsWith('---\n')) {
+    return null
+  }
+
+  const lines = markdown.split('\n')
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
+
+  if (closingIndex === -1) {
+    return null
+  }
+
+  const frontMatter = new Map<string, string>()
+
+  for (const line of lines.slice(1, closingIndex)) {
+    if (!line.trim()) {
+      continue
+    }
+
+    const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
+
+    if (!match) {
+      return null
+    }
+
+    frontMatter.set(match[1], stripWrappingQuotes(match[2].trim()))
+  }
+
+  return {
+    body: lines.slice(closingIndex + 1).join('\n').replace(/^\n/, ''),
+    frontMatter,
+  }
+}
+
+function normalizeWeeklyReviewDisplayBody(markdown: string) {
+  const lines = markdown.split('\n')
+
+  if (lines[0]?.startsWith('# ')) {
+    lines.shift()
+
+    while (lines[0] === '') {
+      lines.shift()
+    }
+
+    if (lines[0] && /^\d{4}-\d{2}-\d{2}\s+至\s+\d{4}-\d{2}-\d{2}$/.test(lines[0].trim())) {
+      lines.shift()
+    }
+  }
+
+  return lines.join('\n').replace(/^\n+/, '').trimEnd()
+}
+
+function splitWeeklyReviewQuestion(markdown: string) {
+  const lines = markdown.split('\n')
+  const questionIndex = lines.findIndex((line) => line.trim() === '## 问题')
+
+  if (questionIndex === -1) {
+    return {
+      bodyMarkdown: markdown.trim(),
+      question: undefined,
+    }
+  }
+
+  const question = lines.slice(questionIndex + 1).join('\n').trim()
+
+  return {
+    bodyMarkdown: lines.slice(0, questionIndex).join('\n').trim(),
+    question: question || undefined,
+  }
+}
+
+function stripWrappingQuotes(value: string) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1)
+  }
+
+  return value
+}
+
+function isDateKey(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 type NormalizedMobileImageAsset = {

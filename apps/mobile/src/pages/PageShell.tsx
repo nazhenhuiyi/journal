@@ -34,6 +34,8 @@ export function PageShell({ children, contentStyle, headerRight, onBack, testID,
           </View>
           <Text
             className="text-lg font-semibold text-foreground"
+            ellipsizeMode="tail"
+            numberOfLines={1}
             style={styles.title}
           >
             {title}

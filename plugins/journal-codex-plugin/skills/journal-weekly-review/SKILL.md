@@ -38,7 +38,7 @@ description: 从任意 Codex 工作区访问已配置的 journal data git 仓库
 3. 计算时间范围。用户明确给范围时按用户范围；用户说“上周”时，默认使用本地日期的上一周，优先按仓库既有周起止规则，否则按周一到周日。
 4. 浏览该范围内的日记、murmur、图片 metadata 和必要图片，做一个轻量取材池：哪些画面、句子、身体反馈或生活细节有温度。取材池只是为了选择中心，不要变成正文大纲。
 5. 找到 `journalDataDir` 中现有的周回顾目录和命名方式；如果没有，使用 `reviews/weekly/YYYY-Www.md`。
-6. 按下面的写作方向写出周回顾文档，末尾保留一个问题。
+6. 按下面的写作方向写出周回顾文档，文件头必须带周回顾 frontmatter，末尾保留一个问题。
 7. 原始日记条目按只读材料处理；用户明确要求时再修改。
 8. 修改后运行 `git -C "$journalDataDir" diff --check` 做轻量检查。
 9. 在 `journalDataDir/logs/ai/` 下写一份 Markdown 日志。如果目录不存在，创建它。
@@ -68,6 +68,26 @@ description: 从任意 Codex 工作区访问已配置的 journal data git 仓库
 - 周回顾输出：优先沿用已有目录；没有时写到 `reviews/weekly/YYYY-Www.md`。
 
 只使用日记中明确写出的事件、人物、地点、项目、主题和可见图片内容。结构化字段以实际 schema 和文件内容为准。
+
+## 周回顾 frontmatter
+
+每篇 `reviews/weekly/YYYY-Www.md` 必须使用这个展示契约，供移动端列表和详情页读取：
+
+```md
+---
+week: 2026-W25
+startDate: 2026-06-15
+endDate: 2026-06-21
+title: 漏窗外的一点绿
+summary: 在快的时代里，给自己留一扇漏窗；从雨中园林、纸页、饭食和身体里，重新练习有限而深的观看。
+coverImage: media/2026/06/img_20260620_210717.webp
+---
+```
+
+- `title` 写去掉“YYYY-Www 周回顾：”后的标题，用于手机卡片和详情页。
+- `summary` 写一到两句有画面感的概括，用于手机列表卡片；不要写成周报结论。
+- `coverImage` 可省略；若本周日记有贴近中心意象的图片，优先填写相对仓库根目录的 `media/...` 路径。
+- 不要写 `sourceDays`，周范围已经由 `startDate` 和 `endDate` 表达，来源追溯留给日志。
 
 ## 轻量检查
 

@@ -55,6 +55,7 @@ import { ReviewPage } from './pages/ReviewPage'
 import { ReviewDayPage } from './pages/ReviewDayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SyncSettingsPage } from './pages/SyncSettingsPage'
+import { WeeklyReviewPage } from './pages/WeeklyReviewPage'
 import { PageShell } from './pages/PageShell'
 import { Screen } from './ui/Screen'
 import {
@@ -92,6 +93,7 @@ type RootStackParamList = {
   PhotoMap: undefined
   Review: undefined
   ReviewDay: { date: string }
+  WeeklyReview: { week: string }
   Settings: undefined
   SyncSettings: undefined
 }
@@ -129,6 +131,7 @@ type RootStackResetRoute =
   | { name: 'PhotoMap' }
   | { name: 'Review' }
   | { name: 'ReviewDay', params: RootStackParamList['ReviewDay'] }
+  | { name: 'WeeklyReview', params: RootStackParamList['WeeklyReview'] }
   | { name: 'Settings' }
   | { name: 'SyncSettings' }
 
@@ -873,9 +876,7 @@ function JournalApp() {
               longEntryMarkdown={longEntryMarkdown}
               onBack={() => goBackOrReturnToToday(navigation)}
               onOpenSourceDay={(date) => navigation.navigate('ReviewDay', { date })}
-              onStartThemeEntry={(themeId) => {
-                openMurmurEntryForTheme(navigation, themeId)
-              }}
+              onOpenWeeklyReview={(week) => navigation.navigate('WeeklyReview', { week })}
               murmurs={murmurs}
               today={today}
             />
@@ -887,6 +888,14 @@ function JournalApp() {
               date={route.params.date}
               onBack={() => goBackOrReturnToToday(navigation)}
               onPreviewImage={openImagePreview}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="WeeklyReview">
+          {({ navigation, route }) => (
+            <WeeklyReviewPage
+              onBack={() => goBackOrReturnToToday(navigation)}
+              week={route.params.week}
             />
           )}
         </Stack.Screen>

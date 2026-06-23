@@ -173,6 +173,7 @@ async function validateFile(file) {
 
   if (file.startsWith("reviews/")) {
     validateReviewPath(file);
+    validateReviewMarkdown(file, markdown);
   }
 }
 
@@ -201,6 +202,68 @@ function validateReviewPath(file) {
   }
 
   warnings.push(`${file}: review path is not a known default review path`);
+}
+
+function validateReviewMarkdown(file, markdown) {
+  if (!/^reviews\/weekly\/\d{4}-W\d{2}\.md$/.test(file)) {
+    return;
+  }
+
+  const content = markdown.replace(/\r\n/g, "\n");
+  const frontMatter = parseRequiredFlatFrontMatter(file, content);
+
+  if (!frontMatter) {
+    return;
+  }
+
+  const weekMatch = /^reviews\/weekly\/(\d{4}-W\d{2})\.md$/.exec(file);
+  const expectedWeek = weekMatch?.[1] ?? "";
+  const requiredFields = ["week", "startDate", "endDate", "title", "summary"];
+
+  for (const field of requiredFields) {
+    if (!frontMatter.has(field) || !frontMatter.get(field)?.trim()) {
+      errors.push(`${file}: weekly review frontmatter missing ${field}`);
+    }
+  }
+
+  if (frontMatter.get("week") !== expectedWeek) {
+    errors.push(`${file}: weekly review week must match filename ${expectedWeek}`);
+  }
+
+  for (const field of ["startDate", "endDate"]) {
+    const value = frontMatter.get(field);
+
+    if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      errors.push(`${file}: weekly review ${field} must use YYYY-MM-DD`);
+    }
+  }
+
+  if (frontMatter.has("sourceDays")) {
+    errors.push(`${file}: weekly review frontmatter must not include sourceDays`);
+  }
+
+  const coverImage = frontMatter.get("coverImage");
+
+  if (coverImage && !isSafeMediaPath(coverImage)) {
+    errors.push(`${file}: weekly review coverImage must be a safe media/... path`);
+  }
+}
+
+function parseRequiredFlatFrontMatter(file, markdown) {
+  if (!markdown.startsWith("---\n")) {
+    errors.push(`${file}: weekly review missing frontmatter`);
+    return null;
+  }
+
+  const lines = markdown.split("\n");
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+
+  if (closingIndex === -1) {
+    errors.push(`${file}: weekly review frontmatter missing closing ---`);
+    return null;
+  }
+
+  return parseFlatMetadata(file, "weekly review frontmatter", lines.slice(1, closingIndex));
 }
 
 function validateEntryMarkdown(file, markdown) {
@@ -384,6 +447,19 @@ function validateMetadataValue(file, label, rawValue) {
   if (value.startsWith("[") && !isArrayLiteral(value)) {
     errors.push(`${file}: ${label} array must use [a, b] syntax`);
   }
+}
+
+function isSafeMediaPath(value) {
+  const trimmed = value.trim();
+
+  return trimmed.startsWith("media/") &&
+    !trimmed.split("/").some((segment) => (
+      !segment ||
+      segment === "." ||
+      segment === ".." ||
+      segment.startsWith(".") ||
+      segment.endsWith(".tmp")
+    ));
 }
 
 function isArrayLiteral(value) {

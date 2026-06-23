@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Image as NativeImage, Pressable, ScrollView, Text, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import {
-  BUILT_IN_THEMES,
   type DayFrontMatter,
   type MurmurBlock,
   type ReviewMoment,
@@ -11,10 +10,13 @@ import {
 import { radiusPixels, spacingPixels } from '@journal/theme'
 import {
   listDailyJournals,
+  listWeeklyReviews,
   loadOrCreateDailyReview,
   type MobileJournalRecord,
+  type MobileWeeklyReviewRecord,
 } from '../services/mobileJournalStore'
 import { journalEffects } from '../services/journalEffects'
+import { useJournalImageThumbnailUri } from '../services/mobileImageThumbnails'
 import { PageShell } from './PageShell'
 
 type ReviewPageProps = {
@@ -23,11 +25,9 @@ type ReviewPageProps = {
   murmurs: MurmurBlock[]
   onBack: () => void
   onOpenSourceDay: (date: string) => void
-  onStartThemeEntry: (themeId: string) => void
+  onOpenWeeklyReview: (week: string) => void
   today: string
 }
-
-const visibleThemeEntries = BUILT_IN_THEMES.slice(0, 7)
 
 export function ReviewPage({
   currentFrontMatter,
@@ -35,10 +35,11 @@ export function ReviewPage({
   murmurs,
   onBack,
   onOpenSourceDay,
-  onStartThemeEntry,
+  onOpenWeeklyReview,
   today,
 }: ReviewPageProps) {
   const [moments, setMoments] = useState<ReviewMoment[]>([])
+  const [weeklyReviews, setWeeklyReviews] = useState<MobileWeeklyReviewRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [didLoadFail, setDidLoadFail] = useState(false)
 
@@ -48,9 +49,13 @@ export function ReviewPage({
     setIsLoading(true)
     setDidLoadFail(false)
     setMoments([])
+    setWeeklyReviews([])
 
-    listDailyJournals()
-      .then((loadedRecords) => {
+    Promise.all([
+      listDailyJournals(),
+      listWeeklyReviews(),
+    ])
+      .then(([loadedRecords, loadedWeeklyReviews]) => {
         const currentDay: ReviewSourceDay = {
           date: today,
           frontMatter: currentFrontMatter,
@@ -65,6 +70,7 @@ export function ReviewPage({
         }).then((result) => ({
           currentDay,
           result,
+          weeklyReviews: loadedWeeklyReviews,
         }))
       })
       .then((loadedReview) => {
@@ -80,6 +86,7 @@ export function ReviewPage({
 
         if (isActive) {
           setMoments(loadedReview.result.review?.moments ?? [])
+          setWeeklyReviews(loadedReview.weeklyReviews)
         }
       })
       .catch((error) => {
@@ -105,25 +112,26 @@ export function ReviewPage({
       <ScrollView contentContainerStyle={{ paddingBottom: spacingPixels['6'] }} showsVerticalScrollIndicator={false}>
         <View className="gap-5">
           <View className="gap-3">
-            <Text className="px-1 text-xs font-semibold text-text-tertiary">此刻</Text>
-            <View className="gap-3">
-              {visibleThemeEntries.map((theme) => (
-                <Pressable
-                  accessibilityLabel={`放进${theme.label}`}
-                  accessibilityRole="button"
-                  className="border border-border bg-surface px-4 py-4"
-                  key={theme.id}
-                  onPress={() => onStartThemeEntry(theme.id)}
-                  style={({ pressed }) => ({
-                    borderRadius: radiusPixels.lg,
-                    opacity: pressed ? 0.74 : 1,
-                  })}
-                >
-                  <Text className="text-base font-semibold text-foreground">{theme.label}</Text>
-                  <Text className="mt-1 text-sm leading-5 text-text-tertiary">{theme.entrySubtitle}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <Text className="px-1 text-xs font-semibold text-text-tertiary">周回顾</Text>
+            {isLoading ? (
+              <Text className="px-1 text-sm font-medium text-text-tertiary">正在翻开这一周</Text>
+            ) : null}
+
+            {!isLoading && !didLoadFail && weeklyReviews.length === 0 ? (
+              <View className="rounded-lg border border-border bg-surface px-4 py-4">
+                <Text className="text-sm leading-5 text-text-tertiary">
+                  周回顾会在一周结束后慢慢装订成册。
+                </Text>
+              </View>
+            ) : null}
+
+            {weeklyReviews.map((review) => (
+              <WeeklyReviewCard
+                key={review.week}
+                review={review}
+                onPress={() => onOpenWeeklyReview(review.week)}
+              />
+            ))}
           </View>
 
           <View className="gap-3">
@@ -161,6 +169,62 @@ export function ReviewPage({
         </View>
       </ScrollView>
     </PageShell>
+  )
+}
+
+function WeeklyReviewCard({
+  review,
+  onPress,
+}: {
+  review: MobileWeeklyReviewRecord
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`打开周回顾：${review.title}`}
+      accessibilityRole="button"
+      className="overflow-hidden border border-border bg-surface"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        borderRadius: radiusPixels.lg,
+        opacity: pressed ? 0.78 : 1,
+      })}
+    >
+      {review.coverImage ? (
+        <WeeklyReviewCover src={review.coverImage} title={review.title} />
+      ) : null}
+      <View className="px-4 py-4">
+        <Text className="text-xs font-semibold text-text-tertiary">
+          {formatWeeklyReviewRange(review.startDate, review.endDate)}
+        </Text>
+        <Text className="mt-2 text-lg font-semibold leading-6 text-foreground">{review.title}</Text>
+        <Text className="mt-2 text-sm leading-5 text-text-tertiary" numberOfLines={3}>
+          {review.summary}
+        </Text>
+      </View>
+    </Pressable>
+  )
+}
+
+function WeeklyReviewCover({
+  src,
+  title,
+}: {
+  src: string
+  title: string
+}) {
+  const imageUri = useJournalImageThumbnailUri(src, 768)
+
+  return (
+    <NativeImage
+      accessibilityLabel={`${title}封面图`}
+      resizeMode="cover"
+      source={{ uri: imageUri }}
+      style={{
+        aspectRatio: 16 / 9,
+        width: '100%',
+      }}
+    />
   )
 }
 
@@ -214,4 +278,18 @@ function hasCurrentDayContent(day: ReviewSourceDay) {
     day.longEntryMarkdown.trim() ||
       day.murmurs.some((murmur) => murmur.body.trim() || murmur.images.length > 0),
   )
+}
+
+function formatWeeklyReviewRange(startDate: string, endDate: string) {
+  return `${formatMonthDay(startDate)} - ${formatMonthDay(endDate)}`
+}
+
+function formatMonthDay(dateKey: string) {
+  const [, month, day] = dateKey.split('-')
+
+  if (!month || !day) {
+    return dateKey
+  }
+
+  return `${Number(month)}月${Number(day)}日`
 }

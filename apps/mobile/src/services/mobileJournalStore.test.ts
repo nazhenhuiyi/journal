@@ -6,8 +6,10 @@ import {
   getDailyJournalFileUri,
   importMobileJournalImagesForDate,
   listDailyJournals,
+  listWeeklyReviews,
   loadDailyJournal,
   loadDailyReview,
+  loadWeeklyReview,
   loadOrCreateDailyReview,
   saveDailyJournal,
   updateDailyJournalFrontMatter,
@@ -896,10 +898,105 @@ themes: [small-thing]
     expect(result.review?.moments).toHaveLength(1)
     expect(mockFileSystem.files.get(reviewPath)).toContain('"id": "anniversary-2025-06-10"')
   })
+
+  it('lists weekly reviews newest first and extracts the question', async () => {
+    addDirectory('file:///app/journal-worktree/reviews/weekly/')
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/reviews/weekly/2026-W24.md',
+      createWeeklyReviewMarkdown({
+        body: '第一周正文。',
+        endDate: '2026-06-14',
+        summary: '苔藓和慢。',
+        title: '苔藓上的那一点慢',
+        week: '2026-W24',
+      }),
+    )
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/reviews/weekly/2026-W25.md',
+      createWeeklyReviewMarkdown({
+        body: '第一段。\n\n第二段。\n\n## 问题\n\n留一扇漏窗吗？',
+        coverImage: 'media/2026/06/img_20260620_210717.webp',
+        endDate: '2026-06-21',
+        startDate: '2026-06-15',
+        summary: '留一扇漏窗。',
+        title: '漏窗外的一点绿',
+        week: '2026-W25',
+      }),
+    )
+
+    const records = await listWeeklyReviews()
+
+    expect(records.map((record) => record.week)).toEqual(['2026-W25', '2026-W24'])
+    expect(records[0]).toMatchObject({
+      bodyMarkdown: '第一段。\n\n第二段。',
+      coverImage: 'media/2026/06/img_20260620_210717.webp',
+      endDate: '2026-06-21',
+      question: '留一扇漏窗吗？',
+      repositoryPath: 'reviews/weekly/2026-W25.md',
+      startDate: '2026-06-15',
+      summary: '留一扇漏窗。',
+      title: '漏窗外的一点绿',
+      week: '2026-W25',
+    })
+  })
+
+  it('returns null for malformed weekly reviews', async () => {
+    addDirectory('file:///app/journal-worktree/reviews/weekly/')
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/reviews/weekly/2026-W24.md',
+      '# Missing frontmatter',
+    )
+    mockFileSystem.files.set(
+      'file:///app/journal-worktree/reviews/weekly/2026-W25.md',
+      createWeeklyReviewMarkdown({
+        body: '正文。',
+        endDate: '2026-06-21',
+        summary: '',
+        title: '漏窗外的一点绿',
+        week: '2026-W25',
+      }),
+    )
+
+    await expect(loadWeeklyReview('2026-W24')).resolves.toBeNull()
+    await expect(loadWeeklyReview('not-a-week')).resolves.toBeNull()
+    await expect(listWeeklyReviews()).resolves.toEqual([])
+  })
 })
 
 function addDirectory(path: string) {
   mockFileSystem.directories.add(normalizeDirectoryPath(path))
+}
+
+function createWeeklyReviewMarkdown({
+  body,
+  coverImage,
+  endDate,
+  startDate = '2026-06-08',
+  summary,
+  title,
+  week,
+}: {
+  body: string
+  coverImage?: string
+  endDate: string
+  startDate?: string
+  summary: string
+  title: string
+  week: string
+}) {
+  return `---
+week: ${week}
+startDate: ${startDate}
+endDate: ${endDate}
+title: ${title}
+summary: ${summary}
+${coverImage ? `coverImage: ${coverImage}\n` : ''}---
+
+# ${week} 周回顾：${title}
+
+${startDate} 至 ${endDate}
+
+${body}`
 }
 
 function normalizeDirectoryPath(path: string) {
