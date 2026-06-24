@@ -11,7 +11,6 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import {
@@ -62,6 +61,12 @@ import {
   importMobileJournalImagesForDate,
   resolveJournalMediaFileUri,
 } from './services/mobileJournalStore'
+import {
+  getMobileImageImportFailureCopy,
+  launchMobileImagePicker,
+  requestMobileImagePickerPermission,
+  type MobileImagePickerSource,
+} from './services/mobileImagePicker'
 import { useJournalImageThumbnailUri } from './services/mobileImageThumbnails'
 import { fetchTodayMobileWeather } from './services/mobileWeather'
 import {
@@ -103,7 +108,7 @@ type NavigationRouteTree = {
   routes?: readonly NavigationRouteTree[]
   state?: NavigationRouteTree
 }
-type ImageImportSource = 'camera' | 'library'
+type ImageImportSource = MobileImagePickerSource
 type ImagePreviewOptions = {
   onBeforeClose?: () => void
 }
@@ -244,6 +249,7 @@ function JournalApp() {
   const pendingDeepLinkRef = useRef<ParsedJournalDeepLink | null>(null)
   const hasRequestedInitialUrlRef = useRef(false)
   const initialActiveEventDateRef = useRef<string | null>(null)
+  const imageImportInFlightRef = useRef(false)
   const homeModeRef = useRef<MobileHomeMode>(defaultMobileHomeMode)
   const homeModeSaveRequestRef = useRef(0)
   const [murmurDraft, setMurmurDraft] = useState('')
@@ -560,16 +566,15 @@ function JournalApp() {
     source: ImageImportSource,
     murmurId?: string | null,
   ) => {
-    if (isBusy || isImportingImages) {
+    if (isBusy || isImportingImages || imageImportInFlightRef.current) {
       return
     }
 
+    imageImportInFlightRef.current = true
     setActiveImageImport(source)
 
     try {
-      const permission = source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync(false)
+      const permission = await requestMobileImagePickerPermission(source)
 
       if (!permission.granted) {
         Alert.alert(
@@ -581,21 +586,9 @@ function JournalApp() {
         return
       }
 
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({
-            exif: true,
-            mediaTypes: ['images'],
-            quality: 1,
-          })
-        : await ImagePicker.launchImageLibraryAsync({
-            allowsMultipleSelection: true,
-            exif: true,
-            // Android Photo Picker can redact GPS EXIF on some OEM builds.
-            legacy: Platform.OS === 'android',
-            mediaTypes: ['images'],
-            preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-            quality: 1,
-          })
+      const result = await launchMobileImagePicker(source, {
+        platform: Platform.OS,
+      })
 
       if (result.canceled) {
         return
@@ -626,10 +619,11 @@ function JournalApp() {
       }
     } catch (error) {
       console.error(error)
-      Alert.alert('图片没有放进去', source === 'camera'
-        ? '刚才拍下的照片没有保存成功。'
-        : '刚才选择的图片没有保存成功。')
+      const copy = getMobileImageImportFailureCopy(source, error)
+
+      Alert.alert(copy.title, copy.message)
     } finally {
+      imageImportInFlightRef.current = false
       setActiveImageImport(null)
     }
   }, [addImagesToMurmur, clearStoredMurmurDraftBackup, isBusy, isImportingImages, murmurDraft, selectedMurmurThemeIds, today])
