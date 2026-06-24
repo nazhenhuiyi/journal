@@ -6,6 +6,31 @@ import {
 import { widgetTaskHandler } from './widgetTaskHandler'
 
 const mockLoadJournalWidgetSnapshot = vi.hoisted(() => vi.fn())
+const mockRefreshJournalWidgetSnapshot = vi.hoisted(() => vi.fn())
+const widgetSnapshot = {
+  date: '2026-06-10',
+  generatedAt: '2026-06-10T08:00:00.000Z',
+  moment: {
+    action: {
+      themeId: 'sky-now',
+      type: 'write',
+    },
+    mode: 'theme-entry',
+    subtitle: '留一张现在的天',
+    title: '此刻的天空',
+  },
+  review: {
+    action: {
+      type: 'weeklyReview',
+      week: '2026-W25',
+    },
+    mode: 'weekly-review',
+    subtitle: '6月15日 - 6月21日',
+    summary: '留一扇漏窗。',
+    title: '漏窗外的一点绿',
+  },
+  version: 2,
+}
 
 vi.mock('react-native-android-widget', () => ({
   FlexWidget: 'FlexWidget',
@@ -14,38 +39,19 @@ vi.mock('react-native-android-widget', () => ({
 
 vi.mock('../services/journalWidgetSnapshotStore', () => ({
   loadJournalWidgetSnapshot: mockLoadJournalWidgetSnapshot,
+  refreshJournalWidgetSnapshot: mockRefreshJournalWidgetSnapshot,
 }))
 
 describe('widgetTaskHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockLoadJournalWidgetSnapshot.mockResolvedValue({
-      date: '2026-06-10',
-      generatedAt: '2026-06-10T08:00:00.000Z',
-      moment: {
-        action: {
-          themeId: 'sky-now',
-          type: 'write',
-        },
-        mode: 'theme-entry',
-        subtitle: '留一张现在的天',
-        title: '此刻的天空',
-      },
-      review: {
-        action: {
-          type: 'weeklyReview',
-          week: '2026-W25',
-        },
-        mode: 'weekly-review',
-        subtitle: '6月15日 - 6月21日',
-        summary: '留一扇漏窗。',
-        title: '漏窗外的一点绿',
-      },
-      version: 2,
+    mockLoadJournalWidgetSnapshot.mockResolvedValue(widgetSnapshot)
+    mockRefreshJournalWidgetSnapshot.mockResolvedValue({
+      snapshot: widgetSnapshot,
     })
   })
 
-  it('renders Android widgets from the cached snapshot during background updates', async () => {
+  it('refreshes Android widget snapshots during background updates', async () => {
     const renderWidget = vi.fn()
 
     await widgetTaskHandler(createWidgetTaskProps({
@@ -54,7 +60,10 @@ describe('widgetTaskHandler', () => {
       widgetName: androidJournalWidgetName,
     }))
 
-    expect(mockLoadJournalWidgetSnapshot).toHaveBeenCalledOnce()
+    expect(mockRefreshJournalWidgetSnapshot).toHaveBeenCalledWith(undefined, {
+      updateNativeWidgets: false,
+    })
+    expect(mockLoadJournalWidgetSnapshot).not.toHaveBeenCalled()
     expect(renderWidget).toHaveBeenCalledOnce()
     expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
       props: {
@@ -70,22 +79,54 @@ describe('widgetTaskHandler', () => {
     })
   })
 
-  it('renders the fallback widget when no cached snapshot exists', async () => {
+  it('falls back to the cached snapshot when background refresh fails', async () => {
     const renderWidget = vi.fn()
+    const error = new Error('refresh failed')
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
+    mockRefreshJournalWidgetSnapshot.mockRejectedValueOnce(error)
+
+    try {
+      await widgetTaskHandler(createWidgetTaskProps({
+        renderWidget,
+        widgetAction: 'WIDGET_UPDATE',
+        widgetName: androidJournalWidgetName,
+      }))
+
+      expect(consoleError).toHaveBeenCalledWith(error)
+      expect(mockLoadJournalWidgetSnapshot).toHaveBeenCalledOnce()
+      expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
+        props: {
+          accessibilityLabel: '漏窗外的一点绿',
+        },
+      })
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('renders the fallback widget when refresh and cache both have no snapshot', async () => {
+    const renderWidget = vi.fn()
+    const consoleError = vi.spyOn(console, 'error').mockImplementationOnce(() => undefined)
+
+    mockRefreshJournalWidgetSnapshot.mockRejectedValueOnce(new Error('refresh failed'))
     mockLoadJournalWidgetSnapshot.mockResolvedValueOnce(null)
 
-    await widgetTaskHandler(createWidgetTaskProps({
-      renderWidget,
-      widgetAction: 'WIDGET_UPDATE',
-      widgetName: androidJournalWidgetName,
-    }))
+    try {
+      await widgetTaskHandler(createWidgetTaskProps({
+        renderWidget,
+        widgetAction: 'WIDGET_UPDATE',
+        widgetName: androidJournalWidgetName,
+      }))
 
-    expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
-      props: {
-        accessibilityLabel: '今天还没有留下什么',
-      },
-    })
+      expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
+        props: {
+          accessibilityLabel: '今天还没有留下什么',
+        },
+      })
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('ignores widget actions for unrelated widget providers', async () => {
@@ -98,6 +139,7 @@ describe('widgetTaskHandler', () => {
     }))
 
     expect(mockLoadJournalWidgetSnapshot).not.toHaveBeenCalled()
+    expect(mockRefreshJournalWidgetSnapshot).not.toHaveBeenCalled()
     expect(renderWidget).not.toHaveBeenCalled()
   })
 })

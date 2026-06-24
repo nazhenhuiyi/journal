@@ -127,7 +127,7 @@ themes: [sky-now]
     expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
     expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 2')
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledTimes(2)
-    expect(mockUpdateNativeJournalWidgets).toHaveBeenCalledWith(snapshot)
+    expect(mockUpdateNativeJournalWidgets).toHaveBeenCalledWith(snapshot, result.timeline)
   })
 
   it('keeps the widget snapshot isolated during mobile E2E runs', () => {
@@ -167,6 +167,33 @@ themes: [sky-now]
     expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
     expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 2')
     expect(mockUpdateNativeJournalWidgets).not.toHaveBeenCalled()
+  })
+
+  it('builds a compact widget timeline for the remaining local moment windows', async () => {
+    const result = await refreshJournalWidgetSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 9, 30),
+    }, {
+      updateNativeWidgets: false,
+    })
+
+    expect(result.timeline.map((entry) => entry.date.getHours())).toEqual([
+      9,
+      10,
+      14,
+      17,
+      20,
+      21,
+    ])
+    expect(result.timeline.map((entry) => entry.snapshot.moment.action.themeId)).toEqual([
+      'sky-now',
+      'food-today',
+      'small-thing',
+      'light-shadow',
+      'small-thing',
+      'thought-maybe',
+    ])
+    expect(mockFileSystem.files.get(snapshotPath)).toContain('"themeId": "sky-now"')
   })
 
   it('uses existing persisted review moments when present', async () => {

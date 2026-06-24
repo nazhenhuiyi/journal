@@ -3,7 +3,10 @@ import {
   androidJournalWidgetNames,
   renderJournalMomentAndroidWidget,
 } from './JournalMomentAndroidWidget'
-import { loadJournalWidgetSnapshot } from '../services/journalWidgetSnapshotStore'
+import {
+  loadJournalWidgetSnapshot,
+  refreshJournalWidgetSnapshot,
+} from '../services/journalWidgetSnapshotStore'
 
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   if (!androidJournalWidgetNames.includes(props.widgetInfo.widgetName)) {
@@ -14,12 +17,25 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     case 'WIDGET_ADDED':
     case 'WIDGET_UPDATE':
     case 'WIDGET_RESIZED': {
-      const snapshot = await loadJournalWidgetSnapshot()
+      const snapshot = await loadSnapshotForAndroidWidgetUpdate()
 
       props.renderWidget(renderJournalMomentAndroidWidget(snapshot, props.widgetInfo))
       break
     }
     default:
       break
+  }
+}
+
+async function loadSnapshotForAndroidWidgetUpdate() {
+  try {
+    const result = await refreshJournalWidgetSnapshot(undefined, {
+      updateNativeWidgets: false,
+    })
+
+    return result.snapshot
+  } catch (error) {
+    console.error(error)
+    return loadJournalWidgetSnapshot()
   }
 }

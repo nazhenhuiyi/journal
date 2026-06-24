@@ -5,6 +5,8 @@ import {
   normalizeJournalWidgetBundleSnapshot,
   normalizeJournalWidgetSnapshot,
   type JournalWidgetBundleSnapshot,
+  type JournalWidgetWeeklyReviewInput,
+  type ReviewMoment,
   type ReviewSourceDay,
 } from '@journal/core'
 import {
@@ -21,37 +23,56 @@ import { updateNativeJournalWidgets } from '../widgets/journalWidgetNative'
 export type RefreshJournalWidgetSnapshotInput = {
   currentDay?: ReviewSourceDay
   date?: string
+  now?: Date
 }
 
 export type RefreshJournalWidgetSnapshotResult = {
   reviewResult: LoadDailyReviewResult
   snapshot: JournalWidgetBundleSnapshot
+  timeline: JournalWidgetSnapshotTimelineEntry[]
 }
 
 export type RefreshJournalWidgetSnapshotOptions = {
   updateNativeWidgets?: boolean
 }
 
+export type JournalWidgetSnapshotTimelineEntry = {
+  date: Date
+  snapshot: JournalWidgetBundleSnapshot
+}
+
 const widgetSnapshotFileName = 'journal-widget-snapshot-v2.json'
 const legacyWidgetSnapshotFileName = 'journal-widget-snapshot-v1.json'
+const momentTimelineRefreshHours = [5, 10, 14, 17, 20, 21] as const
 
 export async function refreshJournalWidgetSnapshot({
   currentDay,
-  date = getLocalDateKey(),
+  date,
+  now,
 }: RefreshJournalWidgetSnapshotInput = {}, {
   updateNativeWidgets = true,
 }: RefreshJournalWidgetSnapshotOptions = {}): Promise<RefreshJournalWidgetSnapshotResult> {
+  const snapshotTime = now ?? new Date()
+  const snapshotDate = date ?? getLocalDateKey(snapshotTime)
   const [records, weeklyReviews] = await Promise.all([
     listDailyJournals(),
     listWeeklyReviews(),
   ])
   const sourceDays = mergeCurrentDay(records, currentDay)
   const reviewResult = await loadOrCreateDailyReview({
-    date,
+    date: snapshotDate,
     sourceDays,
   })
-  const snapshot = createJournalWidgetBundleSnapshot({
-    date,
+  const timeline = createJournalWidgetSnapshotTimeline({
+    date: snapshotDate,
+    now: snapshotTime,
+    reviewMoments: reviewResult.review?.moments ?? [],
+    sourceDays,
+    weeklyReviews,
+  })
+  const snapshot = timeline[0]?.snapshot ?? createJournalWidgetBundleSnapshot({
+    date: snapshotDate,
+    now: snapshotTime,
     reviewMoments: reviewResult.review?.moments ?? [],
     sourceDays,
     weeklyReviews,
@@ -60,12 +81,13 @@ export async function refreshJournalWidgetSnapshot({
   await saveJournalWidgetSnapshot(snapshot)
 
   if (updateNativeWidgets) {
-    await updateNativeJournalWidgetsBestEffort(snapshot)
+    await updateNativeJournalWidgetsBestEffort(snapshot, timeline)
   }
 
   return {
     reviewResult,
     snapshot,
+    timeline,
   }
 }
 
@@ -109,6 +131,37 @@ export function getLegacyJournalWidgetSnapshotFilePath() {
   return `${FileSystem.documentDirectory}${appendMobileE2eSuffix(legacyWidgetSnapshotFileName)}`
 }
 
+function createJournalWidgetSnapshotTimeline({
+  date,
+  now = new Date(),
+  reviewMoments = [],
+  sourceDays,
+  weeklyReviews = [],
+}: {
+  date: string
+  now?: Date
+  reviewMoments?: readonly ReviewMoment[]
+  sourceDays: readonly ReviewSourceDay[]
+  weeklyReviews?: readonly JournalWidgetWeeklyReviewInput[]
+}): JournalWidgetSnapshotTimelineEntry[] {
+  const entryDates = [
+    now,
+    ...getUpcomingMomentTimelineDates(date, now),
+  ]
+
+  return entryDates.map((entryDate) => ({
+    date: entryDate,
+    snapshot: createJournalWidgetBundleSnapshot({
+      date,
+      generatedAt: entryDate.toISOString(),
+      now: entryDate,
+      reviewMoments,
+      sourceDays,
+      weeklyReviews,
+    }),
+  }))
+}
+
 async function loadLegacyJournalWidgetSnapshot(): Promise<JournalWidgetBundleSnapshot | null> {
   const filePath = getLegacyJournalWidgetSnapshotFilePath()
   const fileInfo = await FileSystem.getInfoAsync(filePath)
@@ -128,11 +181,41 @@ async function loadLegacyJournalWidgetSnapshot(): Promise<JournalWidgetBundleSna
   }
 }
 
-async function updateNativeJournalWidgetsBestEffort(snapshot: JournalWidgetBundleSnapshot) {
+async function updateNativeJournalWidgetsBestEffort(
+  snapshot: JournalWidgetBundleSnapshot,
+  timeline: readonly JournalWidgetSnapshotTimelineEntry[],
+) {
   try {
-    await updateNativeJournalWidgets(snapshot)
+    await updateNativeJournalWidgets(snapshot, timeline)
   } catch (error) {
     console.error(error)
+  }
+}
+
+function getUpcomingMomentTimelineDates(date: string, now: Date) {
+  const dateParts = parseDateKey(date)
+  const nowTime = now.getTime()
+
+  if (!dateParts || !Number.isFinite(nowTime)) {
+    return []
+  }
+
+  return momentTimelineRefreshHours
+    .map((hour) => new Date(dateParts.year, dateParts.month - 1, dateParts.day, hour, 0, 0, 0))
+    .filter((entryDate) => entryDate.getTime() > nowTime)
+}
+
+function parseDateKey(date: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    day: Number(match[3]),
+    month: Number(match[2]),
+    year: Number(match[1]),
   }
 }
 
