@@ -15,7 +15,7 @@
 
 ## 产品机制
 
-- [回顾与小组件推荐逻辑](回顾与小组件推荐逻辑.md)：`ReviewMoment`、`ReviewFile`、`JournalWidgetSnapshot` 与小组件刷新。
+- [回顾与小组件推荐逻辑](回顾与小组件推荐逻辑.md)：`ReviewMoment`、`ReviewFile`、`JournalWidgetBundleSnapshot` 与小组件刷新。
 - [移动端 Today 页设计](<移动端 Today 页设计.md>)：移动端 Today、碎碎念面板和信息架构的设计取舍。
 - [移动端小组件](移动端小组件.md)：Android / iOS 小组件实现、snapshot 数据流和验收边界。
 - [品牌语言](品牌语言.md)：产品命名、slogan、语气和文案原则。

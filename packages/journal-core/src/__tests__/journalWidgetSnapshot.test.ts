@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adaptJournalWidgetSnapshotToBundle,
+  createJournalWidgetBundleSnapshot,
   createJournalWidgetSnapshot,
+  normalizeJournalWidgetBundleSnapshot,
   normalizeJournalWidgetSnapshot,
   type ReviewMoment,
   type ReviewSourceDay,
@@ -108,7 +111,7 @@ describe('journal widget snapshots', () => {
     expect(snapshot.subtitle).toBeTruthy()
   })
 
-  it('prefers review after today has content but entry after several quiet days', () => {
+  it('keeps a daily review whenever an eligible moment exists', () => {
     const softMoment: ReviewMoment = {
       ...reviewMoment,
       anchors: [
@@ -142,6 +145,265 @@ describe('journal widget snapshots', () => {
       date: '2026-06-15',
       reviewMoments: [softMoment],
       sourceDays: [sourceDay],
-    }).mode).toBe('theme-entry')
+    }).mode).toBe('review-moment')
+  })
+
+  it('prefers a fresh weekly review over a daily review moment', () => {
+    const snapshot = createJournalWidgetBundleSnapshot({
+      date: '2026-06-22',
+      generatedAt: '2026-06-22T08:00:00.000Z',
+      now: new Date(2026, 5, 22, 8),
+      reviewMoments: [reviewMoment],
+      sourceDays: [sourceDay],
+      weeklyReviews: [
+        {
+          coverImage: 'media/2026/06/img_20260620_210717.webp',
+          endDate: '2026-06-21',
+          startDate: '2026-06-15',
+          summary: '在快的时代里，给自己留一扇漏窗。',
+          title: '漏窗外的一点绿',
+          week: '2026-W25',
+        },
+      ],
+    })
+
+    expect(snapshot.review).toEqual({
+      action: {
+        type: 'weeklyReview',
+        week: '2026-W25',
+      },
+      backgroundImageSrc: 'media/2026/06/img_20260620_210717.webp',
+      mode: 'weekly-review',
+      subtitle: '6月15日 - 6月21日',
+      summary: '在快的时代里，给自己留一扇漏窗。',
+      title: '漏窗外的一点绿',
+    })
+  })
+
+  it('keeps a fresh weekly review when its optional cover image is unsafe', () => {
+    const snapshot = createJournalWidgetBundleSnapshot({
+      date: '2026-06-22',
+      generatedAt: '2026-06-22T08:00:00.000Z',
+      now: new Date(2026, 5, 22, 8),
+      reviewMoments: [reviewMoment],
+      sourceDays: [sourceDay],
+      weeklyReviews: [
+        {
+          coverImage: '../media/bad.jpg',
+          endDate: '2026-06-21',
+          startDate: '2026-06-15',
+          summary: '在快的时代里，给自己留一扇漏窗。',
+          title: '漏窗外的一点绿',
+          week: '2026-W25',
+        },
+      ],
+    })
+
+    expect(snapshot.review).toEqual({
+      action: {
+        type: 'weeklyReview',
+        week: '2026-W25',
+      },
+      mode: 'weekly-review',
+      subtitle: '6月15日 - 6月21日',
+      summary: '在快的时代里，给自己留一扇漏窗。',
+      title: '漏窗外的一点绿',
+    })
+  })
+
+  it('falls back to a daily review when the weekly review is older than one day', () => {
+    const snapshot = createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      now: new Date(2026, 5, 23, 8),
+      reviewMoments: [reviewMoment],
+      sourceDays: [
+        {
+          ...sourceDay,
+          murmurs: [
+            {
+              ...sourceDay.murmurs[0]!,
+              images: [
+                {
+                  id: 'img_20250610_070000',
+                  src: 'media/2025/06/sky.jpg',
+                  tags: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      weeklyReviews: [
+        {
+          endDate: '2026-06-21',
+          startDate: '2026-06-15',
+          summary: '过期周回顾。',
+          title: '漏窗外的一点绿',
+          week: '2026-W25',
+        },
+      ],
+    })
+
+    expect(snapshot.review).toMatchObject({
+      action: {
+        date: '2025-06-10',
+        type: 'reviewDay',
+      },
+      backgroundImageSrc: 'media/2025/06/sky.jpg',
+      mode: 'daily-review',
+      summary: '你写过一句：云有一点发紫',
+      subtitle: '此刻的天空',
+      title: '那年今日',
+    })
+  })
+
+  it('creates a stable empty review placeholder when no review content exists', () => {
+    const snapshot = createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      now: new Date(2026, 5, 23, 8),
+      sourceDays: [],
+    })
+
+    expect(snapshot.review).toMatchObject({
+      action: {
+        themeId: 'small-thing',
+        type: 'write',
+      },
+      mode: 'empty-review',
+    })
+    expect(snapshot.review.title).toBeTruthy()
+    expect(snapshot.review.summary).toBeTruthy()
+  })
+
+  it('selects moment themes by local time and avoids themes already used today', () => {
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 7),
+      sourceDays: [],
+    }).moment.action.themeId).toBe('sky-now')
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 12),
+      sourceDays: [],
+    }).moment.action.themeId).toBe('food-today')
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 18),
+      sourceDays: [],
+    }).moment.action.themeId).toBe('light-shadow')
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 23),
+      sourceDays: [],
+    }).moment.action.themeId).toBe('thought-maybe')
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      now: new Date(2026, 5, 23, 7),
+      sourceDays: [
+        {
+          date: '2026-06-23',
+          frontMatter: { date: '2026-06-23' },
+          longEntryMarkdown: '',
+          murmurs: [
+            {
+              body: '今天已经写过天空。',
+              id: 'm_20260623_070000',
+              images: [],
+              themes: ['sky-now'],
+              time: '2026-06-23T07:00:00+08:00',
+            },
+          ],
+        },
+      ],
+    }).moment.action.themeId).toBe('sunrise-sunset')
+  })
+
+  it('normalizes v2 bundle snapshots and rejects unsafe bundle fields', () => {
+    const snapshot = {
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      moment: {
+        action: { themeId: ' sky-now ', type: 'write' },
+        mode: 'theme-entry',
+        subtitle: ' 留一张现在的天 ',
+        title: ' 此刻的天空 ',
+      },
+      review: {
+        action: { type: 'weeklyReview', week: '2026-W25' },
+        backgroundImageSrc: ' media/2026/06/img.webp ',
+        mode: 'weekly-review',
+        subtitle: ' 6月15日 - 6月21日 ',
+        summary: ' 留一扇漏窗。 ',
+        title: ' 漏窗外的一点绿 ',
+      },
+      version: 2,
+    }
+
+    expect(normalizeJournalWidgetBundleSnapshot(snapshot)).toEqual({
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      moment: {
+        action: { themeId: 'sky-now', type: 'write' },
+        mode: 'theme-entry',
+        subtitle: '留一张现在的天',
+        title: '此刻的天空',
+      },
+      review: {
+        action: { type: 'weeklyReview', week: '2026-W25' },
+        backgroundImageSrc: 'media/2026/06/img.webp',
+        mode: 'weekly-review',
+        subtitle: '6月15日 - 6月21日',
+        summary: '留一扇漏窗。',
+        title: '漏窗外的一点绿',
+      },
+      version: 2,
+    })
+    expect(normalizeJournalWidgetBundleSnapshot({
+      ...snapshot,
+      review: {
+        ...snapshot.review,
+        backgroundImageSrc: '../media/bad.jpg',
+      },
+    })).toBeNull()
+    expect(normalizeJournalWidgetBundleSnapshot({
+      ...snapshot,
+      review: {
+        ...snapshot.review,
+        action: { themeId: 'small-thing', type: 'write' },
+      },
+    })).toBeNull()
+  })
+
+  it('adapts legacy v1 snapshots into a v2 bundle fallback', () => {
+    const bundle = adaptJournalWidgetSnapshotToBundle({
+      action: {
+        date: '2025-06-10',
+        type: 'reviewDay',
+      },
+      date: '2026-06-10',
+      footnote: '此刻的天空',
+      generatedAt: '2026-06-10T08:00:00.000Z',
+      mode: 'review-moment',
+      subtitle: '你写过一句：云有一点发紫',
+      title: '那年今日',
+      version: 1,
+    })
+
+    expect(bundle).toMatchObject({
+      date: '2026-06-10',
+      review: {
+        action: {
+          date: '2025-06-10',
+          type: 'reviewDay',
+        },
+        mode: 'daily-review',
+        summary: '你写过一句：云有一点发紫',
+        subtitle: '此刻的天空',
+        title: '那年今日',
+      },
+      version: 2,
+    })
   })
 })

@@ -1,6 +1,6 @@
-import type { JournalWidgetSnapshot } from '@journal/core'
+import type { JournalWidgetBundleSnapshot } from '@journal/core'
 
-export async function updateNativeJournalWidgets(_snapshot: JournalWidgetSnapshot) {
+export async function updateNativeJournalWidgets(_snapshot: JournalWidgetBundleSnapshot) {
   void _snapshot
   // Platform-specific files update real widgets.
 }

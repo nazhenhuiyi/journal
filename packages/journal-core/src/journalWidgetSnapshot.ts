@@ -5,7 +5,12 @@ import {
 } from './themes'
 import type {
   JournalWidgetAction,
+  JournalWidgetBundleSnapshot,
+  JournalWidgetMomentSnapshot,
+  JournalWidgetReviewMode,
+  JournalWidgetReviewSnapshot,
   JournalWidgetSnapshot,
+  JournalWidgetWeeklyReviewInput,
   ReviewAnchor,
   ReviewMoment,
   ReviewSourceDay,
@@ -18,8 +23,28 @@ type CreateJournalWidgetSnapshotInput = {
   sourceDays: readonly ReviewSourceDay[]
 }
 
+type CreateJournalWidgetBundleSnapshotInput = CreateJournalWidgetSnapshotInput & {
+  now?: Date
+  weeklyReviews?: readonly JournalWidgetWeeklyReviewInput[]
+}
+
 const dateKeyPattern = /^\d{4}-\d{2}-\d{2}$/
-const staleEntryThresholdDays = 3
+const weekKeyPattern = /^\d{4}-W\d{2}$/
+const freshWeeklyReviewThresholdDays = 1
+const emptyReviewPlaceholders = [
+  {
+    summary: '写一句也很好，未来会在这里遇见它。',
+    title: '今天还没有留下什么',
+  },
+  {
+    summary: '不用完整，把眼前的一小件事放下来。',
+    title: '先留下一点此刻',
+  },
+  {
+    summary: '拍一张照片，或写下一句刚刚想到的话。',
+    title: '给今天一个入口',
+  },
+] as const
 
 export function createJournalWidgetSnapshot({
   date,
@@ -27,24 +52,10 @@ export function createJournalWidgetSnapshot({
   reviewMoments = [],
   sourceDays,
 }: CreateJournalWidgetSnapshotInput): JournalWidgetSnapshot {
-  const eligibleMoments = reviewMoments.filter(isWidgetEligibleReviewMoment)
-  const strongMoment = eligibleMoments.find(isStrongReviewMoment)
-  const currentDay = sourceDays.find((day) => day.date === date)
-  const hasCurrentDayContent = currentDay ? hasReviewableDayContent(currentDay) : false
-  const latestPastDay = sourceDays
-    .filter((day) => day.date !== date && hasReviewableDayContent(day))
-    .sort((first, second) => second.date.localeCompare(first.date))[0]
-  const daysSinceLatestPastDay = latestPastDay
-    ? getDayDistance(latestPastDay.date, date)
-    : Number.POSITIVE_INFINITY
-  const shouldPreferEntry = daysSinceLatestPastDay >= staleEntryThresholdDays && !strongMoment
-  const reviewMoment = strongMoment ??
-    (hasCurrentDayContent || !shouldPreferEntry ? selectReviewMomentByWeight({
-      date,
-      moments: eligibleMoments,
-      sourceDays,
-      hasCurrentDayContent,
-    }) : null)
+  const reviewMoment = selectReviewMomentForWidget({
+    date,
+    reviewMoments,
+  })
 
   if (reviewMoment) {
     return createReviewMomentSnapshot({
@@ -59,6 +70,34 @@ export function createJournalWidgetSnapshot({
     generatedAt,
     sourceDays,
   })
+}
+
+export function createJournalWidgetBundleSnapshot({
+  date,
+  generatedAt,
+  now,
+  reviewMoments = [],
+  sourceDays,
+  weeklyReviews = [],
+}: CreateJournalWidgetBundleSnapshotInput): JournalWidgetBundleSnapshot {
+  const snapshotTime = now ?? new Date()
+
+  return {
+    date,
+    generatedAt: generatedAt ?? snapshotTime.toISOString(),
+    moment: createThemeEntryMomentSnapshot({
+      date,
+      now: snapshotTime,
+      sourceDays,
+    }),
+    review: createReviewSnapshotForBundle({
+      date,
+      reviewMoments,
+      sourceDays,
+      weeklyReviews,
+    }),
+    version: 2,
+  }
 }
 
 export function normalizeJournalWidgetSnapshot(value: unknown): JournalWidgetSnapshot | null {
@@ -104,6 +143,155 @@ export function normalizeJournalWidgetSnapshot(value: unknown): JournalWidgetSna
     subtitle: value.subtitle?.trim() || undefined,
     title: value.title.trim(),
     version: 1,
+  }
+}
+
+export function normalizeJournalWidgetBundleSnapshot(value: unknown): JournalWidgetBundleSnapshot | null {
+  if (!isRecord(value) || value.version !== 2 || !isDateKey(value.date)) {
+    return null
+  }
+
+  if (typeof value.generatedAt !== 'string' || !value.generatedAt.trim()) {
+    return null
+  }
+
+  const review = normalizeJournalWidgetReviewSnapshot(value.review)
+  const moment = normalizeJournalWidgetMomentSnapshot(value.moment)
+
+  if (!review || !moment) {
+    return null
+  }
+
+  return {
+    date: value.date,
+    generatedAt: value.generatedAt.trim(),
+    moment,
+    review,
+    version: 2,
+  }
+}
+
+export function adaptJournalWidgetSnapshotToBundle(
+  snapshot: JournalWidgetSnapshot,
+): JournalWidgetBundleSnapshot {
+  const fallbackMoment = createThemeEntryMomentSnapshot({
+    date: snapshot.date,
+    now: new Date(snapshot.generatedAt),
+    sourceDays: [],
+  })
+  const moment: JournalWidgetMomentSnapshot = snapshot.mode === 'theme-entry'
+    ? {
+        action: snapshot.action.type === 'write'
+          ? snapshot.action
+          : fallbackMoment.action,
+        footnote: snapshot.footnote,
+        mode: 'theme-entry',
+        subtitle: snapshot.subtitle,
+        title: snapshot.title,
+      }
+    : fallbackMoment
+  const review: JournalWidgetReviewSnapshot = snapshot.mode === 'review-moment'
+    ? {
+        action: snapshot.action.type === 'reviewDay' || snapshot.action.type === 'review'
+          ? snapshot.action
+          : { type: 'review' },
+        mode: 'daily-review',
+        summary: snapshot.subtitle,
+        subtitle: snapshot.footnote,
+        title: snapshot.title,
+      }
+    : createEmptyReviewSnapshot(snapshot.date)
+
+  return {
+    date: snapshot.date,
+    generatedAt: snapshot.generatedAt,
+    moment,
+    review,
+    version: 2,
+  }
+}
+
+function createReviewSnapshotForBundle({
+  date,
+  reviewMoments,
+  sourceDays,
+  weeklyReviews,
+}: {
+  date: string
+  reviewMoments: readonly ReviewMoment[]
+  sourceDays: readonly ReviewSourceDay[]
+  weeklyReviews: readonly JournalWidgetWeeklyReviewInput[]
+}): JournalWidgetReviewSnapshot {
+  const weeklyReview = selectFreshWeeklyReview(weeklyReviews, date)
+
+  if (weeklyReview) {
+    const coverImage = weeklyReview.coverImage?.trim()
+    const backgroundImageSrc = coverImage && isSafeMediaPath(coverImage)
+      ? coverImage
+      : ''
+
+    return {
+      action: {
+        type: 'weeklyReview',
+        week: weeklyReview.week,
+      },
+      ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
+      mode: 'weekly-review',
+      summary: weeklyReview.summary.trim(),
+      subtitle: formatDateRangeShort(weeklyReview.startDate, weeklyReview.endDate),
+      title: weeklyReview.title.trim(),
+    }
+  }
+
+  const reviewMoment = selectReviewMomentForWidget({
+    date,
+    reviewMoments,
+  })
+
+  if (reviewMoment) {
+    return createDailyReviewSnapshot({
+      moment: reviewMoment,
+      sourceDays,
+    })
+  }
+
+  return createEmptyReviewSnapshot(date)
+}
+
+function createDailyReviewSnapshot({
+  moment,
+  sourceDays,
+}: {
+  moment: ReviewMoment
+  sourceDays: readonly ReviewSourceDay[]
+}): JournalWidgetReviewSnapshot {
+  const sourceDay = moment.sourceDays.find(isDateKey)
+  const backgroundImageSrc = getFirstImageForMoment(moment, sourceDays)
+
+  return {
+    action: sourceDay
+      ? { date: sourceDay, type: 'reviewDay' }
+      : { type: 'review' },
+    ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
+    mode: 'daily-review',
+    summary: moment.subtitle,
+    subtitle: formatReviewMomentFootnote(moment),
+    title: moment.title,
+  }
+}
+
+function createEmptyReviewSnapshot(date: string): JournalWidgetReviewSnapshot {
+  const placeholder = emptyReviewPlaceholders[hashString(date) % emptyReviewPlaceholders.length]
+
+  return {
+    action: {
+      themeId: 'small-thing',
+      type: 'write',
+    },
+    footnote: '回看',
+    mode: 'empty-review',
+    summary: placeholder.summary,
+    title: placeholder.title,
   }
 }
 
@@ -159,54 +347,52 @@ function createThemeEntrySnapshot({
   }
 }
 
-function selectReviewMomentByWeight({
+function createThemeEntryMomentSnapshot({
   date,
-  moments,
+  now,
   sourceDays,
-  hasCurrentDayContent,
 }: {
   date: string
-  moments: ReviewMoment[]
+  now: Date
   sourceDays: readonly ReviewSourceDay[]
-  hasCurrentDayContent: boolean
+}): JournalWidgetMomentSnapshot {
+  const theme = selectMomentThemeEntry({
+    date,
+    now,
+    sourceDays,
+  })
+
+  return {
+    action: {
+      themeId: theme.id,
+      type: 'write',
+    },
+    footnote: '此刻',
+    mode: 'theme-entry',
+    subtitle: theme.entrySubtitle,
+    title: theme.label,
+  }
+}
+
+function selectReviewMomentForWidget({
+  date,
+  reviewMoments,
+}: {
+  date: string
+  reviewMoments: readonly ReviewMoment[]
 }) {
-  if (moments.length === 0) {
+  const eligibleMoments = reviewMoments.filter(isWidgetEligibleReviewMoment)
+  const strongMoment = eligibleMoments.find(isStrongReviewMoment)
+
+  if (strongMoment) {
+    return strongMoment
+  }
+
+  if (eligibleMoments.length === 0) {
     return null
   }
 
-  if (hasCurrentDayContent) {
-    return moments[0]
-  }
-
-  const reviewWeight = getReviewWeight(sourceDays, date)
-  const bucket = hashString(date) % 10
-
-  return bucket < reviewWeight ? moments[0] : null
-}
-
-function getReviewWeight(sourceDays: readonly ReviewSourceDay[], today: string) {
-  const reviewableDates = sourceDays
-    .filter((day) => day.date !== today && hasReviewableDayContent(day))
-    .map((day) => day.date)
-    .sort()
-  const reviewableDayCount = reviewableDates.length
-  const spanDays = reviewableDates.length >= 2
-    ? getDayDistance(reviewableDates[0], reviewableDates[reviewableDates.length - 1])
-    : 0
-
-  if (reviewableDayCount >= 365 || spanDays >= 365) {
-    return 7
-  }
-
-  if (reviewableDayCount >= 180 || spanDays >= 180) {
-    return 7
-  }
-
-  if (reviewableDayCount >= 90 || spanDays >= 90) {
-    return 5
-  }
-
-  return 3
+  return eligibleMoments[hashString(date) % eligibleMoments.length] ?? null
 }
 
 function selectThemeEntry(date: string, sourceDays: readonly ReviewSourceDay[]) {
@@ -223,6 +409,57 @@ function selectThemeEntry(date: string, sourceDays: readonly ReviewSourceDay[]) 
   }
 
   return BUILT_IN_THEMES[hashString(date) % BUILT_IN_THEMES.length]
+}
+
+function selectMomentThemeEntry({
+  date,
+  now,
+  sourceDays,
+}: {
+  date: string
+  now: Date
+  sourceDays: readonly ReviewSourceDay[]
+}) {
+  const currentDay = sourceDays.find((day) => day.date === date)
+  const usedThemeIds = new Set(normalizeThemeIds(
+    currentDay?.murmurs.flatMap((murmur) => murmur.themes) ?? [],
+  ))
+  const candidates = getThemeCandidatesForMoment(date, now)
+  const availableTheme = candidates
+    .filter((themeId) => !usedThemeIds.has(themeId))
+    .map((themeId) => getBuiltInThemeById(themeId))
+    .find(Boolean)
+  const fallbackTheme = candidates
+    .map((themeId) => getBuiltInThemeById(themeId))
+    .find(Boolean)
+
+  return availableTheme ?? fallbackTheme ?? BUILT_IN_THEMES[hashString(date) % BUILT_IN_THEMES.length]
+}
+
+function getThemeCandidatesForMoment(date: string, now: Date) {
+  const hour = Number.isFinite(now.getTime()) ? now.getHours() : 12
+
+  if (isWeekendDate(date) && hour >= 9 && hour < 17) {
+    return ['breathe-moment', 'small-thing', 'quick-photo']
+  }
+
+  if (hour >= 5 && hour < 10) {
+    return ['sky-now', 'sunrise-sunset', 'small-thing']
+  }
+
+  if (hour >= 10 && hour < 14) {
+    return ['food-today', 'small-thing', 'today-three-lines']
+  }
+
+  if (hour >= 17 && hour < 20) {
+    return ['light-shadow', 'sunrise-sunset', 'sky-now']
+  }
+
+  if (hour >= 21 || hour < 5) {
+    return ['thought-maybe', 'small-thing', 'shower-thought']
+  }
+
+  return ['small-thing', 'today-three-lines', 'quick-photo']
 }
 
 function isWidgetEligibleReviewMoment(moment: ReviewMoment) {
@@ -265,6 +502,16 @@ function normalizeJournalWidgetAction(value: unknown): JournalWidgetAction | nul
     return { type: 'review' }
   }
 
+  if (value.type === 'weeklyReview') {
+    if (typeof value.week !== 'string') {
+      return null
+    }
+
+    const week = value.week.trim()
+
+    return isWeekKey(week) ? { type: 'weeklyReview', week } : null
+  }
+
   if (value.type === 'reviewDay') {
     return typeof value.date === 'string' && isDateKey(value.date)
       ? { date: value.date, type: 'reviewDay' }
@@ -280,6 +527,93 @@ function normalizeJournalWidgetAction(value: unknown): JournalWidgetAction | nul
   return null
 }
 
+function normalizeJournalWidgetReviewSnapshot(value: unknown): JournalWidgetReviewSnapshot | null {
+  if (!isRecord(value) || !isJournalWidgetReviewMode(value.mode)) {
+    return null
+  }
+
+  if (typeof value.title !== 'string' || !value.title.trim()) {
+    return null
+  }
+
+  if (value.subtitle !== undefined && typeof value.subtitle !== 'string') {
+    return null
+  }
+
+  if (value.summary !== undefined && typeof value.summary !== 'string') {
+    return null
+  }
+
+  if (value.footnote !== undefined && typeof value.footnote !== 'string') {
+    return null
+  }
+
+  if (
+    value.backgroundImageSrc !== undefined &&
+    (typeof value.backgroundImageSrc !== 'string' || !isSafeMediaPath(value.backgroundImageSrc.trim()))
+  ) {
+    return null
+  }
+
+  const action = normalizeJournalWidgetAction(value.action)
+
+  if (!action || !isActionCompatibleWithReviewMode(value.mode, action)) {
+    return null
+  }
+
+  const backgroundImageSrc = typeof value.backgroundImageSrc === 'string'
+    ? value.backgroundImageSrc.trim()
+    : ''
+  const footnote = typeof value.footnote === 'string' ? value.footnote.trim() : ''
+  const subtitle = typeof value.subtitle === 'string' ? value.subtitle.trim() : ''
+  const summary = typeof value.summary === 'string' ? value.summary.trim() : ''
+
+  return {
+    action,
+    ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
+    ...(footnote ? { footnote } : {}),
+    mode: value.mode,
+    ...(subtitle ? { subtitle } : {}),
+    ...(summary ? { summary } : {}),
+    title: value.title.trim(),
+  }
+}
+
+function normalizeJournalWidgetMomentSnapshot(value: unknown): JournalWidgetMomentSnapshot | null {
+  if (!isRecord(value) || value.mode !== 'theme-entry') {
+    return null
+  }
+
+  if (typeof value.title !== 'string' || !value.title.trim()) {
+    return null
+  }
+
+  if (value.subtitle !== undefined && typeof value.subtitle !== 'string') {
+    return null
+  }
+
+  if (value.footnote !== undefined && typeof value.footnote !== 'string') {
+    return null
+  }
+
+  const action = normalizeJournalWidgetAction(value.action)
+
+  if (!action || action.type !== 'write') {
+    return null
+  }
+
+  const footnote = typeof value.footnote === 'string' ? value.footnote.trim() : ''
+  const subtitle = typeof value.subtitle === 'string' ? value.subtitle.trim() : ''
+
+  return {
+    action,
+    ...(footnote ? { footnote } : {}),
+    mode: 'theme-entry',
+    ...(subtitle ? { subtitle } : {}),
+    title: value.title.trim(),
+  }
+}
+
 function isActionCompatibleWithMode(
   mode: JournalWidgetSnapshot['mode'],
   action: JournalWidgetAction,
@@ -291,11 +625,64 @@ function isActionCompatibleWithMode(
   return action.type === 'reviewDay' || action.type === 'review'
 }
 
-function hasReviewableDayContent(day: ReviewSourceDay) {
-  return Boolean(
-    day.longEntryMarkdown.trim() ||
-      day.murmurs.some((murmur) => murmur.body.trim() || murmur.images.length > 0),
-  )
+function isActionCompatibleWithReviewMode(
+  mode: JournalWidgetReviewMode,
+  action: JournalWidgetAction,
+) {
+  if (mode === 'weekly-review') {
+    return action.type === 'weeklyReview'
+  }
+
+  if (mode === 'daily-review') {
+    return action.type === 'reviewDay' || action.type === 'review'
+  }
+
+  return action.type === 'write'
+}
+
+function isJournalWidgetReviewMode(value: unknown): value is JournalWidgetReviewMode {
+  return value === 'weekly-review' ||
+    value === 'daily-review' ||
+    value === 'empty-review'
+}
+
+function selectFreshWeeklyReview(
+  weeklyReviews: readonly JournalWidgetWeeklyReviewInput[],
+  date: string,
+) {
+  return [...weeklyReviews]
+    .filter((review) => (
+      isWeekKey(review.week) &&
+      isDateKey(review.startDate) &&
+      isDateKey(review.endDate) &&
+      review.startDate <= review.endDate &&
+      Boolean(review.title.trim()) &&
+      Boolean(review.summary.trim()) &&
+      review.endDate <= date &&
+      getDayDistance(review.endDate, date) <= freshWeeklyReviewThresholdDays
+    ))
+    .sort((first, second) => (
+      second.endDate.localeCompare(first.endDate) ||
+      second.week.localeCompare(first.week)
+    ))[0] ?? null
+}
+
+function getFirstImageForMoment(
+  moment: ReviewMoment,
+  sourceDays: readonly ReviewSourceDay[],
+) {
+  for (const sourceDate of moment.sourceDays) {
+    const sourceDay = sourceDays.find((day) => day.date === sourceDate)
+    const image = sourceDay?.murmurs
+      .flatMap((murmur) => murmur.images)
+      .find((candidate) => isSafeMediaPath(candidate.src))
+
+    if (image) {
+      return image.src
+    }
+  }
+
+  return undefined
 }
 
 function getDayDistance(from: string, to: string) {
@@ -319,6 +706,10 @@ function formatDateShort(dateKey: string) {
   return `${Number(month)}月${Number(day)}日`
 }
 
+function formatDateRangeShort(startDate: string, endDate: string) {
+  return `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`
+}
+
 function hashString(value: string) {
   let hash = 0
 
@@ -331,6 +722,37 @@ function hashString(value: string) {
 
 function isDateKey(value: unknown): value is string {
   return typeof value === 'string' && dateKeyPattern.test(value)
+}
+
+function isWeekKey(value: unknown): value is string {
+  return typeof value === 'string' && weekKeyPattern.test(value)
+}
+
+function isSafeMediaPath(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const path = value.trim()
+
+  return path.startsWith('media/') && !path.split('/').some((segment) => (
+    !segment ||
+    segment.startsWith('.') ||
+    segment.endsWith('.tmp') ||
+    segment === '..'
+  ))
+}
+
+function isWeekendDate(date: string) {
+  const timestamp = Date.parse(`${date}T12:00:00Z`)
+
+  if (Number.isNaN(timestamp)) {
+    return false
+  }
+
+  const day = new Date(timestamp).getUTCDay()
+
+  return day === 0 || day === 6
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

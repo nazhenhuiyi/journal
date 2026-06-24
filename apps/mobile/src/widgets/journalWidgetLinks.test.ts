@@ -31,10 +31,24 @@ describe('journal widget links', () => {
     })
   })
 
+  it('builds and parses weekly review links', () => {
+    const link = buildJournalWidgetDeepLink({
+      type: 'weeklyReview',
+      week: '2026-W25',
+    })
+
+    expect(link).toBe('journal://weekly-review?week=2026-W25')
+    expect(parseJournalDeepLink(link)).toEqual({
+      type: 'weeklyReview',
+      week: '2026-W25',
+    })
+  })
+
   it('rejects unsafe or incomplete links', () => {
     expect(parseJournalDeepLink('https://example.com')).toBeNull()
     expect(parseJournalDeepLink('journal://write')).toBeNull()
     expect(parseJournalDeepLink('journal://review-day?date=bad')).toBeNull()
+    expect(parseJournalDeepLink('journal://weekly-review?week=bad')).toBeNull()
   })
 
   it('parses E2E sync blocked debug links', () => {

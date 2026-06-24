@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  getLegacyJournalWidgetSnapshotFilePath,
   getJournalWidgetSnapshotFilePath,
   loadJournalWidgetSnapshot,
   refreshJournalWidgetSnapshot,
@@ -33,7 +34,8 @@ vi.mock('../widgets/journalWidgetNative', () => ({
 
 const entryPath = 'file:///app/journal-worktree/entries/2025/06/2025-06-10.md'
 const reviewPath = 'file:///app/journal-worktree/reviews/2026/06/2026-06-10.json'
-const snapshotPath = 'file:///app/journal-widget-snapshot-v1.json'
+const snapshotPath = 'file:///app/journal-widget-snapshot-v2.json'
+const legacySnapshotPath = 'file:///app/journal-widget-snapshot-v1.json'
 
 describe('journalWidgetSnapshotStore', () => {
   beforeEach(() => {
@@ -119,10 +121,11 @@ themes: [sky-now]
     const { snapshot } = result
 
     expect(result.reviewResult.didWrite).toBe(true)
-    expect(snapshot.mode).toBe('review-moment')
+    expect(snapshot.review.mode).toBe('daily-review')
     expect(getJournalWidgetSnapshotFilePath()).toBe(snapshotPath)
+    expect(getLegacyJournalWidgetSnapshotFilePath()).toBe(legacySnapshotPath)
     expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
-    expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 1')
+    expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 2')
     expect(mockFileSystem.writeAsStringAsync).toHaveBeenCalledTimes(2)
     expect(mockUpdateNativeJournalWidgets).toHaveBeenCalledWith(snapshot)
   })
@@ -131,6 +134,9 @@ themes: [sky-now]
     vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', ' widget/run:1 ')
 
     expect(getJournalWidgetSnapshotFilePath()).toBe(
+      'file:///app/journal-widget-snapshot-v2.json.widget-run-1',
+    )
+    expect(getLegacyJournalWidgetSnapshotFilePath()).toBe(
       'file:///app/journal-widget-snapshot-v1.json.widget-run-1',
     )
   })
@@ -157,9 +163,9 @@ themes: [sky-now]
       updateNativeWidgets: false,
     })
 
-    expect(result.snapshot.mode).toBe('review-moment')
+    expect(result.snapshot.review.mode).toBe('daily-review')
     expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
-    expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 1')
+    expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 2')
     expect(mockUpdateNativeJournalWidgets).not.toHaveBeenCalled()
   })
 
@@ -192,12 +198,12 @@ themes: [sky-now]
     })
 
     expect(result.reviewResult.didWrite).toBe(false)
-    expect(result.snapshot).toMatchObject({
+    expect(result.snapshot.review).toMatchObject({
       action: {
         date: '2025-06-09',
         type: 'reviewDay',
       },
-      mode: 'review-moment',
+      mode: 'daily-review',
       title: '既有浮现',
     })
   })
@@ -232,7 +238,7 @@ themes: [sky-now]
         didWrite: true,
       })
       expect(mockFileSystem.files.get(reviewPath)).toContain('"version": 1')
-      expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 1')
+      expect(mockFileSystem.files.get(snapshotPath)).toContain('"version": 2')
       expect(consoleError).toHaveBeenCalledWith(error)
     } finally {
       consoleError.mockRestore()
@@ -243,6 +249,36 @@ themes: [sky-now]
     mockFileSystem.files.set(snapshotPath, '{bad json')
 
     await expect(loadJournalWidgetSnapshot()).resolves.toBeNull()
+  })
+
+  it('loads legacy v1 snapshots as a v2 bundle fallback when no v2 snapshot exists', async () => {
+    mockFileSystem.files.set(legacySnapshotPath, JSON.stringify({
+      action: {
+        date: '2025-06-10',
+        type: 'reviewDay',
+      },
+      date: '2026-06-10',
+      footnote: '此刻的天空',
+      generatedAt: '2026-06-10T08:00:00.000Z',
+      mode: 'review-moment',
+      subtitle: '你写过一句：云有一点发紫',
+      title: '那年今日',
+      version: 1,
+    }))
+
+    await expect(loadJournalWidgetSnapshot()).resolves.toMatchObject({
+      review: {
+        action: {
+          date: '2025-06-10',
+          type: 'reviewDay',
+        },
+        mode: 'daily-review',
+        summary: '你写过一句：云有一点发紫',
+        subtitle: '此刻的天空',
+        title: '那年今日',
+      },
+      version: 2,
+    })
   })
 })
 

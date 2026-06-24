@@ -1,15 +1,26 @@
-import type { JournalWidgetSnapshot } from '@journal/core'
-import { requestWidgetUpdate } from 'react-native-android-widget'
+import type { JournalWidgetBundleSnapshot } from '@journal/core'
+import {
+  getWidgetInfo,
+  requestWidgetUpdateById,
+} from 'react-native-android-widget'
 import {
   androidJournalWidgetNames,
   renderJournalMomentAndroidWidget,
 } from './JournalMomentAndroidWidget'
 
-export async function updateNativeJournalWidgets(snapshot: JournalWidgetSnapshot) {
-  await Promise.all(androidJournalWidgetNames.map((widgetName) => (
-    requestWidgetUpdate({
-      renderWidget: (widgetInfo) => renderJournalMomentAndroidWidget(snapshot, widgetInfo),
-      widgetName,
-    })
-  )))
+export async function updateNativeJournalWidgets(snapshot: JournalWidgetBundleSnapshot) {
+  await Promise.all(androidJournalWidgetNames.map(async (widgetName) => {
+    const widgetsInfo = await getWidgetInfo(widgetName)
+
+    await Promise.all(widgetsInfo.map((widgetInfo) => (
+      requestWidgetUpdateById({
+        renderWidget: (latestWidgetInfo) => renderJournalMomentAndroidWidget(
+          snapshot,
+          latestWidgetInfo,
+        ),
+        widgetId: widgetInfo.widgetId,
+        widgetName,
+      })
+    )))
+  }))
 }

@@ -447,6 +447,14 @@ function JournalApp() {
       return
     }
 
+    if (deepLink.type === 'weeklyReview') {
+      resetNavigationStack(navigation, [
+        { name: 'Today' },
+        { name: 'WeeklyReview', params: { week: deepLink.week } },
+      ])
+      return
+    }
+
     if (deepLink.type === 'debugSyncBlocked') {
       if (!isMobileE2eDebugLinkEnabled()) {
         return

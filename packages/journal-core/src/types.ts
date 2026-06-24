@@ -183,6 +183,10 @@ export type JournalWidgetAction =
   | {
       type: 'review'
     }
+  | {
+      type: 'weeklyReview'
+      week: string
+    }
 
 export type JournalWidgetSnapshot = {
   version: 1
@@ -193,6 +197,43 @@ export type JournalWidgetSnapshot = {
   subtitle?: string
   footnote?: string
   action: JournalWidgetAction
+}
+
+export type JournalWidgetReviewMode = 'weekly-review' | 'daily-review' | 'empty-review'
+
+export type JournalWidgetReviewSnapshot = {
+  mode: JournalWidgetReviewMode
+  title: string
+  subtitle?: string
+  summary?: string
+  footnote?: string
+  backgroundImageSrc?: string
+  action: JournalWidgetAction
+}
+
+export type JournalWidgetMomentSnapshot = {
+  mode: 'theme-entry'
+  title: string
+  subtitle?: string
+  footnote?: string
+  action: Extract<JournalWidgetAction, { type: 'write' }>
+}
+
+export type JournalWidgetBundleSnapshot = {
+  version: 2
+  date: string
+  generatedAt: string
+  review: JournalWidgetReviewSnapshot
+  moment: JournalWidgetMomentSnapshot
+}
+
+export type JournalWidgetWeeklyReviewInput = {
+  week: string
+  startDate: string
+  endDate: string
+  title: string
+  summary: string
+  coverImage?: string
 }
 
 export type MarkdownDiagnostic = {

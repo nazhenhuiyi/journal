@@ -1,13 +1,16 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import {
-  createJournalWidgetSnapshot,
+  adaptJournalWidgetSnapshotToBundle,
+  createJournalWidgetBundleSnapshot,
+  normalizeJournalWidgetBundleSnapshot,
   normalizeJournalWidgetSnapshot,
-  type JournalWidgetSnapshot,
+  type JournalWidgetBundleSnapshot,
   type ReviewSourceDay,
 } from '@journal/core'
 import {
   getLocalDateKey,
   listDailyJournals,
+  listWeeklyReviews,
   loadOrCreateDailyReview,
   type LoadDailyReviewResult,
   type MobileJournalRecord,
@@ -22,14 +25,15 @@ export type RefreshJournalWidgetSnapshotInput = {
 
 export type RefreshJournalWidgetSnapshotResult = {
   reviewResult: LoadDailyReviewResult
-  snapshot: JournalWidgetSnapshot
+  snapshot: JournalWidgetBundleSnapshot
 }
 
 export type RefreshJournalWidgetSnapshotOptions = {
   updateNativeWidgets?: boolean
 }
 
-const widgetSnapshotFileName = 'journal-widget-snapshot-v1.json'
+const widgetSnapshotFileName = 'journal-widget-snapshot-v2.json'
+const legacyWidgetSnapshotFileName = 'journal-widget-snapshot-v1.json'
 
 export async function refreshJournalWidgetSnapshot({
   currentDay,
@@ -37,16 +41,20 @@ export async function refreshJournalWidgetSnapshot({
 }: RefreshJournalWidgetSnapshotInput = {}, {
   updateNativeWidgets = true,
 }: RefreshJournalWidgetSnapshotOptions = {}): Promise<RefreshJournalWidgetSnapshotResult> {
-  const records = await listDailyJournals()
+  const [records, weeklyReviews] = await Promise.all([
+    listDailyJournals(),
+    listWeeklyReviews(),
+  ])
   const sourceDays = mergeCurrentDay(records, currentDay)
   const reviewResult = await loadOrCreateDailyReview({
     date,
     sourceDays,
   })
-  const snapshot = createJournalWidgetSnapshot({
+  const snapshot = createJournalWidgetBundleSnapshot({
     date,
     reviewMoments: reviewResult.review?.moments ?? [],
     sourceDays,
+    weeklyReviews,
   })
 
   await saveJournalWidgetSnapshot(snapshot)
@@ -61,25 +69,25 @@ export async function refreshJournalWidgetSnapshot({
   }
 }
 
-export async function loadJournalWidgetSnapshot(): Promise<JournalWidgetSnapshot | null> {
+export async function loadJournalWidgetSnapshot(): Promise<JournalWidgetBundleSnapshot | null> {
   const filePath = getJournalWidgetSnapshotFilePath()
   const fileInfo = await FileSystem.getInfoAsync(filePath)
 
-  if (!fileInfo.exists) {
-    return null
+  if (fileInfo.exists) {
+    try {
+      const contents = await FileSystem.readAsStringAsync(filePath)
+      const parsed = JSON.parse(contents) as unknown
+
+      return normalizeJournalWidgetBundleSnapshot(parsed)
+    } catch {
+      return null
+    }
   }
 
-  try {
-    const contents = await FileSystem.readAsStringAsync(filePath)
-    const parsed = JSON.parse(contents) as unknown
-
-    return normalizeJournalWidgetSnapshot(parsed)
-  } catch {
-    return null
-  }
+  return loadLegacyJournalWidgetSnapshot()
 }
 
-export async function saveJournalWidgetSnapshot(snapshot: JournalWidgetSnapshot) {
+export async function saveJournalWidgetSnapshot(snapshot: JournalWidgetBundleSnapshot) {
   const filePath = getJournalWidgetSnapshotFilePath()
 
   await FileSystem.writeAsStringAsync(filePath, `${JSON.stringify(snapshot, null, 2)}\n`)
@@ -93,7 +101,34 @@ export function getJournalWidgetSnapshotFilePath() {
   return `${FileSystem.documentDirectory}${appendMobileE2eSuffix(widgetSnapshotFileName)}`
 }
 
-async function updateNativeJournalWidgetsBestEffort(snapshot: JournalWidgetSnapshot) {
+export function getLegacyJournalWidgetSnapshotFilePath() {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('File system document directory is unavailable.')
+  }
+
+  return `${FileSystem.documentDirectory}${appendMobileE2eSuffix(legacyWidgetSnapshotFileName)}`
+}
+
+async function loadLegacyJournalWidgetSnapshot(): Promise<JournalWidgetBundleSnapshot | null> {
+  const filePath = getLegacyJournalWidgetSnapshotFilePath()
+  const fileInfo = await FileSystem.getInfoAsync(filePath)
+
+  if (!fileInfo.exists) {
+    return null
+  }
+
+  try {
+    const contents = await FileSystem.readAsStringAsync(filePath)
+    const parsed = JSON.parse(contents) as unknown
+    const legacySnapshot = normalizeJournalWidgetSnapshot(parsed)
+
+    return legacySnapshot ? adaptJournalWidgetSnapshotToBundle(legacySnapshot) : null
+  } catch {
+    return null
+  }
+}
+
+async function updateNativeJournalWidgetsBestEffort(snapshot: JournalWidgetBundleSnapshot) {
   try {
     await updateNativeJournalWidgets(snapshot)
   } catch (error) {

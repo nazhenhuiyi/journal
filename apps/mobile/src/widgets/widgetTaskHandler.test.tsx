@@ -20,17 +20,28 @@ describe('widgetTaskHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLoadJournalWidgetSnapshot.mockResolvedValue({
-      action: {
-        themeId: 'sky-now',
-        type: 'write',
-      },
       date: '2026-06-10',
-      footnote: '且留',
       generatedAt: '2026-06-10T08:00:00.000Z',
-      mode: 'theme-entry',
-      subtitle: '留一张现在的天',
-      title: '此刻的天空',
-      version: 1,
+      moment: {
+        action: {
+          themeId: 'sky-now',
+          type: 'write',
+        },
+        mode: 'theme-entry',
+        subtitle: '留一张现在的天',
+        title: '此刻的天空',
+      },
+      review: {
+        action: {
+          type: 'weeklyReview',
+          week: '2026-W25',
+        },
+        mode: 'weekly-review',
+        subtitle: '6月15日 - 6月21日',
+        summary: '留一扇漏窗。',
+        title: '漏窗外的一点绿',
+      },
+      version: 2,
     })
   })
 
@@ -47,7 +58,7 @@ describe('widgetTaskHandler', () => {
     expect(renderWidget).toHaveBeenCalledOnce()
     expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
       props: {
-        accessibilityLabel: '此刻的天空',
+        accessibilityLabel: '漏窗外的一点绿',
       },
     })
     expect(renderWidget.mock.calls[0]?.[0]?.dark).toMatchObject({
@@ -72,7 +83,7 @@ describe('widgetTaskHandler', () => {
 
     expect(renderWidget.mock.calls[0]?.[0]?.light).toMatchObject({
       props: {
-        accessibilityLabel: '记一件小事',
+        accessibilityLabel: '今天还没有留下什么',
       },
     })
   })

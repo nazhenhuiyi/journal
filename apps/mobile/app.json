@@ -89,10 +89,18 @@
           "widgets": [
             {
               "name": "JournalMomentWidget",
-              "displayName": "且留",
-              "description": "留下一点此刻，或看见一张旧纸条。",
+              "displayName": "回看",
+              "description": "每日回顾与周回顾。",
               "supportedFamilies": [
                 "systemMedium"
+              ]
+            },
+            {
+              "name": "JournalMomentCompactWidget",
+              "displayName": "此刻",
+              "description": "根据此刻快速记录。",
+              "supportedFamilies": [
+                "systemSmall"
               ]
             }
           ]
@@ -105,8 +113,8 @@
           "widgets": [
             {
               "name": "JournalMoment",
-              "label": "且留",
-              "description": "此刻入口与旧日浮现",
+              "label": "回看",
+              "description": "每日回顾与周回顾",
               "minWidth": "280dp",
               "minHeight": "110dp",
               "targetCellWidth": 4,
@@ -118,8 +126,8 @@
             },
             {
               "name": "JournalMomentCompact",
-              "label": "且留 · 小",
-              "description": "快速留下此刻",
+              "label": "此刻",
+              "description": "根据此刻快速记录",
               "minWidth": "140dp",
               "minHeight": "70dp",
               "targetCellWidth": 2,

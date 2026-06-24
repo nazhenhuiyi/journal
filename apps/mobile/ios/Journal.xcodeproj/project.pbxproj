@@ -19,6 +19,7 @@
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		C518F47CFE18310DA53E9747 /* libPods-Journal.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D289003BD9BD237B900930 /* libPods-Journal.a */; };
 		C80EF915546F46A6A196F132 /* index.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EEEF86741C445C2B8341350 /* index.swift */; };
+		D7E5A8C13F004AFEA7A1B2C3 /* JournalMomentCompactWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E5A8C03F004AFEA7A1B2C3 /* JournalMomentCompactWidget.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F24CB709AFEE4893A91A60F8 /* JournalMomentWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E472DE03C63742BB93DC2D83 /* JournalMomentWidget.swift */; };
 /* End PBXBuildFile section */
@@ -65,6 +66,7 @@
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Journal/SplashScreen.storyboard; sourceTree = "<group>"; };
 		AF95C65CD5AB5F7B2C2C34FB /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-ExpoWidgetsTarget/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		D7E5A8C03F004AFEA7A1B2C3 /* JournalMomentCompactWidget.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = JournalMomentCompactWidget.swift; path = JournalMomentCompactWidget.swift; sourceTree = "<group>"; };
 		E472DE03C63742BB93DC2D83 /* JournalMomentWidget.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = JournalMomentWidget.swift; path = JournalMomentWidget.swift; sourceTree = "<group>"; };
 		E4E15FB6CBA5AF1A25C8882A /* Pods-Journal.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Journal.release.xcconfig"; path = "Target Support Files/Pods-Journal/Pods-Journal.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -183,6 +185,7 @@
 				98020DFA94F240DFA9715CB0 /* Info.plist */,
 				0EEEF86741C445C2B8341350 /* index.swift */,
 				E472DE03C63742BB93DC2D83 /* JournalMomentWidget.swift */,
+				D7E5A8C03F004AFEA7A1B2C3 /* JournalMomentCompactWidget.swift */,
 			);
 			name = ExpoWidgetsTarget;
 			path = ExpoWidgetsTarget;
@@ -614,6 +617,7 @@
 			files = (
 				C80EF915546F46A6A196F132 /* index.swift in Sources */,
 				F24CB709AFEE4893A91A60F8 /* JournalMomentWidget.swift in Sources */,
+				D7E5A8C13F004AFEA7A1B2C3 /* JournalMomentCompactWidget.swift in Sources */,
 				90C64C663F48E583FEB24BA2 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

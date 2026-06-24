@@ -17,7 +17,10 @@ export {
   normalizeReviewFile,
 } from './reviewFiles'
 export {
+  adaptJournalWidgetSnapshotToBundle,
+  createJournalWidgetBundleSnapshot,
   createJournalWidgetSnapshot,
+  normalizeJournalWidgetBundleSnapshot,
   normalizeJournalWidgetSnapshot,
 } from './journalWidgetSnapshot'
 export {
@@ -65,7 +68,12 @@ export type {
   ImageBlock,
   ImageLocation,
   JournalWidgetAction,
+  JournalWidgetBundleSnapshot,
+  JournalWidgetMomentSnapshot,
+  JournalWidgetReviewMode,
+  JournalWidgetReviewSnapshot,
   JournalWidgetSnapshot,
+  JournalWidgetWeeklyReviewInput,
   JournalIndexEntry,
   JournalIndexFile,
   LinePosition,

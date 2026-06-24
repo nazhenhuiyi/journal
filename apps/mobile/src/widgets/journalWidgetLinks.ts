@@ -14,6 +14,10 @@ export type ParsedJournalDeepLink =
       type: 'review'
     }
   | {
+      type: 'weeklyReview'
+      week: string
+    }
+  | {
       reason: SyncBlockedReason
       type: 'debugSyncBlocked'
     }
@@ -24,6 +28,7 @@ export type ParsedJournalDeepLink =
     }
 
 const dateKeyPattern = /^\d{4}-\d{2}-\d{2}$/
+const weekKeyPattern = /^\d{4}-W\d{2}$/
 const debugSyncBlockedReasons = new Set<SyncBlockedReason>([
   'content-conflict',
   'first-sync-needs-choice',
@@ -38,6 +43,10 @@ export function buildJournalWidgetDeepLink(action: JournalWidgetAction) {
 
   if (action.type === 'reviewDay') {
     return `journal://review-day?date=${encodeURIComponent(action.date)}`
+  }
+
+  if (action.type === 'weeklyReview') {
+    return `journal://weekly-review?week=${encodeURIComponent(action.week)}`
   }
 
   return 'journal://review'
@@ -74,6 +83,14 @@ export function parseJournalDeepLink(url: string): ParsedJournalDeepLink | null 
 
   if (host === 'review') {
     return { type: 'review' }
+  }
+
+  if (host === 'weekly-review') {
+    const week = parsedUrl.searchParams.get('week')?.trim()
+
+    return week && weekKeyPattern.test(week)
+      ? { type: 'weeklyReview', week }
+      : null
   }
 
   if (host === 'debug' && parsedUrl.pathname === '/sync-blocked') {
