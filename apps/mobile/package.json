@@ -42,6 +42,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@babel/plugin-transform-react-jsx": "7.29.7",
+    "@expo/plist": "0.7.0",
     "@expo/ui": "~56.0.17",
     "@expo/vector-icons": "15.0.3",
     "@journal/core": "workspace:*",
@@ -77,7 +79,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
     "react-native-svg": "15.15.4",
-    "react-native-worklets": "0.8.3"
+    "react-native-worklets": "0.8.3",
+    "webidl-conversions": "8.0.1"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

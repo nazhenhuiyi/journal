@@ -10,6 +10,17 @@ onlyBuiltDependencies:
   - electron
   - electron-winstaller
   - esbuild
+  - exifreader
+  - sharp
+  - unrs-resolver
+
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  exifreader: true
+  sharp: true
+  unrs-resolver: true
 
 patchedDependencies:
   isomorphic-git@1.38.4: patches/isomorphic-git@1.38.4.patch
