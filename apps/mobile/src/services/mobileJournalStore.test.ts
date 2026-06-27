@@ -278,7 +278,7 @@ describe('mobileJournalStore', () => {
       'file:///picker/source.jpg',
       [],
       {
-        compress: 0.92,
+        compress: 0.85,
         format: 'webp',
       },
     )

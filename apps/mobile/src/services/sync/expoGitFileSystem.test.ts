@@ -24,8 +24,10 @@ const mockModernFileSystem = vi.hoisted(() => {
       return state.fileText(this.uri)
     }
 
-    write(content: string | Uint8Array) {
-      return state.fileWrite(this.uri, content)
+    write(content: string | Uint8Array, options?: { encoding?: string }) {
+      return options
+        ? state.fileWrite(this.uri, content, options)
+        : state.fileWrite(this.uri, content)
     }
   }
 
@@ -152,12 +154,23 @@ describe('createExpoGitFileSystem', () => {
     expect(mockModernFileSystem.state.fileText).toHaveBeenCalledWith('/repo/README.md')
   })
 
-  it('writes Uint8Array values through legacy base64 to avoid native typed-array bridge crashes', async () => {
+  it('writes Uint8Array values through the modern write API without base64 conversion', async () => {
     const fs = createTestFileSystem()
+    const binary = new Uint8Array([1, 2, 3])
+
+    await fs.promises.writeFile('/repo/.git/objects/blob', binary)
+
+    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith('/repo/.git/objects/blob', binary)
+    expect(mockLegacyFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('falls back to legacy base64 writes when modern Uint8Array writes fail at runtime', async () => {
+    const fs = createTestFileSystem()
+
+    mockModernFileSystem.state.fileWrite.mockRejectedValueOnce(new Error('native bridge failed'))
 
     await fs.promises.writeFile('/repo/.git/objects/blob', new Uint8Array([1, 2, 3]))
 
-    expect(mockModernFileSystem.state.fileWrite).not.toHaveBeenCalled()
     expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
       '/repo/.git/objects/blob',
       Buffer.from([1, 2, 3]).toString('base64'),
@@ -165,8 +178,23 @@ describe('createExpoGitFileSystem', () => {
     )
   })
 
-  it('preserves already-base64 binary strings when writing Git files', async () => {
+  it('preserves already-base64 binary strings through the modern write API', async () => {
     const fs = createTestFileSystem()
+
+    await fs.promises.writeFile('/repo/.git/objects/blob', 'AQID', 'base64')
+
+    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
+      '/repo/.git/objects/blob',
+      'AQID',
+      { encoding: 'base64' },
+    )
+    expect(mockLegacyFileSystem.writeAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('falls back to legacy base64 writes when modern base64 string writes fail at runtime', async () => {
+    const fs = createTestFileSystem()
+
+    mockModernFileSystem.state.fileWrite.mockRejectedValueOnce(new Error('native bridge failed'))
 
     await fs.promises.writeFile('/repo/.git/objects/blob', 'AQID', 'base64')
 
@@ -192,10 +220,9 @@ describe('createExpoGitFileSystem', () => {
       '/repo/.git/objects/78',
       { intermediates: true },
     )
-    expect(mockLegacyFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+    expect(mockModernFileSystem.state.fileWrite).toHaveBeenCalledWith(
       '/repo/.git/objects/78/blob',
-      Buffer.from([1, 2, 3]).toString('base64'),
-      { encoding: 'base64' },
+      new Uint8Array([1, 2, 3]),
     )
   })
 

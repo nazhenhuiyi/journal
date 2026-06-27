@@ -2614,6 +2614,7 @@ describe('journal git sync core', () => {
     const trace = vi.fn()
 
     runtime.trace = trace
+    mockFs.promises.stat.mockResolvedValue({ size: 1234 })
     mockGit.statusMatrix
       .mockResolvedValueOnce([
         ['entries/2026/06/2026-06-08.md', 0, 2, 0],
@@ -2622,6 +2623,34 @@ describe('journal git sync core', () => {
         ['entries/2026/06/2026-06-08.md', 0, 2, 2],
       ])
       .mockResolvedValue([])
+    mockGit.push.mockImplementationOnce(async ({ onProgress }) => {
+      await onProgress?.({
+        loaded: 0,
+        phase: 'Packing objects',
+        total: 2,
+      })
+      await onProgress?.({
+        blobBytes: 1234,
+        blobCount: 1,
+        fastDeflateBlobBytes: 1234,
+        fastDeflateBlobCount: 1,
+        loaded: 2,
+        objectBytes: 1500,
+        phase: 'Packing objects',
+        total: 2,
+      })
+
+      return {
+        error: null,
+        ok: true,
+        refs: {
+          main: {
+            error: '',
+            ok: true,
+          },
+        },
+      }
+    })
 
     await syncJournalNow(
       runtime,
@@ -2636,14 +2665,37 @@ describe('journal git sync core', () => {
 
     expect(eventNames).toEqual(expect.arrayContaining([
       'commit.status',
+      'commit.stage.file',
       'commit.stage',
       'commit.write',
       'remote.fetch',
       'remote.merge',
+      'remote.push.pack',
       'remote.push',
       'merge.strategy',
       'sync.total',
     ]))
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        action: 'add',
+        pathKind: 'entries',
+        sizeBytes: 1234,
+      }),
+      name: 'commit.stage.file',
+      ok: true,
+    }))
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        blobBytes: 1234,
+        blobCount: 1,
+        fastDeflateBlobBytes: 1234,
+        fastDeflateBlobCount: 1,
+        phase: 'Packing objects',
+        total: 2,
+      }),
+      name: 'remote.push.pack',
+      ok: true,
+    }))
     expect(trace).toHaveBeenCalledWith(expect.objectContaining({
       durationMs: expect.any(Number),
       name: 'sync.total',

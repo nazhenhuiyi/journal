@@ -88,14 +88,29 @@ async function writeFile(
     return
   }
 
-  // TODO: Prefer File.writableStream() chunked binary writes here. This legacy
-  // base64 path expands Uint8Array payloads by about 33% before native writes.
-  const base64Contents = typeof data === 'string'
-    ? encoding === 'base64'
-      ? data
-      : Buffer.from(data, 'utf8').toString('base64')
-    : Buffer.from(data).toString('base64')
+  if (typeof data !== 'string') {
+    try {
+      await file.write(data)
+      return
+    } catch {
+      await writeLegacyBase64File(path, Buffer.from(data).toString('base64'))
+      return
+    }
+  }
 
+  const isBase64 = encoding === 'base64'
+
+  try {
+    await file.write(data, isBase64 ? { encoding: 'base64' } : undefined)
+  } catch {
+    await writeLegacyBase64File(
+      path,
+      isBase64 ? data : Buffer.from(data, 'utf8').toString('base64'),
+    )
+  }
+}
+
+async function writeLegacyBase64File(path: string, base64Contents: string) {
   await FileSystem.writeAsStringAsync(path, base64Contents, {
     encoding: FileSystem.EncodingType.Base64,
   })

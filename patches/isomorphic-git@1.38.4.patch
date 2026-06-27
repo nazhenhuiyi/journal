@@ -1,8 +1,8 @@
 diff --git a/index.cjs b/index.cjs
-index 3e94396efc7c68bcb04d67837b533d7821a483fd..52afc9348d1365338a5e3d3c4066b384816c1fbb 100644
+index 3e94396..892a6e9 100644
 --- a/index.cjs
 +++ b/index.cjs
-@@ -2489,6 +2489,15 @@ function nudgeIntoShape(entry) {
+@@ -2496,6 +2496,15 @@ function nudgeIntoShape(entry) {
    if (!entry.oid && entry.sha) {
      entry.oid = entry.sha; // Github
    }
@@ -18,8 +18,242 @@ index 3e94396efc7c68bcb04d67837b533d7821a483fd..52afc9348d1365338a5e3d3c4066b384
    entry.mode = limitModeToAllowed(entry.mode); // index
    if (!entry.type) {
      entry.type = mode2type$1(entry.mode); // index
+@@ -5502,8 +5511,13 @@ async function writeObjectLoose({ fs, gitdir, object, format, oid }) {
+ /* eslint-env node, browser */
+ 
+ let supportsCompressionStream = null;
++const fastDeflateBlobThreshold = 256 * 1024;
++
++async function deflate(buffer, options) {
++  if (options) {
++    return pako.deflate(buffer, options)
++  }
+ 
+-async function deflate(buffer) {
+   if (supportsCompressionStream === null) {
+     supportsCompressionStream = testCompressionStream();
+   }
+@@ -5531,6 +5545,119 @@ function testCompressionStream() {
+   }
+ }
+ 
++function getGitObjectDeflateOptions(type, object) {
++  return shouldUseFastBlobDeflate(type, object) ? { level: 0 } : undefined
++}
++
++function shouldUseFastBlobDeflate(type, object) {
++  return type === 'blob' &&
++    object.byteLength >= fastDeflateBlobThreshold &&
++    isLikelyAlreadyCompressedBlob(object)
++}
++
++function isLikelyAlreadyCompressedBlob(object) {
++  return isWebP(object) ||
++    isJpeg(object) ||
++    isPng(object) ||
++    isGif(object) ||
++    isHeifOrAvif(object) ||
++    isMp4Like(object) ||
++    isWebm(object)
++}
++
++function isWebP(object) {
++  return object.byteLength >= 12 &&
++    object[0] === 0x52 &&
++    object[1] === 0x49 &&
++    object[2] === 0x46 &&
++    object[3] === 0x46 &&
++    object[8] === 0x57 &&
++    object[9] === 0x45 &&
++    object[10] === 0x42 &&
++    object[11] === 0x50
++}
++
++function isJpeg(object) {
++  return object.byteLength >= 3 &&
++    object[0] === 0xff &&
++    object[1] === 0xd8 &&
++    object[2] === 0xff
++}
++
++function isPng(object) {
++  return object.byteLength >= 8 &&
++    object[0] === 0x89 &&
++    object[1] === 0x50 &&
++    object[2] === 0x4e &&
++    object[3] === 0x47 &&
++    object[4] === 0x0d &&
++    object[5] === 0x0a &&
++    object[6] === 0x1a &&
++    object[7] === 0x0a
++}
++
++function isGif(object) {
++  return object.byteLength >= 6 &&
++    object[0] === 0x47 &&
++    object[1] === 0x49 &&
++    object[2] === 0x46 &&
++    object[3] === 0x38 &&
++    (object[4] === 0x37 || object[4] === 0x39) &&
++    object[5] === 0x61
++}
++
++function isHeifOrAvif(object) {
++  if (object.byteLength < 12 || !hasFtypBox(object)) return false
++
++  const brand = asciiSlice(object, 8, 12);
++
++  return brand === 'heic' ||
++    brand === 'heix' ||
++    brand === 'hevc' ||
++    brand === 'hevx' ||
++    brand === 'mif1' ||
++    brand === 'msf1' ||
++    brand === 'avif' ||
++    brand === 'avis'
++}
++
++function isMp4Like(object) {
++  if (object.byteLength < 12 || !hasFtypBox(object)) return false
++
++  const brand = asciiSlice(object, 8, 12);
++
++  return brand === 'mp41' ||
++    brand === 'mp42' ||
++    brand === 'isom' ||
++    brand === 'iso2' ||
++    brand === 'qt  '
++}
++
++function isWebm(object) {
++  return object.byteLength >= 4 &&
++    object[0] === 0x1a &&
++    object[1] === 0x45 &&
++    object[2] === 0xdf &&
++    object[3] === 0xa3
++}
++
++function hasFtypBox(object) {
++  return object[4] === 0x66 &&
++    object[5] === 0x74 &&
++    object[6] === 0x79 &&
++    object[7] === 0x70
++}
++
++function asciiSlice(object, start, end) {
++  let result = '';
++
++  for (let i = start; i < end; i++) {
++    result += String.fromCharCode(object[i]);
++  }
++
++  return result
++}
++
+ async function _writeObject({
+   fs,
+   gitdir,
+@@ -5541,11 +5668,15 @@ async function _writeObject({
+   dryRun = false,
+ }) {
+   if (format !== 'deflated') {
++    const deflateOptions = format === 'content'
++      ? getGitObjectDeflateOptions(type, object)
++      : undefined;
++
+     if (format !== 'wrapped') {
+       object = GitObject.wrap({ type, object });
+     }
+     oid = await shasum(object);
+-    object = Buffer.from(await deflate(object));
++    object = Buffer.from(await deflate(object, deflateOptions));
+   }
+   if (!dryRun) {
+     await writeObjectLoose({ fs, gitdir, object, format: 'deflated', oid });
+@@ -13361,10 +13492,20 @@ async function _pack({
+   cache,
+   dir,
+   gitdir = join(dir, '.git'),
++  onProgress,
+   oids,
+ }) {
+   const hash = new Hash();
+   const outputStream = [];
++  const progress = {
++    blobBytes: 0,
++    blobCount: 0,
++    fastDeflateBlobBytes: 0,
++    fastDeflateBlobCount: 0,
++    loaded: 0,
++    objectBytes: 0,
++    total: oids.length,
++  };
+   function write(chunk, enc) {
+     const buff = Buffer.from(chunk, enc);
+     outputStream.push(buff);
+@@ -13394,12 +13535,51 @@ async function _pack({
+       length = length >>> 7;
+     }
+     // Lastly, we can compress and write the object.
+-    write(Buffer.from(await deflate(object)));
++    const deflateOptions = getGitObjectDeflateOptions(stype, object);
++
++    write(Buffer.from(await deflate(object, deflateOptions)));
++    progress.loaded += 1;
++    progress.objectBytes += object.byteLength;
++
++    if (stype === 'blob') {
++      progress.blobCount += 1;
++      progress.blobBytes += object.byteLength;
++
++      if (deflateOptions?.level === 0) {
++        progress.fastDeflateBlobCount += 1;
++        progress.fastDeflateBlobBytes += object.byteLength;
++      }
++    }
++
++    if (onProgress) {
++      await onProgress({
++        blobBytes: progress.blobBytes,
++        blobCount: progress.blobCount,
++        fastDeflateBlobBytes: progress.fastDeflateBlobBytes,
++        fastDeflateBlobCount: progress.fastDeflateBlobCount,
++        loaded: progress.loaded,
++        objectBytes: progress.objectBytes,
++        phase: 'Packing objects',
++        total: progress.total,
++      });
++    }
+   }
+   write('PACK');
+   write('00000002', 'hex');
+   // Write a 4 byte (32-bit) int
+   write(padHex(8, oids.length), 'hex');
++  if (onProgress) {
++    await onProgress({
++      blobBytes: 0,
++      blobCount: 0,
++      fastDeflateBlobBytes: 0,
++      fastDeflateBlobCount: 0,
++      loaded: 0,
++      objectBytes: 0,
++      phase: 'Packing objects',
++      total: progress.total,
++    });
++  }
+   for (const oid of oids) {
+     const { type, object } = await _readObject({ fs, cache, gitdir, oid });
+     await writeObject({ write, object, stype: type });
+@@ -14048,6 +14228,7 @@ async function _push({
+         fs,
+         cache,
+         gitdir,
++        onProgress,
+         oids: [...objects],
+       });
+   const res = await GitRemoteHTTP.connect({
 diff --git a/index.js b/index.js
-index eb614adef8cb8bc434e2286fcbcd35fba8c2efa3..7ec3f806d68fb11c4a7efe37226cb25d1039c7d3 100644
+index eb614ad..5198460 100644
 --- a/index.js
 +++ b/index.js
 @@ -2489,6 +2489,15 @@ function nudgeIntoShape(entry) {
@@ -38,3 +272,237 @@ index eb614adef8cb8bc434e2286fcbcd35fba8c2efa3..7ec3f806d68fb11c4a7efe37226cb25d
    entry.mode = limitModeToAllowed(entry.mode); // index
    if (!entry.type) {
      entry.type = mode2type$1(entry.mode); // index
+@@ -5489,8 +5498,13 @@ async function writeObjectLoose({ fs, gitdir, object, format, oid }) {
+ /* eslint-env node, browser */
+ 
+ let supportsCompressionStream = null;
++const fastDeflateBlobThreshold = 256 * 1024;
++
++async function deflate(buffer, options) {
++  if (options) {
++    return pako.deflate(buffer, options)
++  }
+ 
+-async function deflate(buffer) {
+   if (supportsCompressionStream === null) {
+     supportsCompressionStream = testCompressionStream();
+   }
+@@ -5518,6 +5532,119 @@ function testCompressionStream() {
+   }
+ }
+ 
++function getGitObjectDeflateOptions(type, object) {
++  return shouldUseFastBlobDeflate(type, object) ? { level: 0 } : undefined
++}
++
++function shouldUseFastBlobDeflate(type, object) {
++  return type === 'blob' &&
++    object.byteLength >= fastDeflateBlobThreshold &&
++    isLikelyAlreadyCompressedBlob(object)
++}
++
++function isLikelyAlreadyCompressedBlob(object) {
++  return isWebP(object) ||
++    isJpeg(object) ||
++    isPng(object) ||
++    isGif(object) ||
++    isHeifOrAvif(object) ||
++    isMp4Like(object) ||
++    isWebm(object)
++}
++
++function isWebP(object) {
++  return object.byteLength >= 12 &&
++    object[0] === 0x52 &&
++    object[1] === 0x49 &&
++    object[2] === 0x46 &&
++    object[3] === 0x46 &&
++    object[8] === 0x57 &&
++    object[9] === 0x45 &&
++    object[10] === 0x42 &&
++    object[11] === 0x50
++}
++
++function isJpeg(object) {
++  return object.byteLength >= 3 &&
++    object[0] === 0xff &&
++    object[1] === 0xd8 &&
++    object[2] === 0xff
++}
++
++function isPng(object) {
++  return object.byteLength >= 8 &&
++    object[0] === 0x89 &&
++    object[1] === 0x50 &&
++    object[2] === 0x4e &&
++    object[3] === 0x47 &&
++    object[4] === 0x0d &&
++    object[5] === 0x0a &&
++    object[6] === 0x1a &&
++    object[7] === 0x0a
++}
++
++function isGif(object) {
++  return object.byteLength >= 6 &&
++    object[0] === 0x47 &&
++    object[1] === 0x49 &&
++    object[2] === 0x46 &&
++    object[3] === 0x38 &&
++    (object[4] === 0x37 || object[4] === 0x39) &&
++    object[5] === 0x61
++}
++
++function isHeifOrAvif(object) {
++  if (object.byteLength < 12 || !hasFtypBox(object)) return false
++
++  const brand = asciiSlice(object, 8, 12);
++
++  return brand === 'heic' ||
++    brand === 'heix' ||
++    brand === 'hevc' ||
++    brand === 'hevx' ||
++    brand === 'mif1' ||
++    brand === 'msf1' ||
++    brand === 'avif' ||
++    brand === 'avis'
++}
++
++function isMp4Like(object) {
++  if (object.byteLength < 12 || !hasFtypBox(object)) return false
++
++  const brand = asciiSlice(object, 8, 12);
++
++  return brand === 'mp41' ||
++    brand === 'mp42' ||
++    brand === 'isom' ||
++    brand === 'iso2' ||
++    brand === 'qt  '
++}
++
++function isWebm(object) {
++  return object.byteLength >= 4 &&
++    object[0] === 0x1a &&
++    object[1] === 0x45 &&
++    object[2] === 0xdf &&
++    object[3] === 0xa3
++}
++
++function hasFtypBox(object) {
++  return object[4] === 0x66 &&
++    object[5] === 0x74 &&
++    object[6] === 0x79 &&
++    object[7] === 0x70
++}
++
++function asciiSlice(object, start, end) {
++  let result = '';
++
++  for (let i = start; i < end; i++) {
++    result += String.fromCharCode(object[i]);
++  }
++
++  return result
++}
++
+ async function _writeObject({
+   fs,
+   gitdir,
+@@ -5528,11 +5655,15 @@ async function _writeObject({
+   dryRun = false,
+ }) {
+   if (format !== 'deflated') {
++    const deflateOptions = format === 'content'
++      ? getGitObjectDeflateOptions(type, object)
++      : undefined;
++
+     if (format !== 'wrapped') {
+       object = GitObject.wrap({ type, object });
+     }
+     oid = await shasum(object);
+-    object = Buffer.from(await deflate(object));
++    object = Buffer.from(await deflate(object, deflateOptions));
+   }
+   if (!dryRun) {
+     await writeObjectLoose({ fs, gitdir, object, format: 'deflated', oid });
+@@ -13348,10 +13479,20 @@ async function _pack({
+   cache,
+   dir,
+   gitdir = join(dir, '.git'),
++  onProgress,
+   oids,
+ }) {
+   const hash = new Hash();
+   const outputStream = [];
++  const progress = {
++    blobBytes: 0,
++    blobCount: 0,
++    fastDeflateBlobBytes: 0,
++    fastDeflateBlobCount: 0,
++    loaded: 0,
++    objectBytes: 0,
++    total: oids.length,
++  };
+   function write(chunk, enc) {
+     const buff = Buffer.from(chunk, enc);
+     outputStream.push(buff);
+@@ -13381,12 +13522,51 @@ async function _pack({
+       length = length >>> 7;
+     }
+     // Lastly, we can compress and write the object.
+-    write(Buffer.from(await deflate(object)));
++    const deflateOptions = getGitObjectDeflateOptions(stype, object);
++
++    write(Buffer.from(await deflate(object, deflateOptions)));
++    progress.loaded += 1;
++    progress.objectBytes += object.byteLength;
++
++    if (stype === 'blob') {
++      progress.blobCount += 1;
++      progress.blobBytes += object.byteLength;
++
++      if (deflateOptions?.level === 0) {
++        progress.fastDeflateBlobCount += 1;
++        progress.fastDeflateBlobBytes += object.byteLength;
++      }
++    }
++
++    if (onProgress) {
++      await onProgress({
++        blobBytes: progress.blobBytes,
++        blobCount: progress.blobCount,
++        fastDeflateBlobBytes: progress.fastDeflateBlobBytes,
++        fastDeflateBlobCount: progress.fastDeflateBlobCount,
++        loaded: progress.loaded,
++        objectBytes: progress.objectBytes,
++        phase: 'Packing objects',
++        total: progress.total,
++      });
++    }
+   }
+   write('PACK');
+   write('00000002', 'hex');
+   // Write a 4 byte (32-bit) int
+   write(padHex(8, oids.length), 'hex');
++  if (onProgress) {
++    await onProgress({
++      blobBytes: 0,
++      blobCount: 0,
++      fastDeflateBlobBytes: 0,
++      fastDeflateBlobCount: 0,
++      loaded: 0,
++      objectBytes: 0,
++      phase: 'Packing objects',
++      total: progress.total,
++    });
++  }
+   for (const oid of oids) {
+     const { type, object } = await _readObject({ fs, cache, gitdir, oid });
+     await writeObject({ write, object, stype: type });
+@@ -14035,6 +14215,7 @@ async function _push({
+         fs,
+         cache,
+         gitdir,
++        onProgress,
+         oids: [...objects],
+       });
+   const res = await GitRemoteHTTP.connect({

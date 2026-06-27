@@ -170,6 +170,17 @@ type PromiseGitFileSystem = {
   }
 }
 
+type GitProgressEvent = {
+  blobBytes?: unknown
+  blobCount?: unknown
+  fastDeflateBlobBytes?: unknown
+  fastDeflateBlobCount?: unknown
+  loaded?: unknown
+  objectBytes?: unknown
+  phase?: unknown
+  total?: unknown
+}
+
 type RemoteFetchDecision = {
   fetchResult: FetchResult | null
   repairCooldownKey: string | null
@@ -783,15 +794,38 @@ async function commitTrackedChanges(
 
   await traceGitStep(runtime, 'commit.stage', async () => {
     for (const [filepath, headStatus, workdirStatus] of changedRows) {
+      const action = workdirStatus === 0 && headStatus !== 0 ? 'remove' : 'add'
+      const sizeBytes = action === 'add'
+        ? await getWorktreePathSizeBytes(runtime, filepath)
+        : null
+
       if (workdirStatus === 0 && headStatus !== 0) {
-        await removeTrackedPathFromIndex(runtime, filepath, Boolean(knownChangedPaths))
+        await traceGitStep(
+          runtime,
+          'commit.stage.file',
+          () => removeTrackedPathFromIndex(runtime, filepath, Boolean(knownChangedPaths)),
+          {
+            action,
+            pathKind: getTracePathKind(filepath),
+            sizeBytes,
+          },
+        )
       } else if (workdirStatus !== 0) {
-        await git.add({
-          cache: runtime.cache,
-          dir: runtime.dir,
-          filepath,
-          fs: runtime.fs,
-        })
+        await traceGitStep(
+          runtime,
+          'commit.stage.file',
+          () => git.add({
+            cache: runtime.cache,
+            dir: runtime.dir,
+            filepath,
+            fs: runtime.fs,
+          }),
+          {
+            action,
+            pathKind: getTracePathKind(filepath),
+            sizeBytes,
+          },
+        )
       }
     }
   }, {
@@ -910,6 +944,27 @@ async function doesWorktreePathExist(runtime: JournalGitRuntime, filepath: strin
 
     throw error
   }
+}
+
+async function getWorktreePathSizeBytes(runtime: JournalGitRuntime, filepath: string) {
+  try {
+    const stat = await (runtime.fs as unknown as PromiseGitFileSystem).promises.stat(
+      joinRuntimePath(runtime.dir, filepath),
+    )
+
+    return getStatSizeBytes(stat)
+  } catch {
+    // Size is diagnostic only; staging should still surface its own error.
+    return null
+  }
+}
+
+function getStatSizeBytes(stat: unknown) {
+  if (!isRecord(stat) || typeof stat.size !== 'number' || !Number.isFinite(stat.size)) {
+    return null
+  }
+
+  return stat.size
 }
 
 async function doCommitsHaveSameTree(
@@ -2429,6 +2484,10 @@ async function tryPushRemote(
       force: false,
       fs: runtime.fs,
       http: createAuthenticatedRuntimeHttpClient(runtime, input.credentials),
+      onProgress: createGitProgressTrace(runtime, 'remote.push.pack', {
+        branch,
+        remote: input.remote,
+      }),
       ref: getLocalBranchRef(branch),
       remote: input.remote,
       remoteRef: getRemoteBranchRef(branch),
@@ -3124,6 +3183,68 @@ function emitGitTrace(runtime: JournalGitRuntime, event: JournalGitTraceEvent) {
   }
 }
 
+function createGitProgressTrace(
+  runtime: JournalGitRuntime,
+  name: string,
+  baseDetails: JournalGitTraceDetails,
+) {
+  const startedAtByPhase = new Map<string, number>()
+
+  return async (event: GitProgressEvent) => {
+    const phase = typeof event.phase === 'string' && event.phase.trim()
+      ? event.phase
+      : 'unknown'
+    const loaded = getProgressNumber(event.loaded)
+    const total = getProgressNumber(event.total)
+
+    if (!startedAtByPhase.has(phase)) {
+      startedAtByPhase.set(phase, Date.now())
+    }
+
+    if (loaded === null || total === null || loaded < total) {
+      return
+    }
+
+    const startedAt = startedAtByPhase.get(phase) ?? Date.now()
+    const details: JournalGitTraceDetails = {
+      ...baseDetails,
+      loaded,
+      phase,
+      total,
+    }
+
+    addProgressNumber(details, 'blobBytes', event.blobBytes)
+    addProgressNumber(details, 'blobCount', event.blobCount)
+    addProgressNumber(details, 'fastDeflateBlobBytes', event.fastDeflateBlobBytes)
+    addProgressNumber(details, 'fastDeflateBlobCount', event.fastDeflateBlobCount)
+    addProgressNumber(details, 'objectBytes', event.objectBytes)
+
+    emitGitTrace(runtime, {
+      details,
+      durationMs: Date.now() - startedAt,
+      name,
+      ok: true,
+    })
+    startedAtByPhase.delete(phase)
+  }
+}
+
+function addProgressNumber(
+  details: JournalGitTraceDetails,
+  key: string,
+  value: unknown,
+) {
+  const numberValue = getProgressNumber(value)
+
+  if (numberValue !== null) {
+    details[key] = numberValue
+  }
+}
+
+function getProgressNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function createTraceDetails<T>(
   details: JournalGitTraceDetailsInput<T> | undefined,
   result: T,
@@ -3162,6 +3283,32 @@ function shortTraceOid(value: string | null) {
   }
 
   return /^[0-9a-f]{40}$/i.test(value) ? value.slice(0, 12) : value
+}
+
+function getTracePathKind(filepath: string) {
+  const normalized = normalizeRepositoryPath(filepath)
+
+  if (normalized.startsWith('media/')) {
+    return 'media'
+  }
+
+  if (normalized.startsWith('entries/')) {
+    return 'entries'
+  }
+
+  if (normalized.startsWith('annotations/')) {
+    return 'annotations'
+  }
+
+  if (normalized.startsWith('reviews/')) {
+    return 'reviews'
+  }
+
+  if (normalized === 'manifest.json') {
+    return 'manifest'
+  }
+
+  return 'other'
 }
 
 function compactErrorMessage(error: unknown) {

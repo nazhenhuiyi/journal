@@ -190,7 +190,7 @@ function createMobileGitHttpClient(trace?: JournalGitTrace): typeof http {
 
       try {
         const response = await withTimeout(
-          requestGitHttpWithExpoFetch(request),
+          requestGitHttpWithExpoFetch(request, trace),
           gitHttpRequestTimeoutMs,
           `GitHub request timed out: ${request.method ?? 'GET'} ${request.url}`,
         )
@@ -220,14 +220,17 @@ function createMobileGitHttpClient(trace?: JournalGitTrace): typeof http {
 
 async function requestGitHttpWithExpoFetch(
   request: Parameters<typeof http.request>[0],
+  trace?: JournalGitTrace,
 ): Promise<Awaited<ReturnType<typeof http.request>>> {
   const method = request.method ?? 'GET'
-  const body = await collectGitHttpBody(request.body)
-  const response = await expoFetch(request.url, {
-    body: body ?? undefined,
+  const body = request.body
+    ? await traceGitHttpBodyCollection(request, () => collectGitHttpBody(request.body), trace)
+    : null
+  const response = await traceGitHttpFetch(request, () => expoFetch(request.url, {
+    body: toFetchBody(body),
     headers: request.headers,
     method,
-  })
+  }), trace)
   const responseBody = response.body
     ? createGitHttpResponseBodyFromStream(response.body)
     : createGitHttpResponseBodyFromBytes(new Uint8Array(await response.arrayBuffer()))
@@ -305,6 +308,71 @@ function createGitHttpResponseBodyFromStream(
   }
 }
 
+async function traceGitHttpBodyCollection(
+  request: Parameters<typeof http.request>[0],
+  collectBody: () => Promise<Uint8Array | null>,
+  trace?: JournalGitTrace,
+) {
+  const startedAt = Date.now()
+
+  try {
+    const body = await collectBody()
+
+    trace?.({
+      details: {
+        ...createMobileGitHttpTraceDetails(request),
+        bodyBytes: body?.byteLength ?? 0,
+      },
+      durationMs: Date.now() - startedAt,
+      name: 'http.gitRequestBody',
+      ok: true,
+    })
+
+    return body
+  } catch (error) {
+    trace?.({
+      details: createMobileGitHttpTraceDetails(request),
+      durationMs: Date.now() - startedAt,
+      errorMessage: getErrorMessage(error),
+      name: 'http.gitRequestBody',
+      ok: false,
+    })
+
+    throw error
+  }
+}
+
+async function traceGitHttpFetch(
+  request: Parameters<typeof http.request>[0],
+  fetchRequest: () => Promise<Response>,
+  trace?: JournalGitTrace,
+) {
+  const startedAt = Date.now()
+
+  try {
+    const response = await fetchRequest()
+
+    trace?.({
+      details: createMobileGitHttpTraceDetails(request, response.status),
+      durationMs: Date.now() - startedAt,
+      name: 'http.gitRequestFetch',
+      ok: true,
+    })
+
+    return response
+  } catch (error) {
+    trace?.({
+      details: createMobileGitHttpTraceDetails(request),
+      durationMs: Date.now() - startedAt,
+      errorMessage: getErrorMessage(error),
+      name: 'http.gitRequestFetch',
+      ok: false,
+    })
+
+    throw error
+  }
+}
+
 async function* createGitHttpResponseBodyFromBytes(
   bytes: Uint8Array,
 ): AsyncIterableIterator<Uint8Array> {
@@ -333,6 +401,17 @@ async function collectGitHttpBody(body: Parameters<typeof http.request>[0]['body
   }
 
   return result
+}
+
+function toFetchBody(body: Uint8Array | null): BodyInit | undefined {
+  if (!body) {
+    return undefined
+  }
+
+  const arrayBuffer = new ArrayBuffer(body.byteLength)
+  new Uint8Array(arrayBuffer).set(body)
+
+  return arrayBuffer
 }
 
 async function requireCredentials(credentials?: GitHubSyncCredentials): Promise<JournalGitCredentials> {

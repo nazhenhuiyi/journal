@@ -90,7 +90,7 @@ const mimeTypeExtensions = new Map([
 ])
 const compressedImageExtension = '.webp'
 const compressedImageMaxLongEdge = 4096
-const compressedImageQuality = 0.92
+const compressedImageQuality = 0.85
 const passthroughImageExtensions = new Set(['.gif'])
 
 export type MobileJournalImageAsset = {

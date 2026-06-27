@@ -7,7 +7,7 @@ import {
   syncMobileJournalWithGitHub,
 } from './mobileGitSync'
 
-const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
+const { mockExpoFetch, mockFileSystem, mockFs, mockGit, mockTrace } = vi.hoisted(() => ({
   mockExpoFetch: vi.fn(),
   mockFileSystem: {
     EncodingType: {
@@ -55,6 +55,7 @@ const { mockExpoFetch, mockFileSystem, mockFs, mockGit } = vi.hoisted(() => ({
     writeRef: vi.fn(),
     writeTree: vi.fn(),
   },
+  mockTrace: vi.fn(),
 }))
 
 vi.mock('isomorphic-git', () => mockGit)
@@ -81,6 +82,14 @@ vi.mock('./secureSyncCredentials', () => ({
     status: 'available',
   })),
 }))
+vi.mock('./mobileSyncTrace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./mobileSyncTrace')>()
+
+  return {
+    ...actual,
+    createMobileSyncTrace: vi.fn(() => mockTrace),
+  }
+})
 
 describe('mobile git sync', () => {
   beforeEach(() => {
@@ -375,6 +384,79 @@ describe('mobile git sync', () => {
         method: 'GET',
       }),
     )
+  })
+
+  it('traces mobile Git HTTP body collection and fetch timing separately', async () => {
+    let didFetch = false
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return didFetch ? 'remote-head' : 'stale-remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.fetch.mockImplementationOnce(async ({ http }) => {
+      mockExpoFetch.mockResolvedValueOnce(new Response('', {
+        headers: {
+          'content-type': 'application/x-git-upload-pack-result',
+        },
+        status: 200,
+      }))
+
+      await http.request({
+        body: (async function* () {
+          yield Buffer.from('git-body')
+        })(),
+        headers: {
+          accept: 'application/x-git-upload-pack-result',
+        },
+        method: 'POST',
+        url: 'https://github.com/example/journal-sync.git/git-upload-pack',
+      })
+
+      didFetch = true
+
+      return {
+        fetchHead: 'remote-head',
+      }
+    })
+
+    await pullMobileJournalUpdatesFromGitHub({
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    }, {
+      token: 'runtime-token',
+    })
+
+    const fetchBody = mockExpoFetch.mock.calls[0]?.[1]?.body
+
+    expect(fetchBody).toBeInstanceOf(ArrayBuffer)
+    expect(Buffer.from(fetchBody as ArrayBuffer).toString('utf8')).toBe('git-body')
+    expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        bodyBytes: 8,
+        host: 'github.com',
+        method: 'POST',
+        service: 'git-upload-pack',
+      }),
+      name: 'http.gitRequestBody',
+      ok: true,
+    }))
+    expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        host: 'github.com',
+        method: 'POST',
+        service: 'git-upload-pack',
+        statusCode: 200,
+      }),
+      name: 'http.gitRequestFetch',
+      ok: true,
+    }))
+    expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'http.gitRequest',
+      ok: true,
+    }))
   })
 
   it('streams mobile Git HTTP response bodies without calling arrayBuffer', async () => {
