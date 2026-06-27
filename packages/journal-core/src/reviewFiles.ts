@@ -109,6 +109,8 @@ function normalizeReviewMomentInput(value: unknown): ReviewMoment | null {
           return normalized ? [normalized] : []
         })
       : [],
+    displayImage: normalizeReviewMomentDisplayImageInput(value.displayImage),
+    displayLabel: typeof value.displayLabel === 'string' ? value.displayLabel : undefined,
     id: value.id,
     kind: value.kind as ReviewMoment['kind'],
     sourceDays,
@@ -122,8 +124,13 @@ function normalizeReviewMomentInput(value: unknown): ReviewMoment | null {
 }
 
 function normalizeReviewMoment(moment: ReviewMoment): ReviewMoment {
+  const displayImage = normalizeReviewMomentDisplayImage(moment.displayImage)
+  const displayLabel = moment.displayLabel?.trim() || undefined
+
   return {
     anchors: moment.anchors.map(normalizeReviewAnchor),
+    ...(displayImage ? { displayImage } : {}),
+    ...(displayLabel ? { displayLabel } : {}),
     id: moment.id.trim(),
     kind: moment.kind,
     sourceDays: normalizeDateKeys(moment.sourceDays),
@@ -131,6 +138,40 @@ function normalizeReviewMoment(moment: ReviewMoment): ReviewMoment {
     themes: normalizeThemeIds(moment.themes),
     title: moment.title.trim(),
     widgetEligible: moment.widgetEligible,
+  }
+}
+
+function normalizeReviewMomentDisplayImageInput(value: unknown): ReviewMoment['displayImage'] {
+  if (!isRecord(value) || typeof value.src !== 'string' || !value.src.trim()) {
+    return undefined
+  }
+
+  if (value.alt !== undefined && typeof value.alt !== 'string') {
+    return undefined
+  }
+
+  if (value.locationName !== undefined && typeof value.locationName !== 'string') {
+    return undefined
+  }
+
+  return normalizeReviewMomentDisplayImage({
+    alt: value.alt,
+    locationName: value.locationName,
+    src: value.src,
+  })
+}
+
+function normalizeReviewMomentDisplayImage(
+  displayImage: ReviewMoment['displayImage'],
+): ReviewMoment['displayImage'] {
+  if (!displayImage?.src.trim()) {
+    return undefined
+  }
+
+  return {
+    src: displayImage.src.trim(),
+    ...(displayImage.alt?.trim() ? { alt: displayImage.alt.trim() } : {}),
+    ...(displayImage.locationName?.trim() ? { locationName: displayImage.locationName.trim() } : {}),
   }
 }
 

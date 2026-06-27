@@ -271,7 +271,19 @@ time: 2026-06-08T09:00:00.000Z
             time: '2026-06-12T14:00:00+08:00',
             themes: [],
             body: '上周喝到好茶。',
-            images: [],
+            images: [
+              {
+                id: 'img_20260612_140000',
+                location: {
+                  latitude: 30.6576,
+                  longitude: 104.0633,
+                  name: '西湖边',
+                  source: 'exif',
+                },
+                src: 'media/2026/06/tea.webp',
+                tags: [],
+              },
+            ],
           },
         ],
       },
@@ -304,6 +316,12 @@ time: 2026-06-08T09:00:00.000Z
         expect.objectContaining({ label: '午后', type: 'timeOfDay' }),
       ]),
       kind: 'relative',
+      displayImage: {
+        alt: '西湖边',
+        locationName: '西湖边',
+        src: 'media/2026/06/tea.webp',
+      },
+      displayLabel: '上周的今天，午后。西湖边',
       subtitle: '你写过一句：上周喝到好茶',
       title: '上周的今天，午后',
       widgetEligible: true,

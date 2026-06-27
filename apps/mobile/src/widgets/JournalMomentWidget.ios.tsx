@@ -1,9 +1,14 @@
 import {
+  Image,
   Rectangle,
   Text,
   VStack,
+  ZStack,
 } from '@expo/ui/swift-ui'
 import {
+  aspectRatio,
+  background,
+  clipped,
   containerBackground,
   font,
   foregroundStyle,
@@ -14,10 +19,16 @@ import {
   lineLimit,
   minimumScaleFactor,
   padding,
+  resizable,
+  shapes,
   widgetURL,
 } from '@expo/ui/swift-ui/modifiers'
 import { createWidget, type WidgetEnvironment } from 'expo-widgets'
 import type { JournalWidgetBundleSnapshot } from '@journal/core'
+
+type NativeWidgetReview = NonNullable<Partial<JournalWidgetBundleSnapshot>['review']> & {
+  backgroundImageUri?: unknown
+}
 
 function JournalMomentWidgetView(
   props: Partial<JournalWidgetBundleSnapshot>,
@@ -26,7 +37,7 @@ function JournalMomentWidgetView(
   'widget'
 
   const journalWidgetFontFamily = 'Xiaolai'
-  const review = props.review
+  const review = props.review as NativeWidgetReview | undefined
   const hasValidReview =
     review &&
     (review.mode === 'weekly-review' || review.mode === 'daily-review' || review.mode === 'empty-review') &&
@@ -56,6 +67,55 @@ function JournalMomentWidgetView(
   const backgroundColor = isDark ? '#171412' : '#F8F2E9'
   const subtitleColor = isDark ? '#9F958C' : '#7B7167'
   const titleColor = isDark ? '#F4EEE7' : '#201B16'
+  const photoUri = reviewMode === 'daily-review' && typeof review?.backgroundImageUri === 'string'
+    ? review.backgroundImageUri.trim()
+    : ''
+  const photoDisplayLabel = reviewMode === 'daily-review' && typeof review?.displayLabel === 'string'
+    ? review.displayLabel.trim()
+    : ''
+  const photoLabel = photoDisplayLabel || title
+
+  if (photoUri) {
+    return (
+      <ZStack
+        alignment="bottomTrailing"
+        modifiers={[
+          frame({ maxHeight: Infinity, maxWidth: Infinity }),
+          containerBackground(backgroundColor, 'widget'),
+          widgetURL(deepLink),
+        ]}
+      >
+        <Image
+          uiImage={photoUri}
+          modifiers={[
+            resizable(),
+            aspectRatio({ contentMode: 'fill' }),
+            frame({ maxHeight: Infinity, maxWidth: Infinity }),
+            clipped(),
+          ]}
+        />
+
+        <Text
+          modifiers={[
+            font({
+              family: journalWidgetFontFamily,
+              size: isSmallWidget ? 11 : 12,
+              weight: 'regular',
+            }),
+            foregroundStyle('#FFFFFF'),
+            lineLimit(1),
+            lineHeight(isSmallWidget ? 14 : 15),
+            minimumScaleFactor(0.84),
+            padding({ horizontal: isSmallWidget ? 6 : 7, vertical: 4 }),
+            background('#66000000', shapes.roundedRectangle({ cornerRadius: 7 })),
+            padding({ bottom: isSmallWidget ? 9 : 10, trailing: isSmallWidget ? 9 : 10 }),
+          ]}
+        >
+          {photoLabel}
+        </Text>
+      </ZStack>
+    )
+  }
 
   return (
     <VStack

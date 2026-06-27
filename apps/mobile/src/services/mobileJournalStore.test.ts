@@ -45,6 +45,9 @@ const mockMediaLibrary = vi.hoisted(() => ({
 const mockDiagnosticLog = vi.hoisted(() => ({
   info: vi.fn(),
 }))
+const mockReverseGeocode = vi.hoisted(() => ({
+  resolveMobileLocationName: vi.fn(),
+}))
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
 vi.mock('expo-image-manipulator', () => mockImageManipulator)
@@ -52,6 +55,7 @@ vi.mock('expo-media-library/legacy', () => mockMediaLibrary)
 vi.mock('./diagnostics/log', () => ({
   mobileDiagnosticLog: mockDiagnosticLog,
 }))
+vi.mock('./mobileReverseGeocode', () => mockReverseGeocode)
 
 const entryPath = 'file:///app/journal-worktree/entries/2026/06/2026-06-08.md'
 const reviewPath = 'file:///app/journal-worktree/reviews/2026/06/2026-06-10.json'
@@ -60,6 +64,7 @@ describe('mobileJournalStore', () => {
   beforeEach(() => {
     vi.stubEnv('EXPO_PUBLIC_JOURNAL_MOBILE_E2E_RUN_ID', '')
     vi.clearAllMocks()
+    mockReverseGeocode.resolveMobileLocationName.mockResolvedValue(undefined)
     mockFileSystem.directories.clear()
     mockFileSystem.files.clear()
     mockFileSystem.copyAsync.mockImplementation(async ({ from, to }: { from: string; to: string }) => {
@@ -229,6 +234,7 @@ describe('mobileJournalStore', () => {
 
   it('compresses imported images into the mobile worktree media directory as WebP', async () => {
     mockFileSystem.files.set('file:///picker/source.jpg', 'image-bytes')
+    mockReverseGeocode.resolveMobileLocationName.mockResolvedValueOnce('颐和园')
 
     const importedImages = await importMobileJournalImagesForDate(
       '2026-06-08',
@@ -259,6 +265,7 @@ describe('mobileJournalStore', () => {
         location: {
           latitude: 39.992,
           longitude: 116.277,
+          name: '颐和园',
           source: 'exif',
         },
       },

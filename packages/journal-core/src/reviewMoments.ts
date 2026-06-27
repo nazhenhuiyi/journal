@@ -25,6 +25,7 @@ type SolarTerm = {
 type DayCandidate = {
   day: ReviewSourceDay
   image?: ImageBlock
+  imageMurmur?: MurmurBlock
   sentence?: string
   themes: string[]
   timeAnchor?: ReviewAnchor
@@ -157,6 +158,8 @@ function createAnniversaryMoment(days: ReviewSourceDay[], today: string) {
 
   return createMoment({
     anchors,
+    displayImage: createCandidateDisplayImage(candidate),
+    displayLabel: createPhotoDisplayLabel('那年今日', sourceDay, candidate),
     id: `anniversary-${sourceDay.date}`,
     kind: 'anniversary',
     sourceDays: [sourceDay.date],
@@ -193,6 +196,8 @@ function createSolarTermMoment(days: ReviewSourceDay[], today: string) {
 
   return createMoment({
     anchors,
+    displayImage: createCandidateDisplayImage(candidate),
+    displayLabel: createPhotoDisplayLabel(`${solarTerm.label}那天`, sourceDay, candidate, { skipSolarTerm: true }),
     id: `solar-term-${solarTerm.value}-${sourceDay.date}`,
     kind: 'single',
     sourceDays: [sourceDay.date],
@@ -238,6 +243,8 @@ function createThemeClusterMoment(days: ReviewSourceDay[]) {
       createDateAnchor(latestDay.date),
       ...(latestCandidate.timeAnchor ? [latestCandidate.timeAnchor] : []),
     ],
+    displayImage: createCandidateDisplayImage(latestCandidate),
+    displayLabel: createPhotoDisplayLabel(formatDateCompact(latestDay.date), latestDay, latestCandidate),
     id: `theme-cluster-${themeId}-${latestDay.date}`,
     kind: 'cluster',
     sourceDays: themeDays.slice(0, 3).map((day) => day.date),
@@ -266,6 +273,8 @@ function createRelativeDateMoments(days: ReviewSourceDay[], today: string) {
         createDateAnchor(sourceDay.date, rule.label),
         ...createContextAnchors(sourceDay, candidate),
       ],
+      displayImage: createCandidateDisplayImage(candidate),
+      displayLabel: createPhotoDisplayLabel(rule.label, sourceDay, candidate),
       id: `${rule.id}-${sourceDay.date}`,
       kind: 'relative',
       sourceDays: [sourceDay.date],
@@ -282,7 +291,7 @@ function createSingleDayMoment(day: ReviewSourceDay) {
   const title = createAnchoredTitle(formatDateShort(day.date), day, candidate)
   const subtitle = createCandidateSubtitle(candidate)
 
-  if (!subtitle) {
+  if (!subtitle && !candidate.image) {
     return null
   }
 
@@ -291,6 +300,8 @@ function createSingleDayMoment(day: ReviewSourceDay) {
       createDateAnchor(day.date),
       ...createContextAnchors(day, candidate),
     ],
+    displayImage: createCandidateDisplayImage(candidate),
+    displayLabel: createPhotoDisplayLabel(formatDateCompact(day.date), day, candidate),
     id: `single-${day.date}`,
     kind: 'single',
     sourceDays: [day.date],
@@ -302,8 +313,24 @@ function createSingleDayMoment(day: ReviewSourceDay) {
 }
 
 function createMoment(moment: ReviewMoment): ReviewMoment {
+  const {
+    displayImage: rawDisplayImage,
+    displayLabel: rawDisplayLabel,
+    ...baseMoment
+  } = moment
+  const displayImage = rawDisplayImage?.src.trim()
+    ? {
+        src: rawDisplayImage.src.trim(),
+        ...(rawDisplayImage.alt?.trim() ? { alt: rawDisplayImage.alt.trim() } : {}),
+        ...(rawDisplayImage.locationName?.trim() ? { locationName: rawDisplayImage.locationName.trim() } : {}),
+      }
+    : undefined
+  const displayLabel = rawDisplayLabel?.trim() || undefined
+
   return {
-    ...moment,
+    ...baseMoment,
+    ...(displayImage ? { displayImage } : {}),
+    ...(displayLabel ? { displayLabel } : {}),
     themes: normalizeThemeIds(moment.themes),
   }
 }
@@ -316,6 +343,7 @@ function createDayCandidate(day: ReviewSourceDay): DayCandidate {
   return {
     day,
     image: firstImageMurmur?.images[0],
+    imageMurmur: firstImageMurmur,
     sentence: firstMurmurWithText ? selectMurmurSentence(firstMurmurWithText) : undefined,
     themes: collectDayThemes(day),
     timeAnchor: anchorMurmur ? createTimeAnchor(anchorMurmur) : undefined,
@@ -328,7 +356,7 @@ function createCandidateSubtitle(candidate: DayCandidate) {
   }
 
   if (candidate.image) {
-    return candidate.image.caption?.trim() || '你留过一张照片。'
+    return candidate.image.caption?.trim() || undefined
   }
 
   const themeId = candidate.themes[0]
@@ -360,6 +388,63 @@ function createAnchoredTitle(prefix: string, day: ReviewSourceDay, candidate: Da
   }
 
   return prefix
+}
+
+function createCandidateDisplayImage(candidate: DayCandidate): ReviewMoment['displayImage'] {
+  const image = candidate.image
+  const src = image?.src.trim()
+
+  if (!image || !src) {
+    return undefined
+  }
+
+  const locationName = normalizeOptionalString(image.location?.name) ||
+    normalizeOptionalString(candidate.imageMurmur?.location?.name)
+  const alt = image.caption?.trim() || locationName || undefined
+
+  return {
+    src,
+    ...(alt ? { alt } : {}),
+    ...(locationName ? { locationName } : {}),
+  }
+}
+
+function createPhotoDisplayLabel(
+  prefix: string,
+  day: ReviewSourceDay,
+  candidate: DayCandidate,
+  options: { skipSolarTerm?: boolean } = {},
+) {
+  if (!candidate.image) {
+    return undefined
+  }
+
+  const atmosphereLabel = createAtmosphereLabel(day, candidate, options)
+  const locationName = normalizeOptionalString(candidate.image.location?.name) ||
+    normalizeOptionalString(candidate.imageMurmur?.location?.name)
+  const timeLabel = [prefix, atmosphereLabel].filter(Boolean).join('，')
+
+  return [timeLabel, locationName].filter(Boolean).join('。') || undefined
+}
+
+function createAtmosphereLabel(
+  day: ReviewSourceDay,
+  candidate: DayCandidate,
+  options: { skipSolarTerm?: boolean } = {},
+) {
+  const weatherText = normalizeOptionalString(day.frontMatter.weather?.text)
+
+  if (weatherText) {
+    return weatherText
+  }
+
+  const solarTerm = getSolarTermForDate(day.date)
+
+  if (solarTerm && !options.skipSolarTerm) {
+    return solarTerm.label
+  }
+
+  return candidate.timeAnchor?.label
 }
 
 function createContextAnchors(
@@ -482,6 +567,16 @@ function formatDateShort(dateKey: string) {
   }
 
   return `${Number(month)} 月 ${Number(day)} 日`
+}
+
+function formatDateCompact(dateKey: string) {
+  const [, month, day] = dateKey.split('-')
+
+  if (!month || !day) {
+    return dateKey
+  }
+
+  return `${Number(month)}月${Number(day)}日`
 }
 
 function getPreviousWeekDateKey(dateKey: string) {

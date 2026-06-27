@@ -4,6 +4,7 @@ import {
 } from '@journal/core'
 import { mobileDiagnosticLog } from './diagnostics/log'
 import { readMobileImageExifLocation } from './mobileImageExif'
+import { resolveMobileLocationName } from './mobileReverseGeocode'
 
 export type MobileImageLocationAsset = {
   assetId: string | null
@@ -40,6 +41,8 @@ export async function resolveMobileImageLocation(
   const imagePickerExifStatus = summarizeExifLocationStatus(imageAsset.exif)
 
   if (imagePickerLocation) {
+    const location = await withResolvedLocationName(imagePickerLocation)
+
     logImageImportLocationResolution({
       assetIdStatus: imageAsset.assetId ? 'present' : 'missing',
       imagePickerExifStatus,
@@ -47,12 +50,14 @@ export async function resolveMobileImageLocation(
       result: 'image-picker-exif',
     })
 
-    return imagePickerLocation
+    return location
   }
 
   const sourceFileLocation = await readMobileImageExifLocation(imageAsset.uri, imageAsset.extension)
 
   if (sourceFileLocation.location) {
+    const location = await withResolvedLocationName(sourceFileLocation.location)
+
     logImageImportLocationResolution({
       assetIdStatus: imageAsset.assetId ? 'present' : 'missing',
       imagePickerExifStatus,
@@ -61,7 +66,7 @@ export async function resolveMobileImageLocation(
       sourceFileExifStatus: sourceFileLocation.status,
     })
 
-    return sourceFileLocation.location
+    return location
   }
 
   if (!imageAsset.assetId) {
@@ -87,7 +92,19 @@ export async function resolveMobileImageLocation(
     sourceFileExifStatus: sourceFileLocation.status,
   })
 
-  return mediaLibraryLocation.location
+  return withResolvedLocationName(mediaLibraryLocation.location)
+}
+
+async function withResolvedLocationName(location: ImageLocation | undefined) {
+  if (!location || location.name?.trim()) {
+    return location
+  }
+
+  const locationName = await resolveMobileLocationName(location)
+
+  return locationName
+    ? { ...location, name: locationName }
+    : location
 }
 
 function parseExifLocation(exif: Record<string, unknown> | null | undefined): ImageLocation | undefined {

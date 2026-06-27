@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import UIKit
 internal import ExpoWidgets
 
 struct JournalMomentWidget: Widget {
@@ -12,6 +13,8 @@ struct JournalMomentWidget: Widget {
     .configurationDisplayName("回看")
     .description("每日回顾与周回顾。")
     .supportedFamilies([.systemMedium])
+    // WidgetKit no-ops this modifier below iOS 17.
+    .contentMarginsDisabled()
   }
 }
 
@@ -23,8 +26,51 @@ private struct JournalMomentWidgetEntryView: View {
   }
 
   var body: some View {
-    textReviewCard
+    Group {
+      if let image = review.displayImage {
+        photoReviewCard(image: image)
+      } else {
+        textReviewCard
+      }
+    }
     .widgetURL(review.deepLink)
+  }
+
+  private func photoReviewCard(image: UIImage) -> some View {
+    GeometryReader { geometry in
+      ZStack {
+        Image(uiImage: image)
+          .resizable()
+          .scaledToFill()
+          .frame(width: geometry.size.width, height: geometry.size.height)
+          .clipped()
+
+        VStack {
+          Spacer()
+
+          HStack {
+            Spacer()
+
+            Text(review.displayLabel ?? review.title)
+              .font(.system(size: 12, weight: .regular))
+              .foregroundStyle(Color.white)
+              .lineLimit(1)
+              .minimumScaleFactor(0.84)
+              .padding(.horizontal, 7)
+              .padding(.vertical, 4)
+              .background(
+                Color.black.opacity(0.38),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+              )
+          }
+          .padding(.trailing, 10)
+          .padding(.bottom, 10)
+        }
+        .frame(width: geometry.size.width, height: geometry.size.height)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .journalWidgetContainerBackground(Color(red: 0.09, green: 0.08, blue: 0.07))
   }
 
   private var textReviewCard: some View {
@@ -41,8 +87,8 @@ private struct JournalMomentWidgetEntryView: View {
         summarySize: 16
       )
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 12)
+    .padding(.horizontal, 32)
+    .padding(.vertical, 24)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .journalWidgetContainerBackground(Color(red: 0.09, green: 0.08, blue: 0.07))
   }
@@ -85,12 +131,16 @@ private struct JournalMomentReviewPayload {
   let subtitle: String?
   let mode: String
   let deepLink: URL?
+  let displayImage: UIImage?
+  let displayLabel: String?
 
   init(props: [String: Any]?) {
     let review = props?["review"] as? [String: Any]
     let mode = review?["mode"] as? String
     let title = review?["title"] as? String
     let summary = review?["summary"] as? String
+    let backgroundImageUri = (review?["backgroundImageUri"] as? String)?.trimmedNonEmpty
+    let displayLabel = (review?["displayLabel"] as? String)?.trimmedNonEmpty
     let isValidReview =
       title?.isEmpty == false &&
       (mode == "weekly-review" || mode == "daily-review" || mode == "empty-review")
@@ -99,9 +149,13 @@ private struct JournalMomentReviewPayload {
     self.summary = isValidReview && summary?.isEmpty == false
       ? summary ?? ""
       : "写一句也很好，未来会在这里遇见它。"
-    self.subtitle = (review?["subtitle"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    self.subtitle = (review?["subtitle"] as? String)?.trimmedNonEmpty
     self.mode = isValidReview ? mode ?? "empty-review" : "empty-review"
     self.deepLink = JournalMomentReviewPayload.makeDeepLink(action: review?["action"] as? [String: Any])
+    self.displayImage = isValidReview && mode == "daily-review"
+      ? JournalMomentReviewPayload.loadImage(uri: backgroundImageUri)
+      : nil
+    self.displayLabel = isValidReview && mode == "daily-review" ? displayLabel : nil
   }
 
   var accentColor: Color {
@@ -137,6 +191,24 @@ private struct JournalMomentReviewPayload {
     default:
       return URL(string: "journal://review")
     }
+  }
+
+  private static func loadImage(uri: String?) -> UIImage? {
+    guard let uri,
+          let url = URL(string: uri),
+          let data = try? Data(contentsOf: url) else {
+      return nil
+    }
+
+    return UIImage(data: data)
+  }
+}
+
+private extension String {
+  var trimmedNonEmpty: String? {
+    let value = trimmingCharacters(in: .whitespacesAndNewlines)
+
+    return value.isEmpty ? nil : value
   }
 }
 

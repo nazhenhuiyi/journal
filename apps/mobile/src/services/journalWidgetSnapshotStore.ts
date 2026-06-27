@@ -1,5 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import {
+  manipulateAsync,
+  SaveFormat,
+} from 'expo-image-manipulator'
+import ExpoWidgetsModule from 'expo-widgets/build/ExpoWidgets'
+import {
   adaptJournalWidgetSnapshotToBundle,
   createJournalWidgetBundleSnapshot,
   normalizeJournalWidgetBundleSnapshot,
@@ -14,11 +19,18 @@ import {
   listDailyJournals,
   listWeeklyReviews,
   loadOrCreateDailyReview,
+  resolveJournalMediaFileUri,
   type LoadDailyReviewResult,
   type MobileJournalRecord,
 } from './mobileJournalStore'
 import { appendMobileE2eSuffix } from './e2eEnvironment'
 import { updateNativeJournalWidgets } from '../widgets/journalWidgetNative'
+
+type NativeJournalWidgetBundleSnapshot = JournalWidgetBundleSnapshot & {
+  review: JournalWidgetBundleSnapshot['review'] & {
+    backgroundImageUri?: string
+  }
+}
 
 export type RefreshJournalWidgetSnapshotInput = {
   currentDay?: ReviewSourceDay
@@ -44,6 +56,8 @@ export type JournalWidgetSnapshotTimelineEntry = {
 const widgetSnapshotFileName = 'journal-widget-snapshot-v2.json'
 const legacyWidgetSnapshotFileName = 'journal-widget-snapshot-v1.json'
 const momentTimelineRefreshHours = [5, 10, 14, 17, 20, 21] as const
+const nativeWidgetReviewImageWidth = 900
+const nativeWidgetReviewImageQuality = 0.82
 
 export async function refreshJournalWidgetSnapshot({
   currentDay,
@@ -186,9 +200,90 @@ async function updateNativeJournalWidgetsBestEffort(
   timeline: readonly JournalWidgetSnapshotTimelineEntry[],
 ) {
   try {
-    await updateNativeJournalWidgets(snapshot, timeline)
+    const nativeSnapshot = await prepareNativeJournalWidgetSnapshot(snapshot)
+    const nativeTimeline = await Promise.all(timeline.map(async (entry) => ({
+      ...entry,
+      snapshot: await prepareNativeJournalWidgetSnapshot(entry.snapshot),
+    })))
+
+    await updateNativeJournalWidgets(nativeSnapshot, nativeTimeline)
   } catch (error) {
     console.error(error)
+  }
+}
+
+async function prepareNativeJournalWidgetSnapshot(
+  snapshot: JournalWidgetBundleSnapshot,
+): Promise<NativeJournalWidgetBundleSnapshot> {
+  if (snapshot.review.mode !== 'daily-review' || !snapshot.review.backgroundImageSrc) {
+    return snapshot
+  }
+
+  const backgroundImageUri = await resolveNativeJournalWidgetImageUri(snapshot.review.backgroundImageSrc)
+
+  if (!backgroundImageUri) {
+    return snapshot
+  }
+
+  return {
+    ...snapshot,
+    review: {
+      ...snapshot.review,
+      backgroundImageUri,
+    },
+  }
+}
+
+async function resolveNativeJournalWidgetImageUri(src: string) {
+  const sourceUri = resolveJournalMediaFileUri(src)
+  const widgetsDirectory = normalizeDirectoryUri(ExpoWidgetsModule.widgetsDirectory)
+
+  if (!sourceUri || !widgetsDirectory) {
+    return null
+  }
+
+  const sourceInfo = await FileSystem.getInfoAsync(sourceUri)
+
+  if (!sourceInfo.exists) {
+    return null
+  }
+
+  const sourceMetadata = sourceInfo as typeof sourceInfo & {
+    modificationTime?: number
+    size?: number
+  }
+  const targetDirectory = `${widgetsDirectory}journal-review-images/`
+  const targetUri = `${targetDirectory}${hashString([
+    src,
+    `${sourceMetadata.size ?? 0}`,
+    `${sourceMetadata.modificationTime ?? 0}`,
+    `jpeg-${nativeWidgetReviewImageWidth}`,
+  ].join(':'))}.jpg`
+
+  try {
+    await FileSystem.makeDirectoryAsync(targetDirectory, { intermediates: true })
+
+    const targetInfo = await FileSystem.getInfoAsync(targetUri)
+
+    if (!targetInfo.exists) {
+      const result = await manipulateAsync(
+        sourceUri,
+        [{ resize: { width: nativeWidgetReviewImageWidth } }],
+        {
+          compress: nativeWidgetReviewImageQuality,
+          format: SaveFormat.JPEG,
+        },
+      )
+
+      await FileSystem.copyAsync({
+        from: result.uri,
+        to: targetUri,
+      })
+    }
+
+    return targetUri
+  } catch {
+    return null
   }
 }
 
@@ -203,6 +298,26 @@ function getUpcomingMomentTimelineDates(date: string, now: Date) {
   return momentTimelineRefreshHours
     .map((hour) => new Date(dateParts.year, dateParts.month - 1, dateParts.day, hour, 0, 0, 0))
     .filter((entryDate) => entryDate.getTime() > nowTime)
+}
+
+function normalizeDirectoryUri(value: string | null | undefined) {
+  if (!value || typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+
+  return trimmed.endsWith('/') ? trimmed : `${trimmed}/`
+}
+
+function hashString(value: string) {
+  let hash = 5381
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index)
+  }
+
+  return (hash >>> 0).toString(36)
 }
 
 function parseDateKey(date: string) {

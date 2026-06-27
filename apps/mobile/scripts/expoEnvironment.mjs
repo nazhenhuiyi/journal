@@ -25,8 +25,8 @@ export function createExpoCliInvocation() {
   assertMobileExpoSdk()
 
   return {
-    args: [expoCli],
-    command: process.execPath,
+    args: [],
+    command: expoCli,
     cwd: projectRoot,
   }
 }

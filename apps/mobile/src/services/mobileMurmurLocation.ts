@@ -1,5 +1,6 @@
 import * as Location from 'expo-location'
 import type { ImageLocation } from '@journal/core'
+import { resolveMobileLocationName } from './mobileReverseGeocode'
 
 const murmurLocationTimeoutMs = 3500
 
@@ -24,11 +25,16 @@ export async function resolveCurrentMurmurLocation(): Promise<ImageLocation | un
       return undefined
     }
 
-    return {
+    const location: ImageLocation = {
       latitude,
       longitude,
       source: 'system',
     }
+    const locationName = await resolveMobileLocationName(location)
+
+    return locationName
+      ? { ...location, name: locationName }
+      : location
   } catch {
     return undefined
   }

@@ -8,6 +8,7 @@ import {
 
 const mockUpdateNativeJournalWidgets = vi.hoisted(() => vi.fn())
 const mockFileSystem = vi.hoisted(() => ({
+  copyAsync: vi.fn(),
   directories: new Set<string>(),
   documentDirectory: 'file:///app/',
   files: new Map<string, string>(),
@@ -28,6 +29,11 @@ const mockImageManipulator = vi.hoisted(() => ({
 
 vi.mock('expo-file-system/legacy', () => mockFileSystem)
 vi.mock('expo-image-manipulator', () => mockImageManipulator)
+vi.mock('expo-widgets/build/ExpoWidgets', () => ({
+  default: {
+    widgetsDirectory: 'file:///widgets/',
+  },
+}))
 vi.mock('../widgets/journalWidgetNative', () => ({
   updateNativeJournalWidgets: mockUpdateNativeJournalWidgets,
 }))
@@ -43,6 +49,32 @@ describe('journalWidgetSnapshotStore', () => {
     vi.clearAllMocks()
     mockFileSystem.directories.clear()
     mockFileSystem.files.clear()
+    mockFileSystem.copyAsync.mockImplementation(async ({ from, to }: { from: string; to: string }) => {
+      const content = mockFileSystem.files.get(from)
+
+      if (content === undefined) {
+        throw new Error(`Missing test file: ${from}`)
+      }
+
+      mockFileSystem.files.set(to, content)
+    })
+    mockImageManipulator.manipulateAsync.mockImplementation(async (uri: string) => {
+      const content = mockFileSystem.files.get(uri)
+
+      if (content === undefined) {
+        throw new Error(`Missing test file: ${uri}`)
+      }
+
+      const resultUri = `${uri}.widget.jpg`
+
+      mockFileSystem.files.set(resultUri, `widget:${content}`)
+
+      return {
+        height: 675,
+        uri: resultUri,
+        width: 900,
+      }
+    })
     mockFileSystem.getInfoAsync.mockImplementation(async (path: string) => {
       const directoryPath = normalizeDirectoryPath(path)
       const isDirectory = mockFileSystem.directories.has(directoryPath)
@@ -232,6 +264,69 @@ themes: [sky-now]
       },
       mode: 'daily-review',
       title: '既有浮现',
+    })
+  })
+
+  it('adds an App Group image URI only for native daily review photo widgets', async () => {
+    const mediaPath = 'file:///app/journal-worktree/media/2025/06/lake.webp'
+
+    mockFileSystem.files.set(mediaPath, 'image-bytes')
+    mockFileSystem.files.set(reviewPath, JSON.stringify({
+      date: '2026-06-10',
+      generatedAt: '2026-06-10T08:00:00.000Z',
+      moments: [
+        {
+          anchors: [],
+          displayImage: {
+            src: 'media/2025/06/lake.webp',
+          },
+          displayLabel: '上周的今天，阴。西湖边',
+          id: 'single-2025-06-09',
+          kind: 'single',
+          sourceDays: ['2025-06-09'],
+          themes: [],
+          title: '上周的今天，阴',
+          widgetEligible: true,
+        },
+      ],
+      version: 1,
+    }))
+
+    const result = await refreshJournalWidgetSnapshot({
+      date: '2026-06-10',
+      currentDay: {
+        date: '2026-06-10',
+        frontMatter: { date: '2026-06-10' },
+        longEntryMarkdown: '',
+        murmurs: [],
+      },
+    })
+    const nativeSnapshot = mockUpdateNativeJournalWidgets.mock.calls[0]?.[0]
+    const copiedImageUri = [...mockFileSystem.files.keys()]
+      .find((path) => path.startsWith('file:///widgets/journal-review-images/'))
+
+    expect(result.snapshot.review).toMatchObject({
+      backgroundImageSrc: 'media/2025/06/lake.webp',
+      displayLabel: '上周的今天，阴。西湖边',
+      mode: 'daily-review',
+    })
+    expect(mockFileSystem.files.get(snapshotPath)).toContain('"backgroundImageSrc": "media/2025/06/lake.webp"')
+    expect(mockFileSystem.files.get(snapshotPath)).not.toContain('backgroundImageUri')
+    expect(copiedImageUri).toMatch(/^file:\/\/\/widgets\/journal-review-images\/.+\.jpg$/)
+    expect(mockImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+      mediaPath,
+      [{ resize: { width: 900 } }],
+      {
+        compress: 0.82,
+        format: 'jpeg',
+      },
+    )
+    expect(mockFileSystem.files.get(copiedImageUri ?? '')).toBe('widget:image-bytes')
+    expect(nativeSnapshot.review).toMatchObject({
+      backgroundImageUri: copiedImageUri,
+      backgroundImageSrc: 'media/2025/06/lake.webp',
+      displayLabel: '上周的今天，阴。西湖边',
+      mode: 'daily-review',
     })
   })
 

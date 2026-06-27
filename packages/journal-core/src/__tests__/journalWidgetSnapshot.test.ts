@@ -148,7 +148,7 @@ describe('journal widget snapshots', () => {
     }).mode).toBe('review-moment')
   })
 
-  it('prefers a fresh weekly review over a daily review moment', () => {
+  it('keeps a fresh weekly review as a text card even when it has a cover image', () => {
     const snapshot = createJournalWidgetBundleSnapshot({
       date: '2026-06-22',
       generatedAt: '2026-06-22T08:00:00.000Z',
@@ -172,7 +172,6 @@ describe('journal widget snapshots', () => {
         type: 'weeklyReview',
         week: '2026-W25',
       },
-      backgroundImageSrc: 'media/2026/06/img_20260620_210717.webp',
       mode: 'weekly-review',
       subtitle: '6月15日 - 6月21日',
       summary: '在快的时代里，给自己留一扇漏窗。',
@@ -250,7 +249,69 @@ describe('journal widget snapshots', () => {
         date: '2025-06-10',
         type: 'reviewDay',
       },
+      mode: 'daily-review',
+      summary: '你写过一句：云有一点发紫',
+      subtitle: '此刻的天空',
+      title: '那年今日',
+    })
+    expect(snapshot.review).not.toHaveProperty('backgroundImageSrc')
+  })
+
+  it('omits time-of-day anchors from ordinary text review subtitles', () => {
+    const weatherMoment: ReviewMoment = {
+      ...reviewMoment,
+      anchors: [
+        { label: '6 月 23 日', type: 'date', value: '2026-06-23' },
+        { label: '多云', type: 'weather', value: '多云' },
+        { label: '上午', type: 'timeOfDay', value: '09' },
+        { label: '此刻的天空', type: 'theme', value: 'sky-now' },
+      ],
+      id: 'single-2026-06-23',
+      kind: 'single',
+      sourceDays: ['2026-06-23'],
+      title: '6 月 23 日，多云',
+    }
+
+    expect(createJournalWidgetBundleSnapshot({
+      date: '2026-06-26',
+      generatedAt: '2026-06-26T08:00:00.000Z',
+      reviewMoments: [weatherMoment],
+      sourceDays: [],
+      weeklyReviews: [],
+    }).review).toMatchObject({
+      mode: 'daily-review',
+      subtitle: '多云',
+      title: '6 月 23 日，多云',
+    })
+  })
+
+  it('uses a display image and small display label only for marked daily review moments', () => {
+    const photoMoment: ReviewMoment = {
+      ...reviewMoment,
+      displayImage: {
+        alt: '西湖边的一张照片',
+        locationName: '西湖边',
+        src: 'media/2025/06/sky.jpg',
+      },
+      displayLabel: '上周的今天，阴。西湖边',
+    }
+
+    const snapshot = createJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      now: new Date(2026, 5, 23, 8),
+      reviewMoments: [photoMoment],
+      sourceDays: [sourceDay],
+      weeklyReviews: [],
+    })
+
+    expect(snapshot.review).toMatchObject({
+      action: {
+        date: '2025-06-10',
+        type: 'reviewDay',
+      },
       backgroundImageSrc: 'media/2025/06/sky.jpg',
+      displayLabel: '上周的今天，阴。西湖边',
       mode: 'daily-review',
       summary: '你写过一句：云有一点发紫',
       subtitle: '此刻的天空',
@@ -352,7 +413,6 @@ describe('journal widget snapshots', () => {
       },
       review: {
         action: { type: 'weeklyReview', week: '2026-W25' },
-        backgroundImageSrc: 'media/2026/06/img.webp',
         mode: 'weekly-review',
         subtitle: '6月15日 - 6月21日',
         summary: '留一扇漏窗。',
@@ -364,7 +424,9 @@ describe('journal widget snapshots', () => {
       ...snapshot,
       review: {
         ...snapshot.review,
+        action: { date: '2026-06-03', type: 'reviewDay' },
         backgroundImageSrc: '../media/bad.jpg',
+        mode: 'daily-review',
       },
     })).toBeNull()
     expect(normalizeJournalWidgetBundleSnapshot({
@@ -374,6 +436,34 @@ describe('journal widget snapshots', () => {
         action: { themeId: 'small-thing', type: 'write' },
       },
     })).toBeNull()
+  })
+
+  it('normalizes display labels for daily review image snapshots', () => {
+    expect(normalizeJournalWidgetBundleSnapshot({
+      date: '2026-06-23',
+      generatedAt: '2026-06-23T08:00:00.000Z',
+      moment: {
+        action: { themeId: 'sky-now', type: 'write' },
+        mode: 'theme-entry',
+        title: '此刻的天空',
+      },
+      review: {
+        action: { date: '2025-06-10', type: 'reviewDay' },
+        backgroundImageSrc: ' media/2025/06/sky.webp ',
+        displayLabel: ' 上周的今天，阴。西湖边 ',
+        mode: 'daily-review',
+        summary: ' 你拍下了一张照片。 ',
+        title: '上周的今天，阴',
+      },
+      version: 2,
+    })?.review).toEqual({
+      action: { date: '2025-06-10', type: 'reviewDay' },
+      backgroundImageSrc: 'media/2025/06/sky.webp',
+      displayLabel: '上周的今天，阴。西湖边',
+      mode: 'daily-review',
+      summary: '你拍下了一张照片。',
+      title: '上周的今天，阴',
+    })
   })
 
   it('adapts legacy v1 snapshots into a v2 bundle fallback', () => {

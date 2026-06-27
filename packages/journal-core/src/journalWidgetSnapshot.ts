@@ -93,7 +93,6 @@ export function createJournalWidgetBundleSnapshot({
     review: createReviewSnapshotForBundle({
       date,
       reviewMoments,
-      sourceDays,
       weeklyReviews,
     }),
     version: 2,
@@ -214,28 +213,20 @@ export function adaptJournalWidgetSnapshotToBundle(
 function createReviewSnapshotForBundle({
   date,
   reviewMoments,
-  sourceDays,
   weeklyReviews,
 }: {
   date: string
   reviewMoments: readonly ReviewMoment[]
-  sourceDays: readonly ReviewSourceDay[]
   weeklyReviews: readonly JournalWidgetWeeklyReviewInput[]
 }): JournalWidgetReviewSnapshot {
   const weeklyReview = selectFreshWeeklyReview(weeklyReviews, date)
 
   if (weeklyReview) {
-    const coverImage = weeklyReview.coverImage?.trim()
-    const backgroundImageSrc = coverImage && isSafeMediaPath(coverImage)
-      ? coverImage
-      : ''
-
     return {
       action: {
         type: 'weeklyReview',
         week: weeklyReview.week,
       },
-      ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
       mode: 'weekly-review',
       summary: weeklyReview.summary.trim(),
       subtitle: formatDateRangeShort(weeklyReview.startDate, weeklyReview.endDate),
@@ -251,7 +242,6 @@ function createReviewSnapshotForBundle({
   if (reviewMoment) {
     return createDailyReviewSnapshot({
       moment: reviewMoment,
-      sourceDays,
     })
   }
 
@@ -260,19 +250,24 @@ function createReviewSnapshotForBundle({
 
 function createDailyReviewSnapshot({
   moment,
-  sourceDays,
 }: {
   moment: ReviewMoment
-  sourceDays: readonly ReviewSourceDay[]
 }): JournalWidgetReviewSnapshot {
   const sourceDay = moment.sourceDays.find(isDateKey)
-  const backgroundImageSrc = getFirstImageForMoment(moment, sourceDays)
+  const displayImageSrc = moment.displayImage?.src.trim()
+  const backgroundImageSrc = displayImageSrc && isSafeMediaPath(displayImageSrc)
+    ? displayImageSrc
+    : ''
+  const displayLabel = backgroundImageSrc
+    ? moment.displayLabel?.trim() || undefined
+    : undefined
 
   return {
     action: sourceDay
       ? { date: sourceDay, type: 'reviewDay' }
       : { type: 'review' },
     ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
+    ...(displayLabel ? { displayLabel } : {}),
     mode: 'daily-review',
     summary: moment.subtitle,
     subtitle: formatReviewMomentFootnote(moment),
@@ -479,8 +474,15 @@ function isStrongAnchor(anchor: ReviewAnchor) {
 }
 
 function formatReviewMomentFootnote(moment: ReviewMoment) {
+  const atmosphereAnchor = moment.anchors
+    .find((anchor) => anchor.type === 'weather' || anchor.type === 'solarTerm')
+
+  if (atmosphereAnchor) {
+    return atmosphereAnchor.label
+  }
+
   const anchorLabels = moment.anchors
-    .filter((anchor) => anchor.type !== 'date')
+    .filter((anchor) => anchor.type !== 'date' && anchor.type !== 'timeOfDay')
     .slice(0, 2)
     .map((anchor) => anchor.label)
 
@@ -548,10 +550,15 @@ function normalizeJournalWidgetReviewSnapshot(value: unknown): JournalWidgetRevi
     return null
   }
 
-  if (
+  if (value.mode === 'daily-review' &&
     value.backgroundImageSrc !== undefined &&
-    (typeof value.backgroundImageSrc !== 'string' || !isSafeMediaPath(value.backgroundImageSrc.trim()))
-  ) {
+    (typeof value.backgroundImageSrc !== 'string' || !isSafeMediaPath(value.backgroundImageSrc.trim()))) {
+    return null
+  }
+
+  if (value.mode === 'daily-review' &&
+    value.displayLabel !== undefined &&
+    typeof value.displayLabel !== 'string') {
     return null
   }
 
@@ -561,8 +568,11 @@ function normalizeJournalWidgetReviewSnapshot(value: unknown): JournalWidgetRevi
     return null
   }
 
-  const backgroundImageSrc = typeof value.backgroundImageSrc === 'string'
+  const backgroundImageSrc = value.mode === 'daily-review' && typeof value.backgroundImageSrc === 'string'
     ? value.backgroundImageSrc.trim()
+    : ''
+  const displayLabel = backgroundImageSrc && typeof value.displayLabel === 'string'
+    ? value.displayLabel.trim()
     : ''
   const footnote = typeof value.footnote === 'string' ? value.footnote.trim() : ''
   const subtitle = typeof value.subtitle === 'string' ? value.subtitle.trim() : ''
@@ -571,6 +581,7 @@ function normalizeJournalWidgetReviewSnapshot(value: unknown): JournalWidgetRevi
   return {
     action,
     ...(backgroundImageSrc ? { backgroundImageSrc } : {}),
+    ...(displayLabel ? { displayLabel } : {}),
     ...(footnote ? { footnote } : {}),
     mode: value.mode,
     ...(subtitle ? { subtitle } : {}),
@@ -665,24 +676,6 @@ function selectFreshWeeklyReview(
       second.endDate.localeCompare(first.endDate) ||
       second.week.localeCompare(first.week)
     ))[0] ?? null
-}
-
-function getFirstImageForMoment(
-  moment: ReviewMoment,
-  sourceDays: readonly ReviewSourceDay[],
-) {
-  for (const sourceDate of moment.sourceDays) {
-    const sourceDay = sourceDays.find((day) => day.date === sourceDate)
-    const image = sourceDay?.murmurs
-      .flatMap((murmur) => murmur.images)
-      .find((candidate) => isSafeMediaPath(candidate.src))
-
-    if (image) {
-      return image.src
-    }
-  }
-
-  return undefined
 }
 
 function getDayDistance(from: string, to: string) {

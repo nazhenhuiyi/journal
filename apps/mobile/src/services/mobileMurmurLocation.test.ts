@@ -6,6 +6,9 @@ const mockLocation = vi.hoisted(() => ({
   getForegroundPermissionsAsync: vi.fn(),
   requestForegroundPermissionsAsync: vi.fn(),
 }))
+const mockReverseGeocode = vi.hoisted(() => ({
+  resolveMobileLocationName: vi.fn(),
+}))
 
 vi.mock('expo-location', () => ({
   Accuracy: {
@@ -15,6 +18,7 @@ vi.mock('expo-location', () => ({
   getForegroundPermissionsAsync: mockLocation.getForegroundPermissionsAsync,
   requestForegroundPermissionsAsync: mockLocation.requestForegroundPermissionsAsync,
 }))
+vi.mock('./mobileReverseGeocode', () => mockReverseGeocode)
 
 describe('mobile murmur location', () => {
   beforeEach(() => {
@@ -32,10 +36,12 @@ describe('mobile murmur location', () => {
         longitude: 104.066,
       },
     })
+    mockReverseGeocode.resolveMobileLocationName.mockResolvedValue('武侯区')
 
     await expect(resolveCurrentMurmurLocation()).resolves.toEqual({
       latitude: 30.657,
       longitude: 104.066,
+      name: '武侯区',
       source: 'system',
     })
     expect(mockLocation.requestForegroundPermissionsAsync).not.toHaveBeenCalled()
@@ -59,6 +65,7 @@ describe('mobile murmur location', () => {
         longitude: 121.47,
       },
     })
+    mockReverseGeocode.resolveMobileLocationName.mockResolvedValue(undefined)
 
     await expect(resolveCurrentMurmurLocation()).resolves.toMatchObject({
       latitude: 31.23,

@@ -154,6 +154,12 @@ export type ReviewMoment = {
   kind: 'single' | 'cluster' | 'anniversary' | 'relative'
   title: string
   subtitle?: string
+  displayImage?: {
+    src: string
+    alt?: string
+    locationName?: string
+  }
+  displayLabel?: string
   widgetEligible: boolean
 }
 
@@ -208,6 +214,7 @@ export type JournalWidgetReviewSnapshot = {
   summary?: string
   footnote?: string
   backgroundImageSrc?: string
+  displayLabel?: string
   action: JournalWidgetAction
 }
 

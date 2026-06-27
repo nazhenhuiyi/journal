@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Image as NativeImage, Pressable, ScrollView, Text, View } from 'react-native'
+import { Image as NativeImage, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import {
   type DayFrontMatter,
@@ -235,6 +235,15 @@ function ReviewMomentCard({
   moment: ReviewMoment
   onPress: () => void
 }) {
+  if (moment.displayImage) {
+    return (
+      <ReviewMomentPhotoCard
+        moment={moment}
+        onPress={onPress}
+      />
+    )
+  }
+
   return (
     <Pressable
       accessibilityLabel={moment.title}
@@ -262,6 +271,67 @@ function ReviewMomentCard({
     </Pressable>
   )
 }
+
+function ReviewMomentPhotoCard({
+  moment,
+  onPress,
+}: {
+  moment: ReviewMoment
+  onPress: () => void
+}) {
+  const imageUri = useJournalImageThumbnailUri(moment.displayImage?.src ?? '', 768)
+  const label = moment.displayLabel ?? moment.title
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      className="overflow-hidden border border-border bg-surface"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        borderRadius: radiusPixels.lg,
+        opacity: pressed ? 0.74 : 1,
+      })}
+    >
+      <View>
+        <NativeImage
+          accessibilityLabel={moment.displayImage?.alt ?? label}
+          resizeMode="cover"
+          source={{ uri: imageUri }}
+          style={{
+            aspectRatio: 4 / 3,
+            width: '100%',
+          }}
+        />
+        <View style={styles.photoLabelPill}>
+          <Text className="text-[11px] font-semibold leading-4 text-black/75" numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+      </View>
+      {!moment.displayLabel && moment.subtitle ? (
+        <View className="px-4 py-3">
+          <Text className="text-sm leading-5 text-text-tertiary" numberOfLines={2}>
+            {moment.subtitle}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  )
+}
+
+const styles = StyleSheet.create({
+  photoLabelPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderRadius: radiusPixels.md,
+    bottom: spacingPixels['2.5'],
+    maxWidth: '78%',
+    paddingHorizontal: spacingPixels['2'],
+    paddingVertical: 3,
+    position: 'absolute',
+    right: spacingPixels['2.5'],
+  },
+})
 
 function mergeCurrentDay(records: MobileJournalRecord[], currentDay: ReviewSourceDay): ReviewSourceDay[] {
   const savedRecords = records.filter((record) => record.date !== currentDay.date)
