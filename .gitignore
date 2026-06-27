@@ -14,6 +14,8 @@ apps/mobile/build/
 apps/mobile/android/
 dist
 dist-electron
+sites/*/.next
+sites/*/out
 release
 builds/
 dist-ssr

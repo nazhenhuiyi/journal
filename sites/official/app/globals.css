@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@import "@journal/theme/tokens.css";
+
+@theme inline {
+  --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  --color-vermilion: #c84f31;
+}
+
+body {
+  letter-spacing: 0;
+}
