@@ -88,6 +88,8 @@ async function writeFile(
     return
   }
 
+  // TODO: Prefer File.writableStream() chunked binary writes here. This legacy
+  // base64 path expands Uint8Array payloads by about 33% before native writes.
   const base64Contents = typeof data === 'string'
     ? encoding === 'base64'
       ? data

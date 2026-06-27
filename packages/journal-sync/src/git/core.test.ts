@@ -486,6 +486,47 @@ describe('journal git sync core', () => {
     }))
   })
 
+  it('fetches remote updates through the local remote-tracking ref so Git can advertise a shared base', async () => {
+    const runtime = createRuntime()
+
+    mockGit.listServerRefs.mockResolvedValueOnce([
+      {
+        oid: 'remote-head',
+        ref: 'refs/heads/main',
+      },
+    ])
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/heads/main') {
+        return 'local-only-head'
+      }
+
+      if (ref === 'refs/remotes/origin/main') {
+        return 'tracking-head'
+      }
+
+      return 'local-only-head'
+    })
+
+    await pullJournalUpdates(
+      runtime,
+      {
+        branch: 'main',
+        remoteUrl: 'https://github.com/example/journal-sync.git',
+      },
+      credentials,
+      {
+        collectDirtyPathsAfterSync: false,
+      },
+    )
+
+    expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      ref: 'refs/remotes/origin/main',
+      remote: 'origin',
+      remoteRef: 'refs/heads/main',
+      singleBranch: true,
+    }))
+  })
+
   it('passes the runtime cache to clone operations', async () => {
     const runtime = createRuntime()
 
@@ -1053,8 +1094,9 @@ describe('journal git sync core', () => {
       updatedWorktree: false,
     })
     expect(mockGit.fetch).toHaveBeenCalledWith(expect.objectContaining({
-      ref: 'main',
+      ref: 'refs/remotes/origin/main',
       remote: 'origin',
+      remoteRef: 'refs/heads/main',
     }))
     expect(mockGit.writeCommit).toHaveBeenCalledWith(expect.objectContaining({
       commit: expect.objectContaining({

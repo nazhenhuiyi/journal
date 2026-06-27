@@ -228,10 +228,12 @@ async function requestGitHttpWithExpoFetch(
     headers: request.headers,
     method,
   })
-  const bytes = new Uint8Array(await response.arrayBuffer())
+  const responseBody = response.body
+    ? createGitHttpResponseBodyFromStream(response.body)
+    : createGitHttpResponseBodyFromBytes(new Uint8Array(await response.arrayBuffer()))
 
   return {
-    body: createGitHttpResponseBody(bytes),
+    body: responseBody,
     headers: parseResponseHeaders(response.headers),
     method,
     statusCode: response.status,
@@ -240,7 +242,72 @@ async function requestGitHttpWithExpoFetch(
   }
 }
 
-async function* createGitHttpResponseBody(bytes: Uint8Array): AsyncIterableIterator<Uint8Array> {
+function createGitHttpResponseBodyFromStream(
+  stream: ReadableStream<Uint8Array>,
+): AsyncIterableIterator<Uint8Array> {
+  const reader = stream.getReader()
+  let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = reader.read()
+  let isReleased = false
+
+  const releaseReader = () => {
+    if (!isReleased) {
+      reader.releaseLock()
+      isReleased = true
+    }
+  }
+
+  return {
+    async next() {
+      if (isReleased) {
+        return {
+          done: true,
+          value: undefined,
+        }
+      }
+
+      const readResult = await (pendingRead ?? reader.read())
+      pendingRead = null
+
+      if (readResult.done) {
+        releaseReader()
+
+        return {
+          done: true,
+          value: undefined,
+        }
+      }
+
+      pendingRead = reader.read()
+
+      return {
+        done: false,
+        value: readResult.value,
+      }
+    },
+
+    async return() {
+      const readToCancel = pendingRead
+
+      pendingRead = null
+      await reader.cancel('Git HTTP response body no longer needed.').catch(() => undefined)
+      await readToCancel?.catch(() => undefined)
+      releaseReader()
+
+      return {
+        done: true,
+        value: undefined,
+      }
+    },
+
+    [Symbol.asyncIterator]() {
+      return this
+    },
+  }
+}
+
+async function* createGitHttpResponseBodyFromBytes(
+  bytes: Uint8Array,
+): AsyncIterableIterator<Uint8Array> {
   yield bytes
 }
 

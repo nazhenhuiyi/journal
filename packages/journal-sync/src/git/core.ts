@@ -1040,17 +1040,21 @@ async function fetchRemote(
   credentials: JournalGitCredentials,
   traceName = 'remote.fetch',
 ) {
+  const branch = getBranchName(config.branch ?? defaultBranch)
+  const remote = config.remote ?? defaultRemote
+
   return traceGitStep(runtime, traceName, () => getGit(runtime).fetch({
     cache: runtime.cache,
     dir: runtime.dir,
     fs: runtime.fs,
     http: createAuthenticatedRuntimeHttpClient(runtime, credentials),
-    ref: getBranchName(config.branch ?? defaultBranch),
-    remote: config.remote ?? defaultRemote,
+    ref: getRemoteTrackingBranchRef(remote, branch),
+    remote,
+    remoteRef: getRemoteBranchRef(branch),
     singleBranch: true,
   }), {
-    branch: getBranchName(config.branch ?? defaultBranch),
-    remote: config.remote ?? defaultRemote,
+    branch,
+    remote,
   })
 }
 

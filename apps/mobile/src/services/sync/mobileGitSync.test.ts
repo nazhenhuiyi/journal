@@ -377,6 +377,90 @@ describe('mobile git sync', () => {
     )
   })
 
+  it('streams mobile Git HTTP response bodies without calling arrayBuffer', async () => {
+    let didFetch = false
+    const arrayBuffer = vi.fn(async () => {
+      throw new Error('arrayBuffer should not be called when response.body is available')
+    })
+    const read = vi.fn<() => Promise<ReadableStreamReadResult<Uint8Array>>>()
+    const cancel = vi.fn(async () => undefined)
+    const releaseLock = vi.fn()
+    const responseBody = {
+      getReader: vi.fn(() => ({
+        cancel,
+        read,
+        releaseLock,
+      })),
+    } as unknown as ReadableStream<Uint8Array>
+
+    read
+      .mockResolvedValueOnce({
+        done: false,
+        value: Buffer.from('git-'),
+      })
+      .mockResolvedValueOnce({
+        done: false,
+        value: Buffer.from('response'),
+      })
+      .mockResolvedValueOnce({
+        done: true,
+        value: undefined,
+      })
+
+    mockGit.resolveRef.mockImplementation(async ({ ref }: { ref: string }) => {
+      if (ref === 'refs/remotes/origin/main') {
+        return didFetch ? 'remote-head' : 'stale-remote-head'
+      }
+
+      return 'local-head'
+    })
+    mockGit.fetch.mockImplementationOnce(async ({ http }) => {
+      mockExpoFetch.mockResolvedValueOnce({
+        arrayBuffer,
+        body: responseBody,
+        headers: new Headers({
+          'content-type': 'application/x-git-upload-pack-result',
+        }),
+        status: 200,
+        statusText: 'OK',
+        url: 'https://github.com/example/journal-sync.git/git-upload-pack',
+      })
+
+      const response = await http.request({
+        headers: {
+          accept: 'application/x-git-upload-pack-result',
+        },
+        method: 'POST',
+        url: 'https://github.com/example/journal-sync.git/git-upload-pack',
+      })
+      const chunks: Uint8Array[] = []
+
+      expect(read).toHaveBeenCalledTimes(1)
+
+      for await (const chunk of response.body) {
+        chunks.push(chunk)
+      }
+
+      expect(Buffer.concat(chunks).toString('utf8')).toBe('git-response')
+      expect(arrayBuffer).not.toHaveBeenCalled()
+      expect(read).toHaveBeenCalledTimes(3)
+      expect(releaseLock).toHaveBeenCalledOnce()
+
+      didFetch = true
+
+      return {
+        fetchHead: 'remote-head',
+      }
+    })
+
+    await pullMobileJournalUpdatesFromGitHub({
+      branch: 'main',
+      remoteUrl: 'https://github.com/example/journal-sync.git',
+    }, {
+      token: 'runtime-token',
+    })
+  })
+
   it('allows the first push when an empty remote cannot be fetched yet', async () => {
     mockGit.statusMatrix
       .mockResolvedValueOnce([
