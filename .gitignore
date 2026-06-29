@@ -35,3 +35,4 @@ dist-ssr
 tmp
 test-results
 docs/design/*
+!docs/design/README.md

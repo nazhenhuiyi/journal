@@ -6,6 +6,6 @@
 - 天气能力在这里保持为纯解析和纯判断；真实定位、网络请求、权限和缓存由应用端处理。
 - 批注数据结构需要保留，即使应用界面暂时不展示批注功能。
 - 修改数据结构或序列化格式时，要同时考虑桌面端、移动端、原生小组件和同步仓库里的历史数据。
-- 修改回顾、主题或小组件 snapshot 逻辑时，要同步考虑移动端 Review 页面、原生小组件和 `docs/product/回顾与小组件推荐逻辑.md`。
+- 修改回顾、主题或小组件 snapshot 逻辑时，要同步考虑移动端 Review 页面、原生小组件和 `docs/product/experience/回顾与小组件推荐逻辑.md`。
 - 不要为了某一端 UI 的临时需求污染共享模型。应用端展示细节应留在应用端。
 - 测试使用 Vitest。运行 `pnpm --filter @journal/core run test` 和 `pnpm --filter @journal/core run typecheck`。

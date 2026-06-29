@@ -12,29 +12,23 @@ import {
 
 const productScreens = [
   {
-    title: "早上先留一句",
+    title: "先记下一句",
     eyebrow: "今日",
-    description:
-      "不必先想好标题。等公交、喝茶、走到街口的时候，先把一句话和当下的天气留下来。",
-    image: "/product/ios-today.png",
-    alt: "且留此刻今日页，正在记录一条关于成都清晨的碎碎念",
+    image: "/product/ios-today-chengdu.png",
+    alt: "且留此刻今日页，展示一条成都当天的碎碎念和照片",
     icon: MessageCircle,
   },
   {
-    title: "下午看见路线",
+    title: "照片带上地点",
     eyebrow: "照片地图",
-    description:
-      "成都、都江堰、峨眉山、雅安、康定和乐山的照片与碎碎念，会在地图上连成自己的四川轨迹。",
-    image: "/product/ios-photo-map.png",
-    alt: "且留此刻照片地图，显示四川内的照片和文字记录",
+    image: "/product/ios-photo-map-chengdu.png",
+    alt: "且留此刻照片地图，显示成都内的照片和文字记录",
     icon: Map,
   },
   {
-    title: "晚上回到那一天",
+    title: "回看某一天",
     eyebrow: "日记回看",
-    description:
-      "点开某一天，文字、照片、地点和时间留在同一个页面里，像把当天重新摊开看一遍。",
-    image: "/product/ios-review-day.png",
+    image: "/product/ios-review-day-chengdu.png",
     alt: "且留此刻日记详情页，展示一日文字、照片和位置记录",
     icon: CalendarClock,
   },
@@ -42,58 +36,50 @@ const productScreens = [
 
 const productPillars = [
   {
-    title: "记录从一秒钟开始",
+    title: "打开就是今天",
     description:
-      "长文、碎碎念和照片都算记录。它不要求你每天完成一篇漂亮文章，只把入口放得足够轻。",
+      "页面先给你一张今天的纸。想写就写一点，什么也不写也可以。",
     icon: PenLine,
   },
   {
-    title: "照片把地点带回来",
+    title: "写的时候很安静",
     description:
-      "一张照片可以带着当时的街口、天气和光线回来，慢慢拼成自己的生活地图。",
-    icon: ImageIcon,
-  },
-  {
-    title: "回看不是年度总结",
-    description:
-      "旧日会按天安静地放好。你不用整理作品，只是在某个晚上重新遇见那一天。",
-    icon: CalendarClock,
-  },
-  {
-    title: "写给自己，不写给算法",
-    description:
-      "且留不把记录变成动态，也不催你分享。它更像一个只替你保管片刻的房间。",
+      "保存、同步和设置都收在边上。写字的时候，页面尽量不打扰你。",
     icon: ShieldCheck,
+  },
+  {
+    title: "旧日慢慢回来",
+    description:
+      "日子放在那里。想看时，再按日期或地图慢慢翻回来。",
+    icon: CalendarClock,
   },
 ];
 
 const recordingFlow = [
   {
-    title: "今日页",
-    description: "先接住一句碎碎念、一段长文，或刚拍下的一张照片。",
+    title: "先留一句",
+    description: "短一点、乱一点都可以。像给自己留张小纸条，别急着写完整。",
   },
   {
-    title: "照片地图",
-    description: "有地点的内容会回到地图上，慢慢显出生活走过的路线。",
+    title: "拍一张照片",
+    description: "照片拍糊了也没关系。那杯茶、那片屋檐，会帮你把当时带回来。",
   },
   {
-    title: "日记回看",
-    description: "同一天的文字、照片和位置会合在一起，方便以后重新翻看。",
+    title: "想起了再回来",
+    description: "过几天又想到什么，就回来添一句。不添，也不亏欠谁。",
   },
   {
-    title: "私人记录",
-    description: "它不把日记变成动态，也不催你分享，只负责安静地留下。",
+    title: "空着也没事",
+    description: "没有想写的日子，就让它空着。且留不会催你。",
   },
 ];
 
 const scenarioMoments = [
-  "人民公园茶社的一杯盖碗茶",
-  "都江堰南桥边的水声",
-  "峨眉山雾里的一段石阶",
-  "康定傍晚吹过折多河的风",
+  "上午 10:18，成都人民公园，茶摊旁坐了一会儿",
+  "下午 13:42，宽窄巷子，路过时拍了一张灰瓦屋檐",
+  "下午 16:08，小通巷，没有拍照，只写下：这里像一个逗号",
+  "傍晚 18:31，望江楼公园，竹影很好，照片有一点糊",
 ];
-
-const principles = ["不催打卡", "空白也算数", "少一点管理感", "多一点在场感"];
 
 export default function Home() {
   return (
@@ -105,7 +91,7 @@ export default function Home() {
       >
         <Image
           className="absolute inset-0 z-0 object-cover object-[72%_50%]"
-          src="/product/ios-photo-map.png"
+          src="/product/ios-photo-map-chengdu.png"
           alt=""
           fill
           priority
@@ -137,19 +123,19 @@ export default function Home() {
             aria-label="官网导航"
           >
             <a className="transition-colors hover:text-white" href="#product">
-              产品介绍
+              记录方式
             </a>
             <a className="transition-colors hover:text-white" href="#scenario">
-              使用场景
+              一段样例
             </a>
             <a className="transition-colors hover:text-white" href="#screens">
               产品截图
             </a>
             <a className="transition-colors hover:text-white" href="#privacy">
-              安心记录
+              只留给自己
             </a>
             <Link className="transition-colors hover:text-white" href="/blog">
-              Blog
+              札记
             </Link>
           </nav>
           <a
@@ -164,7 +150,7 @@ export default function Home() {
         <div className="relative z-20 mx-auto flex w-[min(1120px,calc(100%-48px))] flex-1 items-center py-14 pb-24 max-sm:w-[calc(100%-32px)] max-sm:items-start max-sm:pt-14">
           <div className="max-w-[650px]">
             <p className="text-sm font-bold text-teal-50/82">
-              私人的日常记录产品
+              私人日记应用
             </p>
             <h1
               id="hero-title"
@@ -173,11 +159,11 @@ export default function Home() {
               且留此刻
             </h1>
             <p className="mt-5 text-2xl font-bold leading-relaxed text-white max-sm:text-xl">
-              把碎碎念、照片和地点，留在同一条日记线里。
+              把此刻，轻轻留下。
             </p>
             <p className="mt-4 max-w-xl text-[1.06rem] leading-8 text-white/76 max-sm:text-base">
-              且留此刻从轻量的一句话开始，把当天的文字、图片和位置收在一起。
-              它不是任务管理，也不是公开动态，而是一处可以慢慢回看的私人记录。
+              写一句，拍一张照片，带上地点和日期。先留在今天，
+              以后再慢慢翻。
             </p>
             <div
               className="mt-8 flex flex-wrap gap-3 max-sm:flex-col"
@@ -188,7 +174,7 @@ export default function Home() {
                 href="#product"
               >
                 <PenLine size={19} aria-hidden="true" />
-                <span>了解产品</span>
+                <span>看看怎么记录一天</span>
                 <ArrowRight size={18} aria-hidden="true" />
               </a>
               <a
@@ -196,7 +182,7 @@ export default function Home() {
                 href="#screens"
               >
                 <ImageIcon size={18} aria-hidden="true" />
-                <span>看真实截图</span>
+                <span>看产品截图</span>
               </a>
             </div>
           </div>
@@ -206,14 +192,10 @@ export default function Home() {
       <section id="product" className="bg-background py-24 max-sm:py-18">
         <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-start gap-14 md:grid-cols-[minmax(0,0.84fr)_minmax(320px,0.58fr)] max-sm:w-[calc(100%-32px)]">
           <div>
-            <p className="text-sm font-bold text-primary">产品介绍</p>
+            <p className="text-sm font-bold text-primary">记录方式</p>
             <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-              先写下，再把文字、照片和地点放回一天里。
+              不用想好怎么写，先记下来。
             </h2>
-            <p className="mt-5 text-base leading-8 text-stone-600">
-              且留此刻是一款私人日常记录产品。它把短句、长文、照片和位置放在同一个日记结构里，
-              让用户可以快速留下当下，也能在以后按日期或地图重新回到那一天。
-            </p>
           </div>
 
           <div className="grid gap-2.5" aria-label="且留此刻记录方式">
@@ -239,73 +221,16 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="scenario" className="bg-background pb-24 max-sm:pb-18">
-        <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-start gap-14 border-t border-border/70 pt-20 md:grid-cols-[minmax(0,0.84fr)_minmax(320px,0.58fr)] max-sm:w-[calc(100%-32px)]">
-          <div>
-            <p className="text-sm font-bold text-primary">使用场景</p>
-            <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-              一天里不完整的片刻，最后会自己连起来。
-            </h2>
-            <p className="mt-5 text-base leading-8 text-stone-600">
-              以这组四川记录为例：早上写下一句碎碎念，中午把路上的照片放进日记，
-              晚上再补一段长文。且留不会把这些东西逼成一篇文章，只让它们保持当时的样子。
-            </p>
-          </div>
-
-          <div className="grid gap-2.5" aria-label="四川记录片段">
-            {scenarioMoments.map((moment, index) => (
-              <div
-                className="grid grid-cols-[40px_1fr] items-center gap-3 rounded-lg border border-border bg-surface p-4"
-                key={moment}
-              >
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="text-sm font-bold leading-6 text-stone-800">
-                  {moment}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="screens"
-        className="border-y border-border/70 bg-[linear-gradient(180deg,var(--color-stone-50),var(--color-background))] py-24 max-sm:py-18"
-      >
-        <div className="mx-auto w-[min(1120px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
-          <div className="mb-10 grid items-end gap-x-14 gap-y-7 md:grid-cols-[minmax(0,0.74fr)_minmax(280px,0.48fr)]">
-            <div>
-              <p className="text-sm font-bold text-primary">真实产品截图</p>
-              <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-                这些画面来自真实产品。
-              </h2>
-            </div>
-            <p className="text-base leading-8 text-stone-600">
-              我们用一组四川生活片段还原一个用户的日常：一句话、一张照片、
-              一个路过的地点，最后都能回到同一段生活里。
-            </p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            {productScreens.map((screen) => (
-              <ProductScreen key={screen.title} screen={screen} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-background py-24 max-sm:py-18">
-        <div className="mx-auto w-[min(1120px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
+      <section className="bg-background pb-24 max-sm:pb-18">
+        <div className="mx-auto w-[min(1120px,calc(100%-48px))] border-t border-border/70 pt-20 max-sm:w-[calc(100%-32px)]">
           <div className="mb-9 max-w-3xl">
-            <p className="text-sm font-bold text-primary">产品能力</p>
+            <p className="text-sm font-bold text-primary">且留的样子</p>
             <h2 className="mt-3 font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-              不用整理成作品，也能慢慢有迹可循。
+              它安静一点，把位置留给你的日常。
             </h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             {productPillars.map((pillar) => {
               const Icon = pillar.icon;
 
@@ -330,27 +255,72 @@ export default function Home() {
         </div>
       </section>
 
+      <section id="scenario" className="bg-background pb-24 max-sm:pb-18">
+        <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-start gap-14 border-t border-border/70 pt-20 md:grid-cols-[minmax(0,0.84fr)_minmax(320px,0.58fr)] max-sm:w-[calc(100%-32px)]">
+          <div>
+            <p className="text-sm font-bold text-primary">一段样例生活</p>
+            <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
+              这一天，在成都停过几次。
+            </h2>
+          </div>
+
+          <div className="grid gap-2.5" aria-label="成都记录片段">
+            {scenarioMoments.map((moment, index) => (
+              <div
+                className="grid grid-cols-[40px_1fr] items-center gap-3 rounded-lg border border-border bg-surface p-4"
+                key={moment}
+              >
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="text-sm font-bold leading-6 text-stone-800">
+                  {moment}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="screens"
+        className="border-y border-border/70 bg-[linear-gradient(180deg,var(--color-stone-50),var(--color-background))] py-24 max-sm:py-18"
+      >
+        <div className="mx-auto w-[min(1120px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
+          <div className="mb-10 max-w-3xl">
+            <div>
+              <p className="text-sm font-bold text-primary">产品截图</p>
+              <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
+                那一天，会这样回到你面前。
+              </h2>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {productScreens.map((screen) => (
+              <ProductScreen key={screen.title} screen={screen} />
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section
         id="privacy"
         className="bg-[linear-gradient(135deg,rgb(12_10_9/0.94),rgb(0_120_111/0.86))] py-24 text-white max-sm:py-18"
       >
         <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-center gap-16 md:grid-cols-[minmax(0,0.86fr)_minmax(360px,0.74fr)] max-sm:w-[calc(100%-32px)]">
           <div>
-            <p className="text-sm font-bold text-teal-50/80">安心记录</p>
+            <p className="text-sm font-bold text-teal-50/80">只留给自己</p>
             <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight max-sm:text-3xl">
-              我写下来的东西，先属于我自己。
+              记录先留在你这里。
             </h2>
-            <p className="mt-5 text-base leading-8 text-white/75">
-              它不需要公开，不需要点赞，也不需要每天交作业。你可以只写给未来的自己，
-              也可以在换设备时，把这些记录继续带在身边。
-            </p>
           </div>
 
           <div className="grid gap-3" aria-label="安心记录方式">
             {[
-              ["01", "只为自己留下", "没有公开主页，也没有围观压力。写下来的片刻可以安静待着。"],
-              ["02", "换个地方继续", "手机上随手记，回到电脑前再慢慢补，记录不会被某个场景锁住。"],
-              ["03", "空白也被允许", "哪天没有写也没有关系。生活不是连续打卡，日记也不必是。"],
+              ["01", "没有公开主页", "没有点赞，也没有围观压力。写下来的片刻不用拿给别人看。"],
+              ["02", "本地保存", "日记先在本地，不默认推到公共空间。"],
+              ["03", "私有仓库", "需要跨设备时，再放进自己的私有仓库里继续带走。"],
             ].map(([step, title, description]) => (
               <div
                 className="rounded-lg border border-white/15 bg-white/10 p-5"
@@ -373,23 +343,10 @@ export default function Home() {
 
       <section className="bg-[linear-gradient(180deg,var(--color-background),var(--color-stone-50))] py-24 text-center max-sm:py-18">
         <div className="mx-auto w-[min(900px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
-          <p className="text-sm font-bold text-primary">且留的判断</p>
+          <p className="text-sm font-bold text-primary">留到以后</p>
           <h2 className="mx-auto mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-            记录不是为了管理人生，而是确认自己曾经真实地在场。
+            以后翻回来，还能认得今天的自己。
           </h2>
-          <div
-            className="mt-8 flex flex-wrap justify-center gap-2.5"
-            aria-label="产品原则"
-          >
-            {principles.map((principle) => (
-              <span
-                className="inline-flex min-h-9 items-center rounded-full border border-border bg-white px-4 text-sm font-bold text-stone-700"
-                key={principle}
-              >
-                {principle}
-              </span>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -442,9 +399,6 @@ function ProductScreen({
         <h3 className="mt-2 text-lg font-bold leading-snug text-stone-900">
           {screen.title}
         </h3>
-        <p className="mt-3 text-[0.96rem] leading-7 text-stone-600">
-          {screen.description}
-        </p>
       </div>
     </article>
   );

@@ -279,7 +279,7 @@ flowchart TD
 
 当前不再把 `isomorphic-git.merge()` 作为主路径。`@journal/sync` 使用 `findMergeBase()`、`walk()`、`readBlob()`、`writeBlob()`、`writeTree()`、`writeCommit()` 和 `writeRef()` 自己写 journal-domain merge commit；`isomorphic-git` 仍负责对象库、refs、HTTP transport、status、checkout 和 push/fetch。
 
-冲突策略变更时必须同步更新测试和本文档。性能、trace 和慢路径排查细节见 `docs/product/Git 同步性能笔记.md`。
+冲突策略变更时必须同步更新测试和本文档。性能、trace 和慢路径排查细节见 [Git 同步性能笔记](<Git 同步性能笔记.md>)。
 
 ## 10. 验收事实
 

@@ -6,16 +6,17 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "且留此刻 | 把此刻，轻轻留下",
+  title: "且留此刻 | 私人日记应用",
   description:
-    "且留此刻是一个低负担的个人日记应用。写一页、留一句、放一张照片，都算数。",
+    "且留此刻是一款私人日记应用，把文字、照片、地点和日期放在同一天里。本地优先，支持私有仓库，适合只写给自己的日常记录。",
   icons: {
     icon: "/brand/qieliu-logo.png",
     apple: "/brand/qieliu-logo.png",
   },
   openGraph: {
     title: "且留此刻",
-    description: "把今天轻轻安放下来。",
+    description:
+      "不打卡，不表演，不把生活整理成作品。把一句话、照片、地点和日期留给未来的自己回看。",
     images: [
       {
         url: "/hero/qieliu-hero.webp",
