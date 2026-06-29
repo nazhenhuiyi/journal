@@ -202,7 +202,7 @@ function createMockDays(todayKey) {
 
   for (let weekIndex = 0; weekIndex < cities.length; weekIndex += 1) {
     const city = cities[weekIndex]
-    const offsets = [weekIndex * 7 + 1, weekIndex * 7 + 3, weekIndex * 7 + 6]
+    const offsets = [weekIndex * 7, weekIndex * 7 + 2, weekIndex * 7 + 5]
 
     for (let dayIndex = 0; dayIndex < offsets.length; dayIndex += 1) {
       const date = addDays(todayKey, -offsets[dayIndex])
@@ -232,7 +232,7 @@ function createMockDays(todayKey) {
             palette: createImagePalette(city, imageIndex),
             photoSource: mockPhotoSources[imageIndex % mockPhotoSources.length],
             src: `media/${date.slice(0, 4)}/${date.slice(5, 7)}/${imageId}.png`,
-            tags: [city.label, imagePoint.name, '照片地图'],
+            tags: [city.region, imagePoint.name, '照片地图'],
           })
           imageIndex += 1
         }
@@ -270,10 +270,10 @@ function createMockDays(todayKey) {
       days.push({
         city,
         date,
-        excerpt: `${city.label}的照片地图 mock：用碎碎念做主线，图片在旁边展开成更细的观看证据。`,
-        longEntry: `${city.label}这一日不是完整游记，更像一组给照片地图准备的观察标本。地点负责把碎碎念钉住，照片负责把当时的光线、材质和空气补回来。`,
+        excerpt: `${city.label}这一日被几句碎碎念和几张照片轻轻钉住，像一条从生活里长出来的四川路线。`,
+        longEntry: `${city.label}这一日没有刻意写成游记。我只是把停下来的地方、当时的天气和眼前的颜色留下来，回头再看，才发现它们已经连成一小段路。`,
         murmurs,
-        title: `${city.label}照片地图标本 ${dayIndex + 1}`,
+        title: `${city.label}的一段路 ${dayIndex + 1}`,
       })
     }
   }
@@ -288,7 +288,7 @@ createdAt: ${day.date}T00:00:00.000Z
 updatedAt: ${day.date}T20:00:00.000Z
 title: ${day.title}
 excerpt: ${day.excerpt}
-tags: [照片地图, mock, ${day.city.label}]
+tags: [照片地图, 四川, ${day.city.region}]
 photoMapMock: true
 location:
   name: ${day.city.label}
@@ -346,6 +346,7 @@ function createCities() {
       country: 'China',
       id: 'cd',
       label: '成都',
+      region: '成都',
       theme: 'teahouse-walk',
       tz: '+08:00',
       points: [
@@ -361,115 +362,122 @@ function createCities() {
     },
     {
       country: 'China',
-      id: 'sha',
-      label: '上海',
-      theme: 'river-light',
+      id: 'djy',
+      label: '都江堰',
+      region: '成都平原',
+      theme: 'water-sound',
       tz: '+08:00',
       points: [
-        point('武康路', 31.2104, 121.4381),
-        point('衡山路树影', 31.2057, 121.4496),
-        point('西岸美术馆', 31.1709, 121.4606),
-        point('苏州河桥边', 31.2402, 121.4638),
-        point('外滩源', 31.2421, 121.4907),
-        point('愚园路', 31.2232, 121.4358),
+        point('南桥', 30.9927, 103.6185),
+        point('灌县古城', 30.9875, 103.6144),
+        point('离堆公园', 31.0012, 103.6164),
+        point('玉垒山步道', 31.0038, 103.6097),
+        point('安澜索桥', 31.0089, 103.6182),
+        point('水街茶铺', 30.9886, 103.6223),
       ],
-      colors: ['#0c0a09', '#f5f5f4', '#009689'],
-    },
-    {
-      country: 'Japan',
-      id: 'tokyo',
-      label: '东京',
-      theme: 'station-rhythm',
-      tz: '+09:00',
-      points: [
-        point('代官山小路', 35.6481, 139.7036),
-        point('目黑川', 35.6422, 139.7042),
-        point('清澄白河', 35.6828, 139.7989),
-        point('上野公园', 35.7156, 139.7730),
-        point('银座屋檐', 35.6719, 139.7658),
-        point('神保町书店街', 35.6959, 139.7586),
-      ],
-      colors: ['#00786f', '#ffffff', '#d6d3d1'],
-    },
-    {
-      country: 'South Korea',
-      id: 'seoul',
-      label: '首尔',
-      theme: 'hill-neighborhood',
-      tz: '+09:00',
-      points: [
-        point('北村韩屋', 37.5826, 126.9830),
-        point('三清洞', 37.5849, 126.9819),
-        point('汉江公园', 37.5260, 126.9337),
-        point('圣水洞', 37.5446, 127.0557),
-        point('南山坡道', 37.5512, 126.9882),
-        point('延南洞', 37.5626, 126.9236),
-      ],
-      colors: ['#18181b', '#f8f2e4', '#009689'],
+      colors: ['#00786f', '#dff3ee', '#79716b'],
     },
     {
       country: 'China',
-      id: 'taipei',
-      label: '台北',
-      theme: 'rain-neon',
+      id: 'ems',
+      label: '峨眉山',
+      region: '乐山',
+      theme: 'mountain-mist',
       tz: '+08:00',
       points: [
-        point('大稻埕码头', 25.0566, 121.5089),
-        point('迪化街', 25.0569, 121.5106),
-        point('永康街', 25.0323, 121.5298),
-        point('松山文创', 25.0439, 121.5607),
-        point('象山步道', 25.0270, 121.5769),
-        point('中山站巷弄', 25.0522, 121.5206),
+        point('报国寺', 29.5791, 103.4355),
+        point('伏虎寺山门', 29.5683, 103.4315),
+        point('清音阁', 29.5578, 103.3988),
+        point('万年寺', 29.5481, 103.3728),
+        point('雷洞坪', 29.5327, 103.3402),
+        point('金顶观景台', 29.5257, 103.3338),
       ],
-      colors: ['#00786f', '#fafaf9', '#79716b'],
+      colors: ['#0f766e', '#f8f2e4', '#365314'],
     },
     {
-      country: 'Singapore',
-      id: 'sg',
-      label: '新加坡',
-      theme: 'tropical-grid',
+      country: 'China',
+      id: 'yaan',
+      label: '雅安',
+      region: '雅安',
+      theme: 'rain-tea',
       tz: '+08:00',
       points: [
-        point('牛车水骑楼', 1.2836, 103.8440),
-        point('滨海湾', 1.2834, 103.8607),
-        point('小印度', 1.3068, 103.8494),
-        point('中峇鲁', 1.2842, 103.8334),
-        point('福康宁', 1.2944, 103.8465),
-        point('甘榜格南', 1.3025, 103.8592),
+        point('廊桥夜色', 29.9855, 103.0082),
+        point('上里古镇', 30.1830, 103.1065),
+        point('碧峰峡入口', 30.0717, 103.0876),
+        point('蒙顶山茶园', 30.0793, 103.0447),
+        point('青衣江边', 29.9826, 103.0020),
+        point('多营老街', 29.9922, 102.9475),
       ],
-      colors: ['#009689', '#f0fdfa', '#0c0a09'],
+      colors: ['#166534', '#ecfdf5', '#79716b'],
     },
     {
-      country: 'Thailand',
-      id: 'bkk',
-      label: '曼谷',
-      theme: 'canal-heat',
-      tz: '+07:00',
+      country: 'China',
+      id: 'kangding',
+      label: '康定',
+      region: '甘孜',
+      theme: 'highland-wind',
+      tz: '+08:00',
       points: [
-        point('昭披耶河边', 13.7393, 100.5050),
-        point('Talat Noi', 13.7336, 100.5125),
-        point('暹罗天桥', 13.7463, 100.5347),
-        point('伦披尼公园', 13.7308, 100.5418),
-        point('郑王庙对岸', 13.7447, 100.4890),
-        point('Ari 巷口', 13.7791, 100.5445),
+        point('折多河边', 30.0508, 101.9635),
+        point('跑马山脚', 30.0446, 101.9567),
+        point('老城菜市', 30.0526, 101.9649),
+        point('木格措湖边', 30.1376, 101.8631),
+        point('榆林路口', 30.0390, 101.9620),
+        point('新都桥观景台', 30.0419, 101.4957),
       ],
-      colors: ['#79716b', '#f8f2e4', '#00786f'],
+      colors: ['#1d4ed8', '#f8f2e4', '#78716c'],
     },
     {
-      country: 'Japan',
-      id: 'kyoto',
-      label: '京都',
-      theme: 'temple-silence',
-      tz: '+09:00',
+      country: 'China',
+      id: 'langzhong',
+      label: '阆中',
+      region: '南充',
+      theme: 'old-town-river',
+      tz: '+08:00',
       points: [
-        point('鸭川三条', 35.0104, 135.7713),
-        point('哲学之道', 35.0270, 135.7956),
-        point('祇园巷口', 35.0037, 135.7787),
-        point('南禅寺', 35.0117, 135.7943),
-        point('二条城外', 35.0142, 135.7482),
-        point('京都站天台', 34.9858, 135.7588),
+        point('华光楼', 31.5801, 105.9731),
+        point('中天楼', 31.5766, 105.9747),
+        point('嘉陵江码头', 31.5825, 105.9652),
+        point('醋房街', 31.5749, 105.9725),
+        point('贡院巷口', 31.5774, 105.9764),
+        point('南津关古镇', 31.5689, 105.9530),
       ],
-      colors: ['#0c0a09', '#ffffff', '#009689'],
+      colors: ['#7c2d12', '#f8f2e4', '#0f766e'],
+    },
+    {
+      country: 'China',
+      id: 'leshan',
+      label: '乐山',
+      region: '乐山',
+      theme: 'river-temple',
+      tz: '+08:00',
+      points: [
+        point('张公桥好吃街', 29.5700, 103.7647),
+        point('嘉定坊', 29.5524, 103.7735),
+        point('岷江边', 29.5481, 103.7709),
+        point('乐山大佛游客中心', 29.5476, 103.7742),
+        point('苏稽古镇', 29.6043, 103.6747),
+        point('上中顺街', 29.5646, 103.7671),
+      ],
+      colors: ['#c84f31', '#fff7ed', '#00786f'],
+    },
+    {
+      country: 'China',
+      id: 'daocheng',
+      label: '稻城亚丁',
+      region: '甘孜',
+      theme: 'snow-line',
+      tz: '+08:00',
+      points: [
+        point('香格里拉镇', 28.5560, 100.3337),
+        point('冲古寺', 28.4476, 100.3098),
+        point('洛绒牛场', 28.4005, 100.2745),
+        point('珍珠海栈道', 28.4537, 100.3007),
+        point('仙乃日观景点', 28.4312, 100.2865),
+        point('稻城县城', 29.0374, 100.2984),
+      ],
+      colors: ['#0369a1', '#f8fafc', '#78716c'],
     },
   ]
 }
@@ -529,7 +537,7 @@ function createMurmurBody(city, pointValue, daySequence, index, caseType) {
     '风和路面都有自己的节奏，碎碎念负责把它们记成坐标。',
   ]
   const locationHint = caseType === 3
-    ? '这一条故意不放定位，用来确认未定位内容也能被筛出来。'
+    ? '这一条当时没有开定位，只记得风从街口慢慢吹过来。'
     : `停在${pointValue.name}的时候，${textures[(daySequence + index) % textures.length]}`
 
   return `${city.label} · ${locationHint}`
@@ -547,7 +555,7 @@ function createTextOnlyMurmurBody(city, pointValue, sequence) {
 }
 
 function createImageCaption(city, pointValue, imageOffset) {
-  const suffix = imageOffset === 0 ? '第一张证据' : '换一个角度'
+  const suffix = imageOffset === 0 ? '第一张线索' : '换一个角度'
 
   return `${city.label}${pointValue.name}，${suffix}。`
 }

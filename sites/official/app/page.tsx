@@ -13,52 +13,68 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const recordModes = [
+const productScreens = [
   {
-    title: "写一页",
+    title: "早上先留一句",
+    eyebrow: "今日",
     description:
-      "把天气、段落、清单和今天的心情收在同一页里。长一点也好，只有两行也好。",
-    icon: PenLine,
-  },
-  {
-    title: "留一句",
-    description:
-      "碎碎念不需要被整理成文章。想到的时候先留下，之后再慢慢看见它们的纹理。",
+      "不必先想好标题。等公交、喝茶、走到街口的时候，先把一句话和当下的天气留下来。",
+    image: "/product/ios-today.png",
+    alt: "且留此刻 iOS 今日页，正在记录一条关于成都清晨的碎碎念",
     icon: MessageCircle,
   },
   {
-    title: "放一张照片",
+    title: "下午看见路线",
+    eyebrow: "照片地图",
     description:
-      "照片、位置和当天的文字彼此连起来，让日记多一点身体记得住的证据。",
-    icon: ImageIcon,
+      "成都、都江堰、峨眉山、雅安、康定和乐山的照片与碎碎念，会在地图上连成自己的四川轨迹。",
+    image: "/product/ios-photo-map.png",
+    alt: "且留此刻 iOS 照片地图，显示四川内的照片和文字记录",
+    icon: Map,
+  },
+  {
+    title: "晚上回到那一天",
+    eyebrow: "日记回看",
+    description:
+      "点开某一天，文字、照片、地点和时间留在同一个页面里，像把当天重新摊开看一遍。",
+    image: "/product/ios-review-day.png",
+    alt: "且留此刻 iOS 日记详情页，展示一日文字、照片和位置记录",
+    icon: CalendarClock,
   },
 ];
 
 const productPillars = [
   {
-    title: "桌面与移动共用一套数据",
+    title: "记录从一秒钟开始",
     description:
-      "Electron 桌面端和 Expo 移动端读写同一套 Markdown 结构，记录可以在不同设备之间自然延续。",
-    icon: Cloud,
+      "长文、碎碎念和照片都算记录。它不要求你每天完成一篇漂亮文章，只把入口放得足够轻。",
+    icon: PenLine,
   },
   {
-    title: "私有仓库同步",
+    title: "地图记得身体去过哪里",
     description:
-      "通过 GitHub 私有仓库同步，平台层只处理凭据与文件系统，核心同步逻辑保持可测试、可追踪。",
-    icon: GitBranch,
-  },
-  {
-    title: "照片地图与回顾",
-    description:
-      "地图、图片记录和小组件把旧日重新递到眼前，不把回顾做成任务，只做成一次温和的重逢。",
+      "照片定位和手动位置都能进入照片地图；这组演示数据专注四川，让路线更像真实生活。",
     icon: Map,
   },
   {
-    title: "可读、可迁移",
+    title: "桌面和移动读同一套日记",
     description:
-      "日记不是被锁进黑盒的数据。Markdown、media 和 manifest 都保留清楚的文件约定。",
+      "Electron 桌面端和 Expo 移动端共享 Markdown 结构，回到电脑前也能继续写。",
+    icon: Cloud,
+  },
+  {
+    title: "同步留在自己的仓库",
+    description:
+      "通过 GitHub 私有仓库同步，日记、media 和 manifest 都保留清楚的文件约定。",
     icon: ShieldCheck,
   },
+];
+
+const moments = [
+  "人民公园茶社的一杯盖碗茶",
+  "都江堰南桥边的水声",
+  "峨眉山雾里的一段石阶",
+  "康定傍晚吹过折多河的风",
 ];
 
 const principles = ["不催打卡", "空白也算数", "少一点管理感", "多一点在场感"];
@@ -69,11 +85,11 @@ export default function Home() {
       <section
         id="top"
         aria-labelledby="hero-title"
-        className="relative flex min-h-[82svh] flex-col overflow-hidden bg-stone-50"
+        className="relative flex min-h-[78svh] flex-col overflow-hidden bg-stone-950 text-white"
       >
         <Image
-          className="absolute inset-0 z-0 object-cover object-center"
-          src="/hero/qieliu-hero.webp"
+          className="absolute inset-0 z-0 object-cover object-[72%_50%]"
+          src="/product/ios-photo-map.png"
           alt=""
           fill
           priority
@@ -81,12 +97,12 @@ export default function Home() {
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 z-10 bg-[linear-gradient(90deg,rgb(253_253_253/0.97)_0%,rgb(253_253_253/0.88)_31%,rgb(253_253_253/0.18)_68%),linear-gradient(180deg,rgb(253_253_253/0.24)_0%,rgb(253_253_253/0.08)_63%,var(--color-background)_100%)] max-sm:bg-[linear-gradient(180deg,rgb(253_253_253/0.96)_0%,rgb(253_253_253/0.86)_48%,rgb(253_253_253/0.22)_100%)]"
+          className="absolute inset-0 z-10 bg-[linear-gradient(90deg,rgb(12_10_9/0.96)_0%,rgb(12_10_9/0.88)_32%,rgb(12_10_9/0.28)_72%),linear-gradient(180deg,rgb(12_10_9/0.18)_0%,rgb(12_10_9/0.10)_58%,var(--color-background)_100%)] max-sm:bg-[linear-gradient(180deg,rgb(12_10_9/0.88)_0%,rgb(12_10_9/0.76)_52%,rgb(12_10_9/0.42)_100%)]"
         />
 
         <header className="relative z-20 mx-auto flex w-[min(1120px,calc(100%-48px))] items-center justify-between gap-6 py-5 max-sm:w-[calc(100%-32px)]">
           <a
-            className="inline-flex shrink-0 items-center gap-2.5 text-base font-bold text-stone-900"
+            className="inline-flex shrink-0 items-center gap-2.5 text-base font-bold text-white"
             href="#top"
             aria-label="且留此刻首页"
           >
@@ -101,166 +117,127 @@ export default function Home() {
             <span>且留此刻</span>
           </a>
           <nav
-            className="flex items-center justify-center gap-7 text-sm font-semibold text-stone-700 max-md:hidden"
+            className="flex items-center justify-center gap-7 text-sm font-semibold text-white/72 max-md:hidden"
             aria-label="官网导航"
           >
-            <a className="transition-colors hover:text-primary" href="#recording">
-              记录方式
+            <a className="transition-colors hover:text-white" href="#story">
+              使用场景
             </a>
-            <a className="transition-colors hover:text-primary" href="#product">
-              产品能力
+            <a className="transition-colors hover:text-white" href="#screens">
+              产品截图
             </a>
-            <a className="transition-colors hover:text-primary" href="#sync">
+            <a className="transition-colors hover:text-white" href="#sync">
               数据与同步
             </a>
-            <Link className="transition-colors hover:text-primary" href="/blog">
+            <Link className="transition-colors hover:text-white" href="/blog">
               Blog
             </Link>
           </nav>
           <a
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-stone-900/10 bg-white/65 px-4 text-sm font-bold text-stone-900 backdrop-blur-md transition-colors hover:text-primary max-sm:w-10 max-sm:px-0"
+            className="inline-flex size-10 items-center justify-center rounded-full border border-white/20 bg-white/12 text-white backdrop-blur-md transition-colors hover:bg-white/20"
             href="#sync"
+            aria-label="查看私有同步"
           >
             <GitBranch size={18} aria-hidden="true" />
-            <span className="max-sm:hidden">私有同步</span>
           </a>
         </header>
 
         <div className="relative z-20 mx-auto flex w-[min(1120px,calc(100%-48px))] flex-1 items-center py-14 pb-24 max-sm:w-[calc(100%-32px)] max-sm:items-start max-sm:pt-14">
-          <div className="max-w-[620px]">
-            <p className="text-sm font-bold text-primary">
-              万物有迹，心事且留
+          <div className="max-w-[650px]">
+            <p className="text-sm font-bold text-teal-50/82">
+              一个用户的四川记录
             </p>
             <h1
               id="hero-title"
-              className="mt-5 font-serif text-[clamp(3.1rem,8vw,4.8rem)] font-bold leading-[1.03] text-stone-900"
+              className="mt-5 font-serif text-7xl font-bold leading-[1.03] text-white max-md:text-6xl max-sm:text-5xl"
             >
               且留此刻
             </h1>
-            <p className="mt-5 text-[1.44rem] font-bold leading-relaxed text-stone-900 max-sm:text-xl">
-              把此刻，轻轻留下。
+            <p className="mt-5 text-2xl font-bold leading-relaxed text-white max-sm:text-xl">
+              我不想管理人生，只想把今天轻轻留下。
             </p>
-            <p className="mt-4 max-w-xl text-[1.06rem] leading-8 text-stone-700 max-sm:text-base">
-              一个低负担的个人日记应用。写一页、留一句、放一张照片，都算数。
-              它不催你完成一篇漂亮日记，只给今天一个安静的位置。
+            <p className="mt-4 max-w-xl text-[1.06rem] leading-8 text-white/76 max-sm:text-base">
+              从成都的一句碎碎念，到峨眉山路上的一张照片，再到康定傍晚的位置。
+              且留此刻把文字、照片和地图放回同一段真实生活里。
             </p>
             <div
               className="mt-8 flex flex-wrap gap-3 max-sm:flex-col"
               aria-label="官网主要入口"
             >
               <a
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-[0_16px_32px_rgb(0_120_111/0.20)] transition hover:-translate-y-0.5 hover:bg-primary-hover"
-                href="#recording"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-[0_16px_32px_rgb(0_120_111/0.24)] transition hover:-translate-y-0.5 hover:bg-primary-hover"
+                href="#screens"
               >
-                <PenLine size={19} aria-hidden="true" />
-                <span>看看怎么记录</span>
+                <ImageIcon size={19} aria-hidden="true" />
+                <span>看真实截图</span>
                 <ArrowRight size={18} aria-hidden="true" />
               </a>
               <a
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-stone-900/10 bg-white/75 px-5 text-sm font-bold text-stone-900 backdrop-blur-md transition hover:-translate-y-0.5 hover:text-primary"
-                href="#product"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/18 bg-white/12 px-5 text-sm font-bold text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/18"
+                href="#story"
               >
                 <Sparkles size={18} aria-hidden="true" />
-                <span>了解产品</span>
+                <span>看使用故事</span>
               </a>
-              <Link
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-stone-900/10 bg-white/75 px-5 text-sm font-bold text-stone-900 backdrop-blur-md transition hover:-translate-y-0.5 hover:text-primary"
-                href="/blog"
-              >
-                <span>读一篇理念</span>
-              </Link>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="recording" className="bg-background py-24 max-sm:py-18">
-        <div className="mx-auto w-[min(1120px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
-          <div className="mb-9 grid items-end gap-x-14 gap-y-7 md:grid-cols-[minmax(0,0.78fr)_minmax(280px,0.52fr)]">
-            <div>
-              <p className="text-sm font-bold text-primary">记录可以很轻</p>
-              <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-                今天不必被整理成作品，也值得被留下。
-              </h2>
-            </div>
-            <p className="text-base leading-8 text-stone-600">
-              且留把日记拆成更接近日常的几种动作：一页文字、一句碎碎念、一张照片。
-              你可以写得很完整，也可以只先把一个瞬间放进去。
+      <section id="story" className="bg-background py-24 max-sm:py-18">
+        <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-start gap-14 md:grid-cols-[minmax(0,0.84fr)_minmax(320px,0.58fr)] max-sm:w-[calc(100%-32px)]">
+          <div>
+            <p className="text-sm font-bold text-primary">使用场景</p>
+            <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
+              一天里不完整的片刻，最后会自己连起来。
+            </h2>
+            <p className="mt-5 text-base leading-8 text-stone-600">
+              我早上在人民公园写下一句话，中午把南桥的水声配上一张照片，
+              晚上才想起还有一段路没有定位。且留不会把这些东西逼成一篇文章，
+              只让它们保持当时的样子。
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            {recordModes.map((mode) => {
-              const Icon = mode.icon;
-
-              return (
-                <article
-                  className="min-h-56 rounded-lg border border-border bg-surface p-6 shadow-[0_1px_2px_rgb(12_10_9/0.03)] max-sm:min-h-0"
-                  key={mode.title}
-                >
-                  <span className="inline-flex size-10 items-center justify-center rounded-full border border-primary/20 bg-primary-soft text-primary">
-                    <Icon size={22} aria-hidden="true" />
-                  </span>
-                  <h3 className="mt-7 text-lg font-bold leading-snug text-stone-900">
-                    {mode.title}
-                  </h3>
-                  <p className="mt-3 text-[0.96rem] leading-7 text-stone-600">
-                    {mode.description}
-                  </p>
-                </article>
-              );
-            })}
+          <div className="grid gap-2.5" aria-label="四川记录片段">
+            {moments.map((moment, index) => (
+              <div
+                className="grid grid-cols-[40px_1fr] items-center gap-3 rounded-lg border border-border bg-surface p-4"
+                key={moment}
+              >
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="text-sm font-bold leading-6 text-stone-800">
+                  {moment}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       <section
-        id="product"
+        id="screens"
         className="border-y border-border/70 bg-[linear-gradient(180deg,var(--color-stone-50),var(--color-background))] py-24 max-sm:py-18"
       >
-        <div className="mx-auto grid w-[min(1120px,calc(100%-48px))] items-center gap-16 md:grid-cols-[minmax(0,0.86fr)_minmax(360px,0.74fr)] max-sm:w-[calc(100%-32px)]">
-          <div>
-            <p className="text-sm font-bold text-primary">桌面、移动、回顾</p>
-            <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-              记录在今天发生，也会在以后慢慢浮回来。
-            </h2>
-            <p className="mt-5 text-base leading-8 text-stone-600">
-              桌面端适合安静写一页，移动端适合随手留下照片和一句话。
-              回顾、小组件和照片地图负责在合适的时候，把旧日重新递给你。
+        <div className="mx-auto w-[min(1120px,calc(100%-48px))] max-sm:w-[calc(100%-32px)]">
+          <div className="mb-10 grid items-end gap-x-14 gap-y-7 md:grid-cols-[minmax(0,0.74fr)_minmax(280px,0.48fr)]">
+            <div>
+              <p className="text-sm font-bold text-primary">真实产品截图</p>
+              <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
+                这些画面来自 iOS 模拟器里的真实应用。
+              </h2>
+            </div>
+            <p className="text-base leading-8 text-stone-600">
+              截图使用一组看似真实的四川演示数据：文字、照片和坐标都写进移动端日记目录，
+              再从 App 页面中直接截取。
             </p>
           </div>
 
-          <div
-            className="grid min-h-[430px] grid-cols-[1fr_0.86fr] grid-rows-2 gap-3.5 rounded-lg border border-border/80 bg-[linear-gradient(135deg,rgb(255_255_255/0.92),rgb(248_242_228/0.54))] p-3.5 shadow-[0_24px_70px_rgb(28_25_23/0.08)] max-sm:min-h-[520px] max-sm:grid-cols-1 max-sm:grid-rows-[1.3fr_0.7fr_0.7fr_0.7fr]"
-            aria-label="产品体验示意"
-          >
-            <div className="row-span-2 flex min-w-0 flex-col justify-between rounded-lg border border-stone-900/10 bg-[linear-gradient(180deg,rgb(255_255_255/0.86),rgb(255_255_255/0.62)),repeating-linear-gradient(0deg,rgb(28_25_23/0.045)_0_1px,transparent_1px_28px)] p-5 max-sm:row-span-1">
-              <span className="text-xs font-bold text-muted-foreground">今日</span>
-              <strong className="font-serif text-3xl font-bold leading-snug text-stone-900 max-sm:text-2xl">
-                窗边的雨停了。
-              </strong>
-              <p className="text-sm leading-7 text-stone-600">
-                留一句，也是一条完整的线索。
-              </p>
-            </div>
-            <div className="flex min-w-0 flex-col justify-end rounded-lg border border-stone-900/10 bg-[linear-gradient(135deg,rgb(200_79_49/0.10),rgb(255_255_255/0.78))] p-5 text-vermilion">
-              <ImageIcon size={24} aria-hidden="true" />
-              <span className="mt-3 text-xs font-bold text-muted-foreground">
-                照片记录
-              </span>
-            </div>
-            <div className="flex min-w-0 flex-col justify-end rounded-lg border border-stone-900/10 bg-white/75 p-5 text-primary">
-              <Map size={24} aria-hidden="true" />
-              <span className="mt-3 text-xs font-bold text-muted-foreground">
-                走过的地方
-              </span>
-            </div>
-            <div className="flex min-w-0 flex-col justify-end rounded-lg border border-stone-900/10 bg-white/75 p-5 text-teal-600">
-              <CalendarClock size={24} aria-hidden="true" />
-              <span className="mt-3 text-xs font-bold text-muted-foreground">
-                旧日回看
-              </span>
-            </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {productScreens.map((screen) => (
+              <ProductScreen key={screen.title} screen={screen} />
+            ))}
           </div>
         </div>
       </section>
@@ -270,7 +247,7 @@ export default function Home() {
           <div className="mb-9 max-w-3xl">
             <p className="text-sm font-bold text-primary">产品能力</p>
             <h2 className="mt-3 font-serif text-[2.55rem] font-bold leading-tight text-stone-900 max-sm:text-3xl">
-              安静的体验下面，是清楚的数据结构。
+              温柔的外表下面，是可迁移的数据结构。
             </h2>
           </div>
 
@@ -307,7 +284,7 @@ export default function Home() {
           <div>
             <p className="text-sm font-bold text-teal-50/80">数据与同步</p>
             <h2 className="mt-3 max-w-3xl font-serif text-[2.55rem] font-bold leading-tight max-sm:text-3xl">
-              把日记留在你自己的路径里。
+              我写下来的东西，应该留在自己的路径里。
             </h2>
             <p className="mt-5 text-base leading-8 text-white/75">
               且留用共享核心读写 Markdown，并通过 Git 同步核心在桌面端和移动端之间保持一致。
@@ -382,5 +359,39 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function ProductScreen({
+  screen,
+}: {
+  screen: (typeof productScreens)[number];
+}) {
+  const Icon = screen.icon;
+
+  return (
+    <article className="rounded-lg border border-border bg-surface p-4 shadow-[0_16px_50px_rgb(28_25_23/0.06)]">
+      <div className="relative aspect-[393/852] overflow-hidden rounded-lg border border-stone-900/10 bg-stone-100">
+        <Image
+          className="object-cover"
+          src={screen.image}
+          alt={screen.alt}
+          fill
+          sizes="(min-width: 768px) 31vw, 92vw"
+        />
+      </div>
+      <div className="pt-5">
+        <span className="inline-flex items-center gap-2 text-xs font-extrabold text-primary">
+          <Icon size={16} aria-hidden="true" />
+          {screen.eyebrow}
+        </span>
+        <h3 className="mt-2 text-lg font-bold leading-snug text-stone-900">
+          {screen.title}
+        </h3>
+        <p className="mt-3 text-[0.96rem] leading-7 text-stone-600">
+          {screen.description}
+        </p>
+      </div>
+    </article>
   );
 }
