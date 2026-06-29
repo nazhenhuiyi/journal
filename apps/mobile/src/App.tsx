@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as SplashScreen from 'expo-splash-screen'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import {
   getBuiltInThemeById,
@@ -340,6 +341,12 @@ function JournalApp() {
       ? murmurs.find((murmur) => murmur.id === editingMurmurId) ?? null
       : null
   ), [editingMurmurId, murmurs])
+
+  useEffect(() => {
+    void SplashScreen.hideAsync().catch((error) => {
+      console.error(error)
+    })
+  }, [])
 
   const currentDayForEvents = useMemo(() => {
     if (!record) {

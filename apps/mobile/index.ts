@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler'
 import './global.css'
 import { registerRootComponent } from 'expo'
+import * as SplashScreen from 'expo-splash-screen'
 import { createElement } from 'react'
 import { Platform } from 'react-native'
 import { registerWidgetTaskHandler } from 'react-native-android-widget'
@@ -10,6 +11,7 @@ import { installMobileDiagnosticLogging } from './src/services/diagnostics/runti
 import { widgetTaskHandler } from './src/widgets/widgetTaskHandler'
 
 installMobileDiagnosticLogging()
+void SplashScreen.preventAutoHideAsync().catch(() => {})
 
 function RootApp() {
   return createElement(KeyboardProvider, null, createElement(App))

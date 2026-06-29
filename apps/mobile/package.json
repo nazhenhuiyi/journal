@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node ./scripts/runExpo.mjs start",
     "android": "node ./scripts/runExpo.mjs start --android",
-    "android:dev": "node ./scripts/runExpo.mjs run:android",
+    "android:dev": "node ./scripts/runExpo.mjs run:android --app-id app.zilin.journal.debug",
     "build:android:aab": "pnpm dlx eas-cli@20.1.0 build --platform android --profile production --local --non-interactive --output ./android/app/build/outputs/bundle/release/eas-production-local.aab",
     "build:android:aab:cloud": "pnpm dlx eas-cli@20.1.0 build --platform android --profile production",
     "build:android:apk": "pnpm dlx eas-cli@20.1.0 build --platform android --profile preview --local --non-interactive --output ./android/app/build/outputs/apk/release/eas-preview-local.apk",
