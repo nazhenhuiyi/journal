@@ -51,10 +51,10 @@ function JournalMomentCompactWidgetView(
       modifiers={[
         frame({ maxHeight: Infinity, maxWidth: Infinity, alignment: 'leading' }),
         containerBackground(backgroundColor, 'widget'),
-        padding({ horizontal: 11, vertical: 10 }),
+        padding({ horizontal: 9, vertical: 10 }),
         widgetURL('journal://write?theme=' + themeId),
       ]}
-      spacing={6}
+      spacing={5}
     >
       <Spacer minLength={0} />
 
@@ -69,13 +69,13 @@ function JournalMomentCompactWidgetView(
         modifiers={[
           font({
             family: journalWidgetFontFamily,
-            size: 19,
+            size: 17,
             weight: 'regular',
           }),
           foregroundStyle(titleColor),
-          lineLimit(2),
-          lineHeight(24),
-          minimumScaleFactor(0.78),
+          lineLimit(1),
+          lineHeight(22),
+          minimumScaleFactor(0.64),
         ]}
       >
         {title}
@@ -89,7 +89,7 @@ function JournalMomentCompactWidgetView(
             weight: 'regular',
           }),
           foregroundStyle(subtitleColor),
-          lineLimit(2),
+          lineLimit(1),
           lineHeight(18),
           minimumScaleFactor(0.9),
         ]}

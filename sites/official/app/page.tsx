@@ -9,8 +9,19 @@ import {
   PenLine,
   ShieldCheck,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const productScreens = [
+type ProductScreenCard = {
+  title: string;
+  eyebrow: string;
+  image: string;
+  alt: string;
+  icon: LucideIcon;
+  aspectClassName?: string;
+  sizes?: string;
+};
+
+const productScreens: ProductScreenCard[] = [
   {
     title: "先记下一句",
     eyebrow: "今日",
@@ -31,6 +42,36 @@ const productScreens = [
     image: "/product/ios-review-day-chengdu.png",
     alt: "且留此刻日记详情页，展示一日文字、照片和位置记录",
     icon: CalendarClock,
+  },
+];
+
+const widgetScreens: ProductScreenCard[] = [
+  {
+    title: "照片也能回看",
+    eyebrow: "回看小组件",
+    image: "/product/ios-widget-review-photo-clean.png",
+    alt: "iOS 桌面上的且留此刻回看中号小组件",
+    icon: CalendarClock,
+    aspectClassName: "aspect-[900/455]",
+    sizes: "(min-width: 768px) 33vw, 92vw",
+  },
+  {
+    title: "文字也能回看",
+    eyebrow: "回看文字版",
+    image: "/product/ios-widget-review-text-weather.png",
+    alt: "iOS 桌面上的且留此刻文字版回看中号小组件，展示日期、地点和天气",
+    icon: CalendarClock,
+    aspectClassName: "aspect-[900/455]",
+    sizes: "(min-width: 768px) 33vw, 92vw",
+  },
+  {
+    title: "此刻先留一句",
+    eyebrow: "此刻小组件",
+    image: "/product/ios-widget-moment-small-balanced.png",
+    alt: "iOS 桌面上的且留此刻小号小组件",
+    icon: PenLine,
+    aspectClassName: "aspect-[550/660]",
+    sizes: "(min-width: 768px) 30vw, 92vw",
   },
 ];
 
@@ -162,8 +203,7 @@ export default function Home() {
               把此刻，轻轻留下。
             </p>
             <p className="mt-4 max-w-xl text-[1.06rem] leading-8 text-white/76 max-sm:text-base">
-              写一句，拍一张照片，带上地点和日期。先留在今天，
-              以后再慢慢翻。
+              写下此刻，拍下眼前。地点和日期，一起留在今天。
             </p>
             <div
               className="mt-8 flex flex-wrap gap-3 max-sm:flex-col"
@@ -301,6 +341,12 @@ export default function Home() {
               <ProductScreen key={screen.title} screen={screen} />
             ))}
           </div>
+
+          <div className="mt-5 grid gap-5 md:grid-cols-3">
+            {widgetScreens.map((screen) => (
+              <ProductScreen key={screen.title} screen={screen} />
+            ))}
+          </div>
         </div>
       </section>
 
@@ -376,19 +422,21 @@ export default function Home() {
 function ProductScreen({
   screen,
 }: {
-  screen: (typeof productScreens)[number];
+  screen: ProductScreenCard;
 }) {
   const Icon = screen.icon;
 
   return (
     <article className="rounded-lg border border-border bg-surface p-4 shadow-[0_16px_50px_rgb(28_25_23/0.06)]">
-      <div className="relative aspect-[393/852] overflow-hidden rounded-lg border border-stone-900/10 bg-stone-100">
+      <div
+        className={`relative ${screen.aspectClassName ?? "aspect-[393/852]"} overflow-hidden rounded-lg border border-stone-900/10 bg-stone-100`}
+      >
         <Image
           className="object-cover"
           src={screen.image}
           alt={screen.alt}
           fill
-          sizes="(min-width: 768px) 31vw, 92vw"
+          sizes={screen.sizes ?? "(min-width: 768px) 31vw, 92vw"}
         />
       </div>
       <div className="pt-5">
