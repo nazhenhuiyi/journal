@@ -1,0 +1,18 @@
+{
+  "source": "output/imagegen/journal-logo-final-d3.png",
+  "default": "design/logo-final-d3/qieliu-logo-d3-light-1024.png",
+  "dark": "design/logo-final-d3/qieliu-logo-d3-dark-1024.png",
+  "rounded_preview": "design/logo-final-d3/qieliu-logo-d3-light-rounded-1024.png",
+  "replaced": [
+    "apps/mobile/assets/brand/icon.png",
+    "apps/mobile/assets/brand/adaptive-icon.png",
+    "apps/mobile/assets/brand/splash-icon.png",
+    "apps/mobile/ios/Journal/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+    "apps/mobile/ios/Journal/Images.xcassets/SplashScreenLogo.imageset/image*.png",
+    "apps/desktop/public/brand/icon.png",
+    "apps/desktop/build/icon.png",
+    "apps/desktop/build/icon.ico",
+    "sites/official/public/brand/qieliu-logo.png",
+    "sites/official/app/favicon.ico"
+  ]
+}
