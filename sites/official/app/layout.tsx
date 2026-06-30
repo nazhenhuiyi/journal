@@ -6,9 +6,9 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://journal.zilin.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "且留此刻 | 私人日记应用",
+  title: "且留此刻",
   description:
-    "且留此刻是一款私人日记应用，把文字、照片、地点和日期放在同一天里。本地优先，支持私有仓库，适合只写给自己的日常记录。",
+    "且留此刻把文字、照片、地点和日期放在同一天里。本地优先，支持私有仓库，适合只写给自己的日常记录。",
   icons: {
     icon: "/brand/qieliu-logo.png",
     apple: "/brand/qieliu-logo.png",

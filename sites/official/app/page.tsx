@@ -190,12 +190,9 @@ export default function Home() {
 
         <div className="relative z-20 mx-auto flex w-[min(1120px,calc(100%-48px))] flex-1 items-center py-14 pb-24 max-sm:w-[calc(100%-32px)] max-sm:items-start max-sm:pt-14">
           <div className="max-w-[650px]">
-            <p className="text-sm font-bold text-teal-50/82">
-              私人日记应用
-            </p>
             <h1
               id="hero-title"
-              className="mt-5 font-serif text-7xl font-bold leading-[1.03] text-white max-md:text-6xl max-sm:text-5xl"
+              className="font-serif text-7xl font-bold leading-[1.03] text-white max-md:text-6xl max-sm:text-5xl"
             >
               且留此刻
             </h1>
